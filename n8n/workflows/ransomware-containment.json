@@ -321,7 +321,7 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "parameters": {
-        "fromEmail": "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+        "fromEmail": "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
         "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
         "subject": "=🚨 [{{ $('Score Risk & Build Alert').first().json.severity }}] {{ $('Score Risk & Build Alert').first().json.workflowName }}",
         "emailFormat": "text",
