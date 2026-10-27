@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, ArrowRight, CheckCircle2, Clock, Cpu, ExternalLink, GitBranch, Loader2, Play, Power, RefreshCw, RotateCcw, Server, Settings2, ShieldCheck, Timer, Workflow, Zap } from "lucide-react";
+import { Activity, ArrowRight, Bell, CheckCircle2, Clock, Cpu, ExternalLink, GitBranch, Loader2, Play, Power, RefreshCw, RotateCcw, Server, Settings2, ShieldCheck, Timer, Workflow, Zap } from "lucide-react";
 import { api, useApi } from "@/lib/api";
 import { cn, formatDate, formatNumber, relativeTime, titleCase } from "@/lib/utils";
 import { DataTable, type Column } from "@/components/DataTable";
@@ -88,7 +88,7 @@ export default function AutomationPage() {
         title="SOAR Automation"
         subtitle="n8n workflows that contain threats, reset credentials and collect compliance evidence"
         icon={Workflow}
-        badge={<Badge tone="info" dot>{active}/{list.length || 4} active</Badge>}
+        badge={<Badge tone="info" dot>{active}/{list.length || 5} active</Badge>}
         actions={
           <>
             <Button icon={RefreshCw} onClick={() => { refetch(); executions.refetch(); }} loading={refreshing}>Refresh</Button>
@@ -118,10 +118,10 @@ export default function AutomationPage() {
           <div className="relative mt-4 grid gap-2 sm:grid-cols-5">
             {[
               { label: "SOC API", icon: Server, detail: "REST + webhooks" },
-              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 120} nodes` },
+              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 97} nodes` },
               { label: "EDR / SIEM", icon: ShieldCheck, detail: "CrowdStrike · Elastic" },
               { label: "Identity", icon: Settings2, detail: "Okta · Microsoft 365" },
-              { label: "Ticketing", icon: GitBranch, detail: "Jira · Slack" },
+              { label: "On-call alerts", icon: Bell, detail: "Telegram · Gmail" },
             ].map((node, index) => (
               <div key={node.label} className="flex items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-2.5">
                 <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", index === 1 ? "bg-brand-500/15 text-brand-300" : "bg-white/[0.04] text-slate-500")}><node.icon className="h-3 w-3" /></span>
@@ -142,7 +142,7 @@ export default function AutomationPage() {
         ) : (
           <>
             <StatCard label="Active workflows" value={active} hint={`${list.length} production playbooks`} icon={Workflow} tone="brand" />
-            <StatCard label="Orchestrated nodes" value={summary?.nodes || 120} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
+            <StatCard label="Orchestrated nodes" value={summary?.nodes || 97} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
             <StatCard label="Executions" value={formatNumber(totalRuns)} hint={`${successRate}% successful`} icon={Activity} tone={successRate >= 95 ? "success" : "warning"} />
             <StatCard label="Mean duration" value={avgDuration ? `${avgDuration}ms` : "—"} hint="Manual and triggered runs" icon={Timer} tone="warning" />
           </>

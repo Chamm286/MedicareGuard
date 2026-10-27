@@ -98,6 +98,14 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       MG_API_URL: http://backend:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
+      MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      MG_ALERT_EMAIL: ${MG_ALERT_EMAIL:-}
+      MG_SMTP_FROM: ${MG_SMTP_FROM:-}
+      MG_SMTP_HOST: ${MG_SMTP_HOST:-}
+      MG_SMTP_USER: ${MG_SMTP_USER:-}
+      MG_SMTP_PASSWORD: ${MG_SMTP_PASSWORD:-}
     ports:
       - "5678:5678"
     volumes:
