@@ -13,7 +13,8 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "seed:reset": "node scripts/seed.js --reset",
-    "test": "node scripts/smoke-test.js"
+    "test": "node scripts/smoke-test.js",
+    "token:n8n": "node scripts/mint-service-token.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
