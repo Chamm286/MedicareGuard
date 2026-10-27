@@ -18,7 +18,7 @@ const workflows = [
     version: "2.4.0",
     owner: "SOC Automation",
     targetSla: "4 minutes",
-    nodeCount: 30,
+    nodeCount: 40,
     tags: ["ransomware", "EDR", "containment", "P1"],
     integrations: ["CrowdStrike Falcon", "Palo Alto Cortex", "Slack", "Jira Service Management"],
     stages: [
@@ -43,7 +43,7 @@ const workflows = [
     version: "3.1.2",
     owner: "Detection Engineering",
     targetSla: "2 minutes",
-    nodeCount: 30,
+    nodeCount: 40,
     tags: ["phishing", "sandbox", "identity", "quarantine"],
     integrations: ["Microsoft 365", "VirusTotal", "Okta", "Slack"],
     stages: [
@@ -68,7 +68,7 @@ const workflows = [
     version: "1.8.4",
     owner: "Exposure Management",
     targetSla: "24 hours",
-    nodeCount: 30,
+    nodeCount: 40,
     tags: ["CVE", "SLA", "remediation", "clinical risk"],
     integrations: ["Elastic SIEM", "Jira Service Management", "Slack", "Email"],
     stages: [
@@ -93,7 +93,7 @@ const workflows = [
     version: "2.0.1",
     owner: "GRC",
     targetSla: "Nightly",
-    nodeCount: 30,
+    nodeCount: 40,
     tags: ["HIPAA", "NIST", "ISO 27001", "evidence"],
     integrations: ["Okta", "Elastic SIEM", "AWS GuardDuty", "PostgreSQL"],
     stages: [

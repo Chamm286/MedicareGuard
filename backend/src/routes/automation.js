@@ -5,10 +5,9 @@ const { asyncHandler, HttpError } = require("../utils/http");
 const { requirePermission } = require("../middleware/auth");
 const { recordActivity, recordAudit } = require("../services/audit");
 const { workflows, byId } = require("../config/automation");
+const { n8nBaseUrl, probeN8n, simulateAction, finalizeExecution } = require("../services/automationRuntime");
 
 const router = express.Router();
-
-const n8nBaseUrl = () => (process.env.N8N_BASE_URL || process.env.N8N_URL || "http://localhost:5678").replace(/\/$/, "");
 
 const readOverrides = async () => {
   const result = await query("SELECT key, value FROM settings WHERE key LIKE 'automation.workflow.%'");
@@ -20,11 +19,21 @@ const readOverrides = async () => {
   );
 };
 
+let runtimeCache = { value: null, expires: 0 };
+
+const runtimeStatus = async () => {
+  if (runtimeCache.value && runtimeCache.expires > Date.now()) return runtimeCache.value;
+  const value = await probeN8n();
+  runtimeCache = { value, expires: Date.now() + 10000 };
+  return value;
+};
+
 const loadStats = async () => {
   const result = await query(
     `SELECT resource_id,
             count(*)::int AS runs,
             count(*) FILTER (WHERE metadata->>'status' IN ('success','dispatched'))::int AS successful_runs,
+            count(*) FILTER (WHERE metadata->>'status' IN ('success','dispatched','failed'))::int AS attempted_runs,
             max(created_at) AS last_run,
             round(avg(NULLIF(metadata->>'durationMs','')::numeric))::int AS avg_duration_ms
      FROM activity_logs
@@ -32,6 +41,28 @@ const loadStats = async () => {
      GROUP BY resource_id`,
   );
   return Object.fromEntries(result.rows.map((row) => [row.resource_id, row]));
+};
+
+const sampleEntity = async (workflowId) => {
+  if (workflowId === "ransomware-containment") {
+    const result = await query("SELECT id FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating') ORDER BY detected_at DESC LIMIT 1");
+    return result.rows[0]?.id || null;
+  }
+  if (workflowId === "phishing-triage") {
+    const result = await query("SELECT id FROM alerts WHERE (source ILIKE '%email%' OR title ILIKE '%phish%' OR tags && ARRAY['phishing']) ORDER BY (title ILIKE '%phish%') DESC, detected_at DESC LIMIT 1");
+    if (result.rows[0]?.id) return result.rows[0].id;
+    const fallback = await query("SELECT id FROM alerts ORDER BY detected_at DESC LIMIT 1");
+    return fallback.rows[0]?.id || null;
+  }
+  if (workflowId === "vulnerability-sla") {
+    const result = await query("SELECT id FROM vulnerabilities WHERE status = 'open' ORDER BY cvss_score DESC LIMIT 1");
+    return result.rows[0]?.id || null;
+  }
+  if (workflowId === "compliance-evidence") {
+    const result = await query("SELECT id FROM compliance_controls ORDER BY score ASC LIMIT 1");
+    return result.rows[0]?.id || null;
+  }
+  return null;
 };
 
 router.get(
@@ -47,12 +78,13 @@ router.get(
         status: enabled ? "active" : "paused",
         runs: stat.runs || 0,
         successful_runs: stat.successful_runs || 0,
-        success_rate: stat.runs ? Math.round((stat.successful_runs / stat.runs) * 100) : 100,
+        success_rate: stat.attempted_runs ? Math.round((stat.successful_runs / stat.attempted_runs) * 100) : 100,
         last_run: stat.last_run || null,
         avg_duration_ms: stat.avg_duration_ms || null,
-        n8n_url: `${n8nBaseUrl()}/workflow`,
+        n8n_url: `${n8nBaseUrl()}/workflow/${workflow.id}`,
       };
     });
+    const runtime = await runtimeStatus();
     res.json({
       data,
       summary: {
@@ -61,6 +93,7 @@ router.get(
         nodes: data.reduce((sum, workflow) => sum + workflow.nodeCount, 0),
         runs: data.reduce((sum, workflow) => sum + workflow.runs, 0),
         n8n: n8nBaseUrl(),
+        runtime,
       },
     });
   }),
@@ -94,6 +127,58 @@ router.get(
   }),
 );
 
+
+router.get(
+  "/runtime",
+  asyncHandler(async (_req, res) => {
+    res.json({ data: await runtimeStatus() });
+  }),
+);
+
+router.post(
+  "/simulate/:action",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const allowed = new Set([
+      "edr-telemetry", "edr-isolate", "edr-verify", "network-contain", "intel-reputation",
+      "identity-context", "identity-revoke", "identity-verify", "sandbox-detonate",
+      "email-quarantine", "email-verify", "vuln-intel", "patch-catalog", "change-request",
+      "patch-orchestrate", "patch-verify", "evidence-identity", "evidence-endpoint",
+      "evidence-audit", "evidence-pack", "evidence-verify", "evidence-persist",
+      "evidence-write", "intel-sync", "notify", "ticket-sync",
+    ]);
+    if (!allowed.has(req.params.action)) throw new HttpError(404, "Unknown automation action");
+    const result = await simulateAction(req.params.action, req.body || {});
+    res.json({ data: { action: result.action, simulated: result.simulated, ...result.data } });
+  }),
+);
+
+router.post(
+  "/executions/:executionId/complete",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const { status, durationMs, nodeCount, metrics, message, workflowId } = req.body || {};
+    const result = await finalizeExecution({
+      executionId: req.params.executionId,
+      workflowId,
+      status,
+      durationMs,
+      nodeCount,
+      metrics,
+      message,
+      actorEmail: req.user?.email,
+    });
+    await recordAudit({
+      req,
+      action: "complete_workflow",
+      resource: "automation",
+      resourceId: result.workflowId || workflowId,
+      details: { executionId: req.params.executionId, status: result.status, durationMs: result.durationMs },
+    });
+    res.json({ data: result });
+  }),
+);
+
 router.post(
   "/workflows/:id/run",
   requirePermission("write"),
@@ -105,7 +190,8 @@ router.post(
 
     const executionId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const payload = { executionId, workflowId: workflow.id, mode: "manual", triggeredBy: req.user?.email, startedAt, source: "medicareguard-console" };
+    const entityId = await sampleEntity(workflow.id);
+    const payload = { executionId, workflowId: workflow.id, entityId, mode: "manual", triggeredBy: req.user?.email, startedAt, source: "medicareguard-console" };
     let status = "queued";
     let dispatched = false;
 
