@@ -3,7 +3,8 @@
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install backend and frontend dependencies
+install: ## Install root, backend and frontend dependencies
+	npm install
 	cd backend && npm install
 	cd frontend && npm install
 
@@ -32,6 +33,7 @@ docker-reset: ## Stop stack and delete volumes
 	docker compose down -v
 
 screenshots: ## Capture UI screenshots with Playwright
+	npx playwright install chromium
 	node scripts/capture-screenshots.mjs
 
 test: ## Run backend integration smoke test
