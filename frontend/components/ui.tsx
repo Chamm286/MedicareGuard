@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Inbox, Loader2, X, type LucideIcon } from "lucide-react";
 import { cn, initials, severityDot, severityStyles, statusStyles, titleCase } from "@/lib/utils";
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("panel", className)}>{children}</div>;
+export function Card({ className, children, style }: { className?: string; children: ReactNode; style?: CSSProperties }) {
+  return <div className={cn("panel", className)} style={style}>{children}</div>;
 }
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
