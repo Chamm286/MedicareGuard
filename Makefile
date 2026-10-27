@@ -1,4 +1,4 @@
-.PHONY: help install dev backend frontend db-migrate db-seed docker-up docker-down docker-reset screenshots test lint
+.PHONY: help install dev backend frontend db-migrate db-seed docker-up docker-down docker-reset screenshots test typecheck lint
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -39,5 +39,7 @@ screenshots: ## Capture UI screenshots with Playwright
 test: ## Run backend integration smoke test
 	cd backend && npm test
 
-lint: ## Lint frontend
-	cd frontend && npm run lint
+typecheck: ## Type-check the frontend
+	cd frontend && npx tsc --noEmit
+
+lint: typecheck ## Alias for typecheck
