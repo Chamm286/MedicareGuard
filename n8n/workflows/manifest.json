@@ -1,0 +1,37 @@
+{
+  "nodeCount": 40,
+  "workflows": [
+    {
+      "id": "ransomware-containment",
+      "name": "Ransomware Containment & Recovery",
+      "executable": 40,
+      "stickyNotes": 9,
+      "connections": 39,
+      "file": "n8n/workflows/ransomware-containment.json"
+    },
+    {
+      "id": "phishing-triage",
+      "name": "Phishing Triage & Credential Reset",
+      "executable": 40,
+      "stickyNotes": 9,
+      "connections": 39,
+      "file": "n8n/workflows/phishing-triage.json"
+    },
+    {
+      "id": "vulnerability-sla",
+      "name": "Vulnerability SLA Escalation",
+      "executable": 40,
+      "stickyNotes": 9,
+      "connections": 39,
+      "file": "n8n/workflows/vulnerability-sla.json"
+    },
+    {
+      "id": "compliance-evidence",
+      "name": "Continuous Compliance Evidence",
+      "executable": 40,
+      "stickyNotes": 9,
+      "connections": 39,
+      "file": "n8n/workflows/compliance-evidence.json"
+    }
+  ]
+}
