@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 N8N_DB="${N8N_DB:-$HOME/.n8n/database.sqlite}"
 WORKFLOW_DIR="$ROOT/n8n/workflows"
-WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence)
+WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence live-attack-monitor)
 
 if ! command -v n8n >/dev/null 2>&1; then
   echo "n8n CLI not found. Install n8n or add it to PATH." >&2
@@ -54,6 +54,25 @@ PY
 
 echo "Importing MedicareGuard PostgreSQL credential for n8n user $N8N_USER_ID..."
 (cd /tmp && n8n import:credentials --input="$TMP_DIR/credential.json" --userId="$N8N_USER_ID")
+
+if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD:-}" ]]; then
+  python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" <<'PYCRED'
+import json
+import sys
+path, user, password, host, port, secure = sys.argv[1:]
+credential = {
+    "id": "mg-smtp-credential",
+    "name": "MedicareGuard SMTP",
+    "type": "smtp",
+    "data": {"user": user, "password": password, "host": host, "port": int(port), "secure": secure.lower() == "true"},
+}
+json.dump([credential], open(path, "w"), indent=2)
+PYCRED
+  echo "Importing MedicareGuard SMTP credential..."
+  (cd /tmp && n8n import:credentials --input="$TMP_DIR/smtp.json" --userId="$N8N_USER_ID")
+else
+  echo "Skipping SMTP credential: set MG_SMTP_HOST, MG_SMTP_USER and MG_SMTP_PASSWORD to enable Gmail alerts."
+fi
 
 for workflow_id in "${WORKFLOW_IDS[@]}"; do
   file="$WORKFLOW_DIR/$workflow_id.json"

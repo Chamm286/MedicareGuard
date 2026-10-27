@@ -42,7 +42,7 @@ test: ## Run backend integration smoke test
 typecheck: ## Type-check the frontend
 	cd frontend && npx tsc --noEmit
 
-n8n-build: ## Regenerate the 40-node n8n workflow definitions
+n8n-build: ## Regenerate the focused n8n workflow definitions
 	node scripts/build-n8n-workflows.mjs
 
 n8n-token: ## Mint a 30-day JWT for n8n service calls
