@@ -69,6 +69,7 @@ const run = async () => {
     ["GET", "/ai/conversations"],
     ["GET", "/_meta/resources"],
     ["GET", "/automation/workflows"],
+    ["GET", "/automation/runtime"],
     ["GET", "/automation/executions"],
     ["GET", "/reports/schedules"],
     ["GET", "/vulnerabilities?limit=5"],
