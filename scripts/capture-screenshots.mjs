@@ -71,6 +71,7 @@ try {
   ];
 
   for (const [route, name] of pages) {
+    if (name === "automation") await page.setViewportSize({ width: 1440, height: 1400 });
     await page.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded" });
     await sleep(1900);
     const text = await page.locator("body").innerText();
@@ -78,6 +79,7 @@ try {
       errors.push(`${route}: error state visible`);
     }
     await page.screenshot({ path: path.join(OUT, `${name}.png`) });
+    if (name === "automation") await page.setViewportSize(VIEWPORT);
     console.log(`captured ${name}`);
   }
 
