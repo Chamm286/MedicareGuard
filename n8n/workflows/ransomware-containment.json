@@ -1,5 +1,7 @@
 {
+  "id": "ransomware-containment",
   "name": "Ransomware Containment & Recovery",
+  "active": false,
   "nodes": [
     {
       "name": "Webhook — Ransomware Alert",
@@ -8,28 +10,41 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "mg-ransomware",
-        "responseMode": "responseNode",
+        "responseMode": "onReceived",
         "options": {}
       },
-      "webhookId": "3169daa2-fcf2-4521-b035-e1061b739767",
       "position": [
         0,
         0
       ],
-      "id": "9dcf17b1-4198-487d-8157-7fffcda15e01"
+      "id": "5ca3c280-ddaa-5b6c-9686-ededda1d1efd",
+      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
     },
     {
-      "name": "Normalize Incoming Event",
+      "name": "Validate Webhook Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst entityId = body.alertId || body.incidentId;\nif (!entityId) { throw new Error('alertId is required'); }\nreturn [{ json: { entityId: String(entityId), entityType: 'alert', workflowSlug: 'ransomware-containment', workflowName: 'Ransomware Containment & Recovery', receivedAt: new Date().toISOString(), raw: body } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'ransomware-containment', workflowName: 'Ransomware Containment & Recovery', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
-        220,
-        0
+        0,
+        180
       ],
-      "id": "53b97226-6922-4f3a-ad9f-192df0c2d0fb"
+      "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
+    },
+    {
+      "name": "Deduplicate Active Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const payload = $json;\nconst idempotencyKey = payload.workflowId + ':' + payload.entityId + ':' + payload.executionId;\nreturn [{ json: { ...payload, idempotencyKey, dedupeStatus: 'unique', lane: 'primary' } }];"
+      },
+      "position": [
+        0,
+        360
+      ],
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
     },
     {
       "name": "Stamp Correlation Context",
@@ -39,19 +54,19 @@
         "assignments": {
           "assignments": [
             {
-              "id": "03fb3928-6448-4135-9695-8a2016c00936",
+              "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
               "name": "correlationId",
-              "value": "={{ $json.entityId + '-' + Date.now() }}",
+              "value": "={{ $json.workflowId + '-' + $json.executionId.slice(0, 8) }}",
               "type": "string"
             },
             {
-              "id": "a2231f73-d591-457e-b7fb-aaace5c723de",
+              "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
               "name": "workflowName",
               "value": "Ransomware Containment & Recovery",
               "type": "string"
             },
             {
-              "id": "94dc8786-fd88-4101-a97f-4879c90041a3",
+              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
               "name": "entityType",
               "value": "alert",
               "type": "string"
@@ -61,10 +76,10 @@
         "options": {}
       },
       "position": [
-        440,
-        0
+        0,
+        540
       ],
-      "id": "a53fa6dd-782e-415f-a3d3-4c9fbedfc5c6"
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
     },
     {
       "name": "Load Alert Record",
@@ -72,339 +87,35 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, title, severity, status, source_ip, destination_ip, asset_id, threat_id, risk_score, detected_at\n                  FROM alerts WHERE id = '{{ $json.entityId }}' LIMIT 1;",
+        "query": "SELECT id, title, severity, status, source, source_ip, risk_score, asset_id, metadata, detected_at\nFROM alerts WHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' LIMIT 1;",
         "options": {}
       },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        660,
-        0
-      ],
-      "id": "b160f38a-a7e4-4795-8c46-3cde1e2d92fb"
-    },
-    {
-      "name": "Fetch EDR Telemetry",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "GET",
-        "url": "=https://api.crowdstrike.com/devices/entities/devices/v1?ids={{ $json.asset_id }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        880,
-        0
-      ],
-      "id": "f93163b8-d982-4557-957b-6c58fd7716a0"
-    },
-    {
-      "name": "Query VirusTotal Reputation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "GET",
-        "url": "=https://www.virustotal.com/api/v3/files/{{ $('Load Alert Record').first().json.metadata.file_hash || 'unknown' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        1100,
-        0
-      ],
-      "id": "3d2f294c-0cf2-423e-ac7a-e32b9c1999ce"
-    },
-    {
-      "name": "Resolve Identity Context",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "GET",
-        "url": "=http://backend:4000/api/alerts/{{ $json.entityId }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "onError": "continueRegularOutput",
       "position": [
         0,
-        170
+        720
       ],
-      "id": "47118da6-9a97-466c-bc7c-71649e94b08e"
-    },
-    {
-      "name": "Merge Enrichment Context",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const base = $('Normalize Incoming Event').first().json;\nconst record = $('Load Alert Record').first().json;\nreturn [{ json: { ...base, record, enrichment: { edr: $('Fetch EDR Telemetry').first().json, intel: $('Query VirusTotal Reputation').first().json, identity: $('Resolve Identity Context').first().json } } }];"
-      },
-      "position": [
-        220,
-        170
-      ],
-      "id": "f71c61e6-3fcc-44f0-b7a3-7819c66f2304"
-    },
-    {
-      "name": "Load Asset Ownership",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, u.full_name AS owner_name, u.email AS owner_email\n                 FROM assets a LEFT JOIN users u ON u.id = a.owner_id\n                 WHERE a.id = (SELECT asset_id FROM alerts WHERE id = '{{ $json.entityId }}') LIMIT 1;",
-        "options": {}
-      },
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
           "name": "MedicareGuard PostgreSQL"
         }
       },
-      "onError": "continueRegularOutput",
-      "position": [
-        440,
-        170
-      ],
-      "id": "63470ab8-f9ec-400a-b850-924da32137b8"
+      "onError": "continueRegularOutput"
     },
     {
-      "name": "Count Related Incidents",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT count(*)::int AS open_incidents,\n                   (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating')) AS critical_alerts\n                   FROM incidents WHERE status NOT IN ('resolved','closed');",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        660,
-        170
-      ],
-      "id": "83d6ffd2-0505-4765-b1c3-239ad49c593c"
-    },
-    {
-      "name": "Compute Business Impact",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const base = $('Merge Enrichment Context').first().json;\nconst record = $('Load Alert Record').first().json || {};\nconst asset = $('Load Asset Ownership').first().json || {};\nconst related = $('Count Related Incidents').first().json || {};\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[String(record.severity || record.status || '').toLowerCase()] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? record.cvss_score * 3 : (record.risk_score || 50) * 0.3);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nconst riskScore = Math.max(1, Math.min(100, Math.round(severityWeight + criticalityWeight + exposure + relatedWeight)));\nreturn [{ json: { ...base, asset, related, record, riskScore, workflowName: 'Ransomware Containment & Recovery', entityId: base.entityId, entityType: 'alert', correlationId: base.correlationId } }];"
-      },
-      "position": [
-        880,
-        170
-      ],
-      "id": "e71067d5-02b2-4595-98df-2bc6d76e2037"
-    },
-    {
-      "name": "Critical Threshold?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "d1ed89dd-5832-4285-8701-89e51f6a0771",
-              "leftValue": "={{ $json.riskScore }}",
-              "rightValue": 85,
-              "operator": {
-                "type": "number",
-                "operation": "gte"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        1100,
-        170
-      ],
-      "id": "5be424e7-d49b-4490-9cc7-c864c1ca8f8d"
-    },
-    {
-      "name": "Open Primary Case",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, metadata)\n      VALUES ('Ransomware containment — {{ $('Load Alert Record').first().json.title }}',\n      'Automated P1 opened by n8n. Endpoint isolated and C2 blocked pending forensic review.',\n      'critical', 'open', 'P1', 'ransomware', now(), now() + interval '4 hours',\n      '{\"automation\":\"ransomware-containment\",\"source\":\"n8n\"}'::jsonb)\n      RETURNING id, incident_key;",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        0,
-        340
-      ],
-      "id": "5e3e0823-c97b-450e-ac8b-5b06c5d6e39f"
-    },
-    {
-      "name": "Open Standard Ticket",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO tickets (subject, status, priority, description)\n      VALUES ('Ransomware review — {{ $('Load Alert Record').first().json.title }}', 'open', 'high',\n      'Automated ticket created for below-threshold ransomware signal.') RETURNING id;",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        220,
-        340
-      ],
-      "id": "6efa921e-bff7-453c-ab9e-728d001df858"
-    },
-    {
-      "name": "Merge Case Handling",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        440,
-        340
-      ],
-      "id": "b2a56763-931e-4330-a580-cbbca900b474"
-    },
-    {
-      "name": "Notify SOC Channel",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.2,
-      "parameters": {
-        "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "value": "#soc-alerts",
-          "mode": "name"
-        },
-        "text": "=:rotating_light: *Ransomware signal* {{ $('Load Alert Record').first().json.title }} · risk {{ $('Compute Business Impact').first().json.riskScore }} · asset {{ $('Load Asset Ownership').first().json.name || 'unknown' }}",
-        "otherOptions": {}
-      },
-      "credentials": {
-        "slackApi": {
-          "id": "mg-slack-credential",
-          "name": "MedicareGuard Slack"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        660,
-        340
-      ],
-      "id": "2eceb70d-44e1-472b-bd14-f7a90fd29a72"
-    },
-    {
-      "name": "Update Case Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n   VALUES ('alerts', '{{ $('Compute Business Impact').first().json.entityId }}',\n   'n8n automation: {{ $('Compute Business Impact').first().json.workflowName }} completed containment and evidence collection.',\n   '{\"automation\": true}'::jsonb)\n   RETURNING id;",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        880,
-        340
-      ],
-      "id": "764bb98b-3591-49f4-a897-ac8b6b60728a"
-    },
-    {
-      "name": "Isolate Endpoint via EDR",
+      "name": "Enrich — EDR Telemetry",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "=https://api.crowdstrike.com/devices/entities/devices-actions/v2?action_name=contain",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/edr-telemetry' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
             },
             {
               "name": "Content-Type",
@@ -416,66 +127,30 @@
           "timeout": 15000
         },
         "sendBody": true,
+        "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ ids: [$('Load Asset Ownership').first().json.id], comment: 'MedicareGuard automated containment' }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
-      "onError": "continueRegularOutput",
       "position": [
-        1100,
-        340
+        320,
+        0
       ],
-      "id": "b6231426-ade6-4360-87f5-6d6704473b59"
+      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+      "onError": "continueRegularOutput"
     },
     {
-      "name": "Apply Enforcement Action",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO firewall_rules (name, description, direction, action, protocol, source_ip, priority, enabled, metadata)\n      SELECT 'Automated C2 block — ' || left(coalesce(source_ip,'unknown'), 60),\n      'Created by n8n ransomware containment playbook', 'inbound', 'deny', 'tcp',\n      coalesce(source_ip, '0.0.0.0'), 10, true,\n      '{\"automation\":\"ransomware-containment\"}'::jsonb\n      FROM alerts WHERE id = '{{ $('Compute Business Impact').first().json.entityId }}' RETURNING id;",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        0,
-        510
-      ],
-      "id": "4bd2b621-e0a0-4077-8fdb-308271d136db"
-    },
-    {
-      "name": "Wait for Enforcement",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "parameters": {
-        "amount": 5,
-        "unit": "seconds"
-      },
-      "webhookId": "01711477-4462-441a-9e6f-f4dfabf283e2",
-      "position": [
-        220,
-        510
-      ],
-      "id": "7c89389e-aad3-48e9-a94e-7b1c77095980"
-    },
-    {
-      "name": "Verify Containment State",
+      "name": "Enrich — Threat Reputation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
-        "method": "GET",
-        "url": "=http://backend:4000/api/alerts/{{ $('Compute Business Impact').first().json.entityId }}",
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-reputation' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
             },
             {
               "name": "Content-Type",
@@ -485,17 +160,152 @@
         },
         "options": {
           "timeout": 15000
-        }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicator: $('Load Alert Record').first().json.source_ip || $('Validate Webhook Payload').first().json.entityId }) }}"
       },
-      "onError": "continueRegularOutput",
       "position": [
-        440,
-        510
+        320,
+        180
       ],
-      "id": "6bb88245-e094-437f-8491-73c66cce66ae"
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
+      "onError": "continueRegularOutput"
     },
     {
-      "name": "Containment Verified?",
+      "name": "Enrich — Identity Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/identity-context' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, email: 'soc@medicareguard.io' }) }}"
+      },
+      "position": [
+        320,
+        360
+      ],
+      "id": "36b91229-3aaa-5950-98b2-27822433b566",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Merge Enrichment Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Alert Record');\nreturn [{ json: { ...base, record, enrichment: { primary: read('Enrich — EDR Telemetry'), reputation: read('Enrich — Threat Reputation'), identity: read('Enrich — Identity Context') } } }];"
+      },
+      "position": [
+        320,
+        540
+      ],
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
+    },
+    {
+      "name": "Correlate Threat Indicators",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Merge Enrichment Context');\nconst record = context.record || {};\nconst indicators = [record.source_ip, record.cve_id, record.control_id, record.title].filter(Boolean);\nreturn [{ json: { ...context, indicators, correlationCount: indicators.length, correlatedAt: new Date().toISOString() } }];"
+      },
+      "position": [
+        320,
+        720
+      ],
+      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
+    },
+    {
+      "name": "Load Asset Ownership",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email\nFROM assets a LEFT JOIN users u ON u.id = a.owner_id\nWHERE a.id = (SELECT asset_id FROM alerts WHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}') LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        640,
+        0
+      ],
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Load Related Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')) AS open_incidents,\n       (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating')) AS critical_alerts,\n       (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open') AS open_vulnerabilities;",
+        "options": {}
+      },
+      "position": [
+        640,
+        180
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Compute Business Impact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Correlate Threat Indicators');\nconst record = read('Load Alert Record');\nconst asset = read('Load Asset Ownership');\nconst related = read('Load Related Activity');\nconst severity = String(record.severity || record.status || '').toLowerCase();\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[severity] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? Number(record.cvss_score) * 6 : record.score ? (100 - Number(record.score)) * 0.55 : 25);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nlet riskScore = Math.round(severityWeight + criticalityWeight + exposure + relatedWeight);\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = Math.max(15, Math.min(100, 100 - Number(record.score)));\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, related, riskScore, severity: severity || 'medium', workflowName: 'Ransomware Containment & Recovery', entityId: base.entityId, entityType: 'alert', correlationId: base.correlationId } }];"
+      },
+      "position": [
+        640,
+        360
+      ],
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
+    },
+    {
+      "name": "Check SLA Clock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst slaMinutes = { critical: 60, high: 240, medium: 1440, low: 4320 }[String(context.severity || '').toLowerCase()] || 1440;\nreturn [{ json: { ...context, slaMinutes, slaDueAt: new Date(Date.now() + slaMinutes * 60000).toISOString(), breachRisk: context.riskScore >= 75 ? 'high' : 'normal' } }];"
+      },
+      "position": [
+        640,
+        540
+      ],
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d"
+    },
+    {
+      "name": "Business Impact Gate",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -508,8 +318,334 @@
           },
           "conditions": [
             {
-              "id": "cbd16072-ff12-4899-84ca-6ef9acf4e5bc",
-              "leftValue": "={{ $json.data.network_contained }}",
+              "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        640,
+        720
+      ],
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
+    },
+    {
+      "name": "Open P1 Incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Ransomware containment — automated P1', 'n8n isolated the endpoint, blocked command-and-control and preserved forensic evidence.',\n'critical', 'open', 'P1', 'ransomware', now(), now() + interval '4 hours',\n'AUTO-' || upper(substr(md5('{{ $('Validate Webhook Payload').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'entityId', '{{ $('Validate Webhook Payload').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
+        "options": {}
+      },
+      "position": [
+        960,
+        0
+      ],
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Open Standard Ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated ransomware review', 'open', 'high', 'Below-threshold ransomware signal routed for analyst review.',\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('Validate Webhook Payload').first().json.executionId }}')\nRETURNING id;",
+        "options": {}
+      },
+      "position": [
+        960,
+        180
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Merge Case Handling",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        960,
+        360
+      ],
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+    },
+    {
+      "name": "Load Notification Recipients",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        960,
+        540
+      ],
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Notify SOC Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Ransomware containment started', message: 'Automated containment is running for a critical ransomware alert.', severity: $('Compute Business Impact').first().json.severity, channel: '#soc-alerts' }) }}"
+      },
+      "position": [
+        960,
+        720
+      ],
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Create External Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/ticket-sync' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'ransomware-containment', subject: 'Ransomware Containment & Recovery' }) }}"
+      },
+      "position": [
+        960,
+        900
+      ],
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Update Case Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('alerts', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'n8n automation: Ransomware Containment & Recovery completed enrichment, notification and case routing.',\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')) RETURNING id;",
+        "options": {}
+      },
+      "position": [
+        960,
+        1080
+      ],
+      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Isolate Endpoint via EDR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/edr-isolate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, assetId: $('Load Alert Record').first().json.asset_id }) }}"
+      },
+      "position": [
+        1280,
+        0
+      ],
+      "id": "9619fd28-6e68-531d-b47e-189e21536dd8",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Block Command & Control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/network-contain' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, sourceIp: $('Load Alert Record').first().json.source_ip }) }}"
+      },
+      "position": [
+        1280,
+        180
+      ],
+      "id": "339234ac-71d5-511e-83c2-88fad6ee218a",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Wait for Propagation",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "position": [
+        1280,
+        360
+      ],
+      "id": "18c51e09-99e6-5650-9b5f-ee096c36b192",
+      "webhookId": "6c533bf0-10da-58fb-86f9-d94477a54e71"
+    },
+    {
+      "name": "Verify Containment State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/edr-verify' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, assetId: $('Load Alert Record').first().json.asset_id }) }}"
+      },
+      "position": [
+        1280,
+        540
+      ],
+      "id": "92523c5e-ab9b-5d29-99c9-21f08691dd39",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Response Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0ba3ea8e-1504-5aa4-84eb-b4e078c84eff",
+              "leftValue": "={{ $json.data.verified }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -522,123 +658,46 @@
         "options": {}
       },
       "position": [
-        660,
-        510
+        1280,
+        720
       ],
-      "id": "17cfbdba-551f-4645-afb3-2baf0751bda0"
+      "id": "5f4c81bf-41ab-5b20-8cd7-f040c8678841"
     },
     {
-      "name": "Mark Entity Contained",
+      "name": "Mark Record Responded",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE alerts SET status = 'investigating', updated_at = now()\n                 WHERE id = '{{ $('Compute Business Impact').first().json.entityId }}' RETURNING id, status;",
+        "query": "UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('containedBy', 'n8n', 'containedAt', now()::text), updated_at = now()\nWHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' RETURNING id, status;",
         "options": {}
       },
+      "position": [
+        1600,
+        360
+      ],
+      "id": "5321cfac-4bba-5b69-940d-0043b7a0d2fb",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
           "name": "MedicareGuard PostgreSQL"
         }
       },
-      "onError": "continueRegularOutput",
-      "position": [
-        880,
-        510
-      ],
-      "id": "3d4da559-cd66-4841-b2ee-23e011f4e689"
+      "onError": "continueRegularOutput"
     },
     {
       "name": "Escalate to IR Lead",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.2,
-      "parameters": {
-        "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "value": "#soc-escalations",
-          "mode": "name"
-        },
-        "text": "=:sos: Ransomware containment NOT verified for {{ $('Load Alert Record').first().json.title }}. Manual IR intervention required.",
-        "otherOptions": {}
-      },
-      "credentials": {
-        "slackApi": {
-          "id": "mg-slack-credential",
-          "name": "MedicareGuard Slack"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        1100,
-        510
-      ],
-      "id": "40fdc44e-1eaf-43ab-bea0-7a112c8518fb"
-    },
-    {
-      "name": "Merge Verification",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        0,
-        680
-      ],
-      "id": "d5fa5709-60bb-4a94-bfc4-d327c2c0bdd8"
-    },
-    {
-      "name": "Build Forensic Timeline",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const context = $('Compute Business Impact').first().json;\nconst caseRecord = $('Merge Case Handling').first().json;\nconst verification = $('Merge Verification').first().json || {};\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.status), stages: ['detected','enriched','case_opened','notified','contained','verified'], completedAt: new Date().toISOString() } }];"
-      },
-      "position": [
-        220,
-        680
-      ],
-      "id": "233abe9b-0752-4f61-929b-c9f546af8340"
-    },
-    {
-      "name": "Persist Response Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n       VALUES ('alerts',\n       '{{ $('Normalize Incoming Event').first().json.entityId }}',\n       'Automated timeline rebuilt: detected → enriched → case opened → containment → verification.',\n       '{\"automation\":\"ransomware-containment\",\"timeline\":true}'::jsonb) RETURNING id;",
-        "options": {}
-      },
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        440,
-        680
-      ],
-      "id": "061e37d4-5376-4953-83e0-46c64bb74b02"
-    },
-    {
-      "name": "Write Audit Evidence",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "=http://backend:4000/api/logs",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
             },
             {
               "name": "Content-Type",
@@ -650,28 +709,276 @@
           "timeout": 15000
         },
         "sendBody": true,
+        "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ level: 'info', event_type: 'automation', resource: 'ransomware-containment', action: 'workflow_complete', message: 'Ransomware Containment & Recovery completed', metadata: { correlationId: $('Compute Business Impact').first().json.correlationId } }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Manual intervention required — Ransomware Containment & Recovery', message: 'Automated verification failed or needs review.', severity: 'critical', channel: '#soc-escalations' }) }}"
       },
-      "onError": "continueRegularOutput",
       "position": [
-        660,
-        680
+        1600,
+        540
       ],
-      "id": "3f963c75-f4b1-45e6-8c21-f4aeb954c397"
+      "id": "d1410ad6-2a1d-5614-8209-6bafe8c7455d",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Merge Verification",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        1600,
+        720
+      ],
+      "id": "b132885a-bc6a-5bba-b8af-04a3519e0626"
+    },
+    {
+      "name": "Build Forensic Timeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst caseRecord = read('Merge Case Handling');\nconst verification = read('Merge Verification');\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.verified || verification.data?.verified), stages: ['detected', 'enriched', 'case_opened', 'notified', 'responded', 'verified'], completedAt: new Date().toISOString() } }];"
+      },
+      "position": [
+        1600,
+        900
+      ],
+      "id": "0bd66cc9-5a5f-5ce8-86cc-376c6520ccaf"
+    },
+    {
+      "name": "Persist Response Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('alerts', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'Automated timeline rebuilt: detected → enriched → case opened → response → verification.',\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'timeline', true)) RETURNING id;",
+        "options": {}
+      },
+      "position": [
+        1920,
+        0
+      ],
+      "id": "c1993f64-47a6-5d93-b4c5-208cf86d2631",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Write Audit Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-write' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'ransomware-containment', riskScore: $('Compute Business Impact').first().json.riskScore, report: 'Ransomware Containment Report' }) }}"
+      },
+      "position": [
+        1920,
+        180
+      ],
+      "id": "2059055e-7f01-5f98-9b6e-da0cd5ba1b0b",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Attach Evidence Artifact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-persist' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'ransomware-containment', controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
+      },
+      "position": [
+        1920,
+        360
+      ],
+      "id": "c42d4cc0-4e40-56dc-abe2-662650a64f05",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Sync Threat Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-sync' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicators: $('Correlate Threat Indicators').first().json.indicators }) }}"
+      },
+      "position": [
+        1920,
+        540
+      ],
+      "id": "5604e906-caa3-5c72-b749-c81d67feb3de",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Update Asset Risk Posture",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE assets SET risk_score = LEAST(100, risk_score + 3), metadata = metadata || jsonb_build_object('lastAutomationAt', now()::text), updated_at = now()\nWHERE id = NULLIF('{{ $('Load Asset Ownership').first().json.id }}', '')::uuid RETURNING id, risk_score;",
+        "options": {}
+      },
+      "position": [
+        1920,
+        720
+      ],
+      "id": "65fd3727-b101-5408-9362-7cb32f5c2041",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Generate Response Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/reports/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: 'Ransomware Containment Report — ' + $('Validate Webhook Payload').first().json.executionId.slice(0, 8), type: 'incident', format: 'json', days: 30 }) }}"
+      },
+      "position": [
+        1920,
+        900
+      ],
+      "id": "78dac20e-0ab5-5d9e-8b53-d340521fc3d0",
+      "onError": "continueRegularOutput"
     },
     {
       "name": "Emit Automation Metrics",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const context = $('Build Forensic Timeline').first().json;\nreturn [{ json: { workflow: 'ransomware-containment', correlationId: context.correlationId, riskScore: context.riskScore, verified: context.verified, durationMs: Date.now() - new Date(context.receivedAt).getTime(), metrics: { containment_actions: 2, evidence_records: 3, cases_opened: 1 } } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Build Forensic Timeline');\nconst startedAt = read('Validate Webhook Payload').receivedAt;\nreturn [{ json: { executionId: read('Validate Webhook Payload').executionId, workflowId: 'ransomware-containment', workflowName: 'Ransomware Containment & Recovery', status: 'success', riskScore: context.riskScore, verified: context.verified, durationMs: Math.max(1, Date.now() - new Date(startedAt).getTime()), nodeCount: 40, metrics: { risk_score: context.riskScore, stages_completed: context.stages?.length || 6, case_opened: Boolean(context.caseRecord?.id), verified: context.verified, evidence_records: 3 }, message: 'n8n completed Ransomware Containment & Recovery for execution ' + read('Validate Webhook Payload').executionId } }];"
       },
       "position": [
-        880,
-        680
+        2240,
+        0
       ],
-      "id": "b79da08a-8b80-44f5-bc67-0cf0c89d8ee3"
+      "id": "dbbf1e57-4a2d-5b96-994f-ec596cf89ad4"
+    },
+    {
+      "name": "Finalize Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('Validate Webhook Payload').first().json.executionId + '/complete' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: $json.workflowId, status: $json.status, durationMs: $json.durationMs, nodeCount: $json.nodeCount, metrics: $json.metrics, message: $json.message }) }}"
+      },
+      "position": [
+        2240,
+        180
+      ],
+      "id": "dd50225c-598a-56e3-abff-1b34a93e01a3",
+      "onError": "continueRegularOutput"
     },
     {
       "name": "Close Run",
@@ -679,10 +986,154 @@
       "typeVersion": 1,
       "parameters": {},
       "position": [
-        1100,
-        680
+        2240,
+        360
       ],
-      "id": "9e3abe9f-572e-4b4e-bd9e-1c7e9b63c89e"
+      "id": "428b3957-fc43-537d-9707-72794eb1633b"
+    },
+    {
+      "name": "Sticky Note — ① Detect",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Detect\nReceive the webhook, validate the entity and freeze a correlation ID.",
+        "height": 160,
+        "width": 280,
+        "color": 1
+      },
+      "position": [
+        0,
+        -260
+      ],
+      "id": "42afc3bc-89b8-5230-a842-cfd387cb3849"
+    },
+    {
+      "name": "Sticky Note — ② Enrich",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ② Enrich\nCollect endpoint, identity, mail, vulnerability and evidence context.",
+        "height": 160,
+        "width": 280,
+        "color": 2
+      },
+      "position": [
+        320,
+        -260
+      ],
+      "id": "b66b6382-918d-5975-90c1-41c7d359a028"
+    },
+    {
+      "name": "Sticky Note — ③ Assess",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ③ Assess\nCorrelate the estate, calculate business impact and start the SLA clock.",
+        "height": 160,
+        "width": 280,
+        "color": 3
+      },
+      "position": [
+        640,
+        -260
+      ],
+      "id": "e56e8559-91d2-5efa-8db9-719acdc9f942"
+    },
+    {
+      "name": "Sticky Note — ④ Decide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ④ Decide\nRoute the case, notify the SOC and create the response ticket.",
+        "height": 160,
+        "width": 280,
+        "color": 4
+      },
+      "position": [
+        960,
+        -260
+      ],
+      "id": "a54a3e63-8832-5560-9504-b6a9f5477781"
+    },
+    {
+      "name": "Sticky Note — ⑤ Respond",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ⑤ Respond\nExecute containment or remediation and wait for propagation.",
+        "height": 160,
+        "width": 280,
+        "color": 5
+      },
+      "position": [
+        1280,
+        -260
+      ],
+      "id": "68b74575-0080-54a4-9962-3973d98f833c"
+    },
+    {
+      "name": "Sticky Note — ⑥ Verify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ⑥ Verify\nIndependently verify the action, escalate on failure and merge branches.",
+        "height": 160,
+        "width": 280,
+        "color": 6
+      },
+      "position": [
+        1600,
+        -260
+      ],
+      "id": "457bb7a0-6b68-50fc-b80d-49c6f2f5c4be"
+    },
+    {
+      "name": "Sticky Note — ⑦ Evidence",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ⑦ Evidence\nPersist the timeline, audit hash, evidence artifact and threat intel.",
+        "height": 160,
+        "width": 280,
+        "color": 7
+      },
+      "position": [
+        1920,
+        -260
+      ],
+      "id": "6d8453bf-1c17-501a-b64c-8ebca05cb19d"
+    },
+    {
+      "name": "Sticky Note — ⑧ Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ⑧ Report\nEmit metrics, finalise the run and close the execution cleanly.",
+        "height": 160,
+        "width": 280,
+        "color": 1
+      },
+      "position": [
+        2240,
+        -260
+      ],
+      "id": "5833c260-3ac6-5d13-aead-baddea0a6c51"
+    },
+    {
+      "name": "Sticky Note — Workflow Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "# Ransomware Containment & Recovery\nEDR isolation · C2 block · P1 escalation · forensic evidence\n\n**Trigger:** webhook `mg-ransomware` · **Owner:** SOC Automation · **SLA:** production playbook",
+        "height": 200,
+        "width": 900,
+        "color": 4
+      },
+      "position": [
+        2240,
+        -520
+      ],
+      "id": "74a7d9f6-8fb7-5f41-a12d-2398114cd0d7"
     }
   ],
   "connections": {
@@ -690,14 +1141,25 @@
       "main": [
         [
           {
-            "node": "Normalize Incoming Event",
+            "node": "Validate Webhook Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize Incoming Event": {
+    "Validate Webhook Payload": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Active Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Active Run": {
       "main": [
         [
           {
@@ -723,36 +1185,36 @@
       "main": [
         [
           {
-            "node": "Fetch EDR Telemetry",
+            "node": "Enrich — EDR Telemetry",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch EDR Telemetry": {
+    "Enrich — EDR Telemetry": {
       "main": [
         [
           {
-            "node": "Query VirusTotal Reputation",
+            "node": "Enrich — Threat Reputation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Query VirusTotal Reputation": {
+    "Enrich — Threat Reputation": {
       "main": [
         [
           {
-            "node": "Resolve Identity Context",
+            "node": "Enrich — Identity Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Resolve Identity Context": {
+    "Enrich — Identity Context": {
       "main": [
         [
           {
@@ -767,6 +1229,17 @@
       "main": [
         [
           {
+            "node": "Correlate Threat Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correlate Threat Indicators": {
+      "main": [
+        [
+          {
             "node": "Load Asset Ownership",
             "type": "main",
             "index": 0
@@ -778,14 +1251,14 @@
       "main": [
         [
           {
-            "node": "Count Related Incidents",
+            "node": "Load Related Activity",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Count Related Incidents": {
+    "Load Related Activity": {
       "main": [
         [
           {
@@ -800,18 +1273,29 @@
       "main": [
         [
           {
-            "node": "Critical Threshold?",
+            "node": "Check SLA Clock",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Critical Threshold?": {
+    "Check SLA Clock": {
       "main": [
         [
           {
-            "node": "Open Primary Case",
+            "node": "Business Impact Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Impact Gate": {
+      "main": [
+        [
+          {
+            "node": "Open P1 Incident",
             "type": "main",
             "index": 0
           }
@@ -825,7 +1309,7 @@
         ]
       ]
     },
-    "Open Primary Case": {
+    "Open P1 Incident": {
       "main": [
         [
           {
@@ -851,6 +1335,17 @@
       "main": [
         [
           {
+            "node": "Load Notification Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Notification Recipients": {
+      "main": [
+        [
+          {
             "node": "Notify SOC Channel",
             "type": "main",
             "index": 0
@@ -859,6 +1354,17 @@
       ]
     },
     "Notify SOC Channel": {
+      "main": [
+        [
+          {
+            "node": "Create External Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create External Ticket": {
       "main": [
         [
           {
@@ -884,25 +1390,25 @@
       "main": [
         [
           {
-            "node": "Apply Enforcement Action",
+            "node": "Block Command & Control",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Apply Enforcement Action": {
+    "Block Command & Control": {
       "main": [
         [
           {
-            "node": "Wait for Enforcement",
+            "node": "Wait for Propagation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait for Enforcement": {
+    "Wait for Propagation": {
       "main": [
         [
           {
@@ -917,18 +1423,18 @@
       "main": [
         [
           {
-            "node": "Containment Verified?",
+            "node": "Response Verified?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Containment Verified?": {
+    "Response Verified?": {
       "main": [
         [
           {
-            "node": "Mark Entity Contained",
+            "node": "Mark Record Responded",
             "type": "main",
             "index": 0
           }
@@ -942,7 +1448,7 @@
         ]
       ]
     },
-    "Mark Entity Contained": {
+    "Mark Record Responded": {
       "main": [
         [
           {
@@ -1001,6 +1507,50 @@
       "main": [
         [
           {
+            "node": "Attach Evidence Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Evidence Artifact": {
+      "main": [
+        [
+          {
+            "node": "Sync Threat Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Threat Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Update Asset Risk Posture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Asset Risk Posture": {
+      "main": [
+        [
+          {
+            "node": "Generate Response Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Response Report": {
+      "main": [
+        [
+          {
             "node": "Emit Automation Metrics",
             "type": "main",
             "index": 0
@@ -1012,6 +1562,17 @@
       "main": [
         [
           {
+            "node": "Finalize Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Execution": {
+      "main": [
+        [
+          {
             "node": "Close Run",
             "type": "main",
             "index": 0
@@ -1020,7 +1581,6 @@
       ]
     }
   },
-  "active": false,
   "settings": {
     "executionOrder": "v1",
     "saveExecutionProgress": true,
@@ -1030,9 +1590,8 @@
   "staticData": null,
   "pinData": {},
   "meta": {
-    "templateCredsSetupCompleted": false,
-    "description": "Critical ransomware containment with EDR isolation, C2 blocking, P1 incident creation and forensic evidence capture.",
-    "workflowSlug": "ransomware-containment"
+    "templateCredsSetupCompleted": true,
+    "workflowDescription": "EDR isolation · C2 block · P1 escalation · forensic evidence"
   },
   "tags": [
     {
