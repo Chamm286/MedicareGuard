@@ -1,4 +1,4 @@
-.PHONY: help install dev backend frontend db-migrate db-seed docker-up docker-down docker-reset screenshots test typecheck lint
+.PHONY: help install dev backend frontend db-migrate db-seed docker-up docker-down docker-reset screenshots test typecheck lint n8n-build n8n-token n8n-setup
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -41,5 +41,14 @@ test: ## Run backend integration smoke test
 
 typecheck: ## Type-check the frontend
 	cd frontend && npx tsc --noEmit
+
+n8n-build: ## Regenerate the 40-node n8n workflow definitions
+	node scripts/build-n8n-workflows.mjs
+
+n8n-token: ## Mint a 30-day JWT for n8n service calls
+	cd backend && npm run --silent token:n8n
+
+n8n-setup: n8n-build ## Import, publish and activate MedicareGuard workflows in local n8n
+	bash scripts/setup-n8n.sh
 
 lint: typecheck ## Alias for typecheck
