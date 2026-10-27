@@ -382,6 +382,36 @@ const seed = async () => {
     }),
   );
 
+  const automationWorkflows = [
+    ["ransomware-containment", "Ransomware Containment & Recovery"],
+    ["phishing-triage", "Phishing Triage & Credential Reset"],
+    ["vulnerability-sla", "Vulnerability SLA Escalation"],
+    ["compliance-evidence", "Continuous Compliance Evidence"],
+  ];
+  await insert(
+    "activity_logs",
+    ["level", "event_type", "actor_id", "actor_email", "source_ip", "user_agent", "resource", "resource_id", "action", "message", "metadata", "created_at"],
+    Array.from({ length: 32 }).map((_, index) => {
+      const [slug, workflowName] = pick(automationWorkflows);
+      const status = index % 13 === 0 ? "failed" : pick(["success", "dispatched", "success", "queued"]);
+      const durationMs = int(720, 4200);
+      return {
+        level: status === "failed" ? "error" : status === "queued" ? "warn" : "info",
+        event_type: "automation",
+        actor_id: userIds[0],
+        actor_email: pick([users[0].email, "automation@medicareguard.io"]),
+        source_ip: randomIp(),
+        user_agent: "n8n/2.41.5",
+        resource: "automation_workflow",
+        resource_id: slug,
+        action: "run",
+        message: status === "queued" ? `Workflow queued (n8n offline): ${workflowName}` : `Workflow dispatched to n8n: ${workflowName}`,
+        metadata: JSON.stringify({ executionId: uuid(), workflowId: slug, workflowName, status, mode: pick(["manual", "webhook", "schedule"]), durationMs, nodeCount: 30 }),
+        created_at: daysAgo(int(0, 9), 23),
+      };
+    }),
+  );
+
   await insert(
     "audit_logs",
     ["actor_id", "actor_email", "action", "resource", "resource_id", "ip_address", "user_agent", "details", "created_at"],
