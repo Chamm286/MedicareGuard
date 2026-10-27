@@ -24,6 +24,7 @@ const logRoutes = require("./routes/logs");
 const statsRoutes = require("./routes/stats");
 const reportRoutes = require("./routes/reports");
 const aiRoutes = require("./routes/ai");
+const automationRoutes = require("./routes/automation");
 const systemRoutes = require("./routes/system");
 const { buildGenericRouter } = require("./routes/generic");
 const { recordActivity } = require("./services/audit");
@@ -72,6 +73,7 @@ app.use(`${api}/logs`, authenticate, logRoutes);
 app.use(`${api}/stats`, authenticate, statsRoutes);
 app.use(`${api}/reports`, authenticate, reportRoutes);
 app.use(`${api}/ai`, authenticate, aiRoutes);
+app.use(`${api}/automation`, authenticate, automationRoutes);
 app.use(`${api}`, buildGenericRouter());
 
 app.get("/", (_req, res) => res.json({ service: "MedicareGuard SOC API", docs: `${api}/_meta/endpoints`, health: `${api}/health` }));
