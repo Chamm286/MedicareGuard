@@ -2,7 +2,7 @@
 
 **A full-stack security operations platform for healthcare environments.**
 
-MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 541-endpoint REST API, a 21-route Next.js console, four 30-node n8n workflows and a realistic seeded dataset for demos.
+MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 544-endpoint REST API, a 21-route Next.js console, four 40-node n8n workflows and a realistic seeded dataset for demos.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white">
@@ -65,8 +65,8 @@ flowchart LR
   end
 
   subgraph Services
-    A["Express API<br/>541 endpoints"]
-    W["n8n 2.41<br/>4 response workflows"]
+    A["Express API<br/>544 endpoints"]
+    W["n8n 2.41<br/>4 × 40-node workflows"]
   end
 
   subgraph Data
@@ -92,10 +92,10 @@ flowchart LR
 | Frontend | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Recharts, Lucide |
 | Backend | Node.js 20+, Express 4, PostgreSQL (`pg`), JWT, bcrypt, Helmet, rate limiting |
 | Database | PostgreSQL 16 — 42 tables, 5 analytics views, triggers and indexes |
-| Automation | n8n 2.41 — 4 workflows × 30 nodes |
+| Automation | n8n 2.41 — 4 workflows × 40 executable nodes |
 | Infrastructure | Docker Compose, multi-stage Dockerfiles, nginx reverse proxy |
 | AI | Deterministic, telemetry-grounded analyst with optional OpenAI provider |
-| Testing | 57-check integration smoke suite, TypeScript checks, Playwright screenshots |
+| Testing | 58-check integration smoke suite, TypeScript checks, Playwright screenshots |
 
 ## Feature map
 
@@ -188,11 +188,35 @@ make dev
 Useful commands:
 
 ```bash
-make test          # 57-check API smoke suite (541 endpoints)
+make test          # 58-check API smoke suite (544 endpoints)
 make typecheck     # frontend TypeScript check
 make screenshots   # recapture docs/screenshots with Playwright
+make n8n-build     # regenerate the four 40-node n8n workflows
+make n8n-token     # mint a 30-day JWT for n8n callbacks
+make n8n-setup     # import, publish and activate the workflows
 make docker-reset  # stop stack and delete volumes
 ```
+
+### Live n8n integration
+
+The console dispatches runs to n8n webhooks; the workflows enrich the case through the SOC API and PostgreSQL, then call `POST /api/automation/executions/:id/complete` so the UI shows the final status, duration and node count.
+
+```bash
+# 1. Mint a token and expose it to n8n
+cd backend && npm run --silent token:n8n > /tmp/mg-n8n-token
+export MG_API_URL=http://localhost:4000/api
+export MG_API_TOKEN="$(cat /tmp/mg-n8n-token)"
+export N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+
+# 2. From the repository root, import the credential and workflows
+bash scripts/setup-n8n.sh
+
+# 3. Restart n8n and dispatch a run
+curl -X POST http://localhost:4000/api/automation/workflows/phishing-triage/run \
+  -H "Authorization: Bearer $MG_API_TOKEN"
+```
+
+Full details, credential overrides and verification commands are in [`n8n/README.md`](n8n/README.md).
 
 ## API
 
@@ -215,7 +239,7 @@ curl -s -X POST http://localhost:4000/api/automation/workflows/ransomware-contai
   -H "Authorization: Bearer $TOKEN"
 ```
 
-The API exposes 541 routes covering:
+The API exposes 544 routes covering:
 
 - `auth`, `users`, `roles`, `system`, `search`
 - `alerts`, `incidents`, `threats`, `assets`, `vulnerabilities`, `firewall-rules`
@@ -233,7 +257,9 @@ See `GET /api/_meta/resources` for the full resource registry.
 | Vulnerability SLA Escalation | `/webhook/mg-vulnerability` | Enrich CVE, assign owner, create change request, escalate SLA |
 | Continuous Compliance Evidence | `/webhook/mg-compliance` | Collect HIPAA/NIST/ISO evidence and write audit trail |
 
-Import steps, credential placeholders and `MG_API_TOKEN` setup are documented in [`n8n/README.md`](n8n/README.md).
+Each playbook contains 40 executable nodes and 9 sticky notes across ingest, enrichment, correlation, decision, response, verification, documentation and notification stages. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
+
+Setup, credential overrides, environment variables and verification commands are documented in [`n8n/README.md`](n8n/README.md).
 
 ## Database
 
@@ -252,18 +278,18 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 ```
 .
 ├── backend/               Express API, services, middleware and scripts
-│   ├── scripts/           migrate, seed and 57-check smoke suite
+│   ├── scripts/           migrate, seed, service-token and 58-check smoke suite
 │   └── src/
 │       ├── config/        env, database, resource and automation registries
 │       ├── middleware/    JWT authentication, RBAC and error handling
 │       ├── routes/        auth, alerts, threats, assets, incidents, reports, AI, automation
-│       └── services/      AI analyst and audit logging
+│       └── services/      AI analyst, automation runtime and audit logging
 ├── database/schema.sql    42 tables, 5 views, indexes and triggers
 ├── frontend/              Next.js 15 App Router console
 │   ├── app/(app)/         dashboard and all operational modules
 │   ├── components/        shell, tables, charts, threat map, command palette
 │   └── lib/               API client, auth, navigation and formatting
-├── n8n/                   4 importable 30-node workflows + setup guide
+├── n8n/                   4 importable 40-node workflows + setup guide
 ├── nginx/                 reverse proxy for console, API and n8n
 ├── docs/screenshots/      Playwright captures of every module
 ├── docker-compose.yml     PostgreSQL, backend, frontend, n8n and nginx
@@ -287,8 +313,8 @@ cd backend && npm test
 ```
 
 ```
-Endpoints discovered: 541
-Checks: 57/57 passed
+Endpoints discovered: 544
+Checks: 58/58 passed
 ```
 
 Frontend:
