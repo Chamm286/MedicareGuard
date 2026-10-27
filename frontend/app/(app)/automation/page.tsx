@@ -21,6 +21,7 @@ export default function AutomationPage() {
 
   const list = data?.data || [];
   const summary = data?.summary;
+  const runtime = summary?.runtime;
   const runs = executions.data?.data || [];
   const selected = list.find((item: any) => item.id === selectedId);
   const selectedRuns = useMemo(() => runs.filter((run: any) => run.workflowId === selectedId), [runs, selectedId]);
@@ -28,7 +29,8 @@ export default function AutomationPage() {
   const active = list.filter((workflow: any) => workflow.enabled).length;
   const totalRuns = runs.length;
   const completed = runs.filter((run: any) => ["success", "dispatched"].includes(run.status)).length;
-  const successRate = totalRuns ? Math.round((completed / totalRuns) * 100) : 100;
+  const attempted = runs.filter((run: any) => ["success", "dispatched", "failed"].includes(run.status)).length;
+  const successRate = attempted ? Math.round((completed / attempted) * 100) : 100;
   const avgDuration = runs.length ? Math.round(runs.reduce((sum: number, run: any) => sum + Number(run.durationMs || 0), 0) / runs.length) : 0;
 
   const runWorkflow = async (workflow: any) => {
@@ -110,7 +112,7 @@ export default function AutomationPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1 font-mono text-[9px] text-slate-500">{summary?.n8n || "http://localhost:5678"}</span>
-              <Badge tone={active === list.length && list.length ? "low" : "warning"} dot>{active === list.length && list.length ? "operational" : "degraded"}</Badge>
+              <Badge tone={runtime ? (runtime.online ? "low" : "critical") : "warning"} dot>{runtime ? (runtime.online ? `n8n online · ${runtime.latencyMs}ms` : "n8n offline") : "probing n8n"}</Badge>
             </div>
           </div>
           <div className="relative mt-4 grid gap-2 sm:grid-cols-5">
@@ -196,7 +198,10 @@ export default function AutomationPage() {
               </div>
 
               <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-                <button onClick={() => setSelectedId(workflow.id)} className="text-[9.5px] text-slate-600 transition hover:text-brand-300">View pipeline →</button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setSelectedId(workflow.id)} className="text-[9.5px] text-slate-600 transition hover:text-brand-300">View pipeline →</button>
+                  <a href={workflow.n8n_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9.5px] text-slate-600 transition hover:text-brand-300">Open in n8n <ExternalLink className="h-2.5 w-2.5" /></a>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <span className="hidden text-[8.5px] text-slate-700 sm:inline">{workflow.schedule}</span>
                   <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>Run now</Button>
@@ -227,6 +232,7 @@ export default function AutomationPage() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setSelectedId(null)}>Close</Button>
+            {selected && <a href={selected.n8n_url} target="_blank" rel="noreferrer"><Button variant="ghost" icon={ExternalLink}>Open in n8n</Button></a>}
             {selected && <Button variant="primary" icon={Play} loading={running === selected.id} disabled={!selected.enabled} onClick={() => runWorkflow(selected)}>Run workflow</Button>}
           </>
         }
