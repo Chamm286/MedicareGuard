@@ -1,37 +1,45 @@
 {
-  "nodeCount": 40,
+  "nodeCount": 97,
   "workflows": [
     {
       "id": "ransomware-containment",
       "name": "Ransomware Containment & Recovery",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "executable": 20,
+      "stickyNotes": 7,
+      "connections": 19,
       "file": "n8n/workflows/ransomware-containment.json"
     },
     {
       "id": "phishing-triage",
       "name": "Phishing Triage & Credential Reset",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "executable": 20,
+      "stickyNotes": 7,
+      "connections": 19,
       "file": "n8n/workflows/phishing-triage.json"
     },
     {
       "id": "vulnerability-sla",
       "name": "Vulnerability SLA Escalation",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "executable": 20,
+      "stickyNotes": 7,
+      "connections": 19,
       "file": "n8n/workflows/vulnerability-sla.json"
     },
     {
       "id": "compliance-evidence",
       "name": "Continuous Compliance Evidence",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "executable": 20,
+      "stickyNotes": 7,
+      "connections": 19,
       "file": "n8n/workflows/compliance-evidence.json"
+    },
+    {
+      "id": "live-attack-monitor",
+      "name": "Live Attack Monitor & Phone Alerts",
+      "executable": 17,
+      "stickyNotes": 5,
+      "connections": 16,
+      "file": "n8n/workflows/live-attack-monitor.json"
     }
   ]
 }

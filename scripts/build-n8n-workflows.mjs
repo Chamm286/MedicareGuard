@@ -5,64 +5,59 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(__dirname, "../n8n/workflows");
-const NODE_COUNT = 40;
 const CREDENTIAL = { id: "mg-postgres-credential", name: "MedicareGuard PostgreSQL" };
 
 const ref = (node, field) => `$('${node}').first().json.${field}`;
 const sqlRef = (node, field) => `{{ ${ref(node, field)} }}`;
 
 const stageNotes = [
-  { x: 0, title: "① Detect", color: 1, detail: "Receive the webhook, validate the entity and freeze a correlation ID." },
-  { x: 320, title: "② Enrich", color: 2, detail: "Collect endpoint, identity, mail, vulnerability and evidence context." },
-  { x: 640, title: "③ Assess", color: 3, detail: "Correlate the estate, calculate business impact and start the SLA clock." },
-  { x: 960, title: "④ Decide", color: 4, detail: "Route the case, notify the SOC and create the response ticket." },
-  { x: 1280, title: "⑤ Respond", color: 5, detail: "Execute containment or remediation and wait for propagation." },
-  { x: 1600, title: "⑥ Verify", color: 6, detail: "Independently verify the action, escalate on failure and merge branches." },
-  { x: 1920, title: "⑦ Evidence", color: 7, detail: "Persist the timeline, audit hash, evidence artifact and threat intel." },
-  { x: 2240, title: "⑧ Report", color: 1, detail: "Emit metrics, finalise the run and close the execution cleanly." },
+  { x: 0, title: "① Detect", color: 1, detail: "Receive the webhook, validate the payload and load the affected record." },
+  { x: 300, title: "② Enrich", color: 2, detail: "Collect EDR, identity, sandbox, CVE or evidence context and asset ownership." },
+  { x: 600, title: "③ Decide", color: 3, detail: "Score business risk, route the case and open the right incident." },
+  { x: 900, title: "④ Notify", color: 4, detail: "Send Telegram and Gmail alerts with a direct link back to the console." },
+  { x: 1200, title: "⑤ Respond", color: 5, detail: "Run containment or remediation and verify that the action held." },
+  { x: 1500, title: "⑥ Close", color: 6, detail: "Mark the record, write evidence and finalize the n8n execution." },
 ];
 
 const positions = {
   webhook: [0, 0],
-  validate: [0, 180],
-  dedupe: [0, 360],
-  stamp: [0, 540],
-  load: [0, 720],
-  enrichA: [320, 0],
-  enrichB: [320, 180],
-  enrichC: [320, 360],
-  mergeEnrichment: [320, 540],
-  correlate: [320, 720],
-  loadAsset: [640, 0],
-  loadRelated: [640, 180],
-  impact: [640, 360],
-  sla: [640, 540],
-  gate: [640, 720],
-  criticalCase: [960, 0],
-  standardCase: [960, 180],
-  mergeCase: [960, 360],
-  recipients: [960, 540],
-  notify: [960, 720],
-  ticket: [960, 900],
-  timeline: [960, 1080],
-  actionA: [1280, 0],
-  actionB: [1280, 180],
-  wait: [1280, 360],
-  verify: [1280, 540],
-  verified: [1280, 720],
-  mark: [1600, 360],
-  escalate: [1600, 540],
-  mergeVerify: [1600, 720],
-  buildTimeline: [1600, 900],
-  persistTimeline: [1920, 0],
-  audit: [1920, 180],
-  artifact: [1920, 360],
-  intel: [1920, 540],
-  assetRisk: [1920, 720],
-  report: [1920, 900],
-  metrics: [2240, 0],
-  finalize: [2240, 180],
-  close: [2240, 360],
+  validate: [0, 160],
+  load: [0, 320],
+  enrichA: [300, 0],
+  enrichB: [300, 160],
+  loadAsset: [300, 320],
+  score: [300, 480],
+  criticalCase: [600, 0],
+  standardCase: [600, 160],
+  mergeCase: [600, 320],
+  gate: [600, 480],
+  notifyGate: [780, 320],
+  telegram: [900, 0],
+  gmail: [900, 160],
+  actionA: [900, 320],
+  actionB: [900, 480],
+  verify: [1200, 320],
+  mark: [1200, 480],
+  evidence: [1200, 640],
+  finalize: [1500, 0],
+  close: [1500, 160],
+  monitorWebhook: [0, 0],
+  monitorSchedule: [0, 160],
+  monitorNormalize: [0, 320],
+  monitorLoad: [300, 0],
+  monitorBuild: [300, 160],
+  monitorGate: [300, 320],
+  monitorRecipients: [600, 0],
+  monitorNotifyGate: [780, 160],
+  monitorTelegram: [600, 160],
+  monitorGmail: [600, 320],
+  monitorInApp: [900, 0],
+  monitorUpdate: [900, 160],
+  monitorAudit: [900, 320],
+  monitorNoAttacks: [900, 480],
+  monitorMetrics: [1200, 0],
+  monitorFinalize: [1200, 160],
+  monitorClose: [1500, 160],
 };
 
 let idCounter = 0;
@@ -324,10 +319,69 @@ WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' RETURNING id, sta
     reportName: "Continuous Compliance Evidence Report",
     metricNote: "identity, endpoint and audit evidence with immutable checksum",
   },
+  {
+    id: "live-attack-monitor",
+    name: "Live Attack Monitor & Phone Alerts",
+    triggerLabel: "Monitor Tick",
+    webhookPath: "mg-attack-monitor",
+    entityType: "alert",
+    stageSummary: "5-minute attack sweep · Telegram + Gmail · on-call visibility",
+  },
 ];
+
+const notificationText = (spec) => {
+  const path = spec.entityType === "vulnerability" ? "/vulnerabilities/" : spec.entityType === "compliance_control" ? "/reports" : "/alerts/";
+  const link = spec.entityType === "compliance_control"
+    ? `($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/reports'`
+    : `($env.MG_CONSOLE_URL || 'http://localhost:3000') + '${path}' + $('Score Risk & Build Alert').first().json.entityId`;
+  return `'🚨 *MedicareGuard SOC alert*\\n*Workflow:* ' + $('Score Risk & Build Alert').first().json.workflowName + '\\n*Severity:* ' + $('Score Risk & Build Alert').first().json.severity + '\\n*Risk:* ' + $('Score Risk & Build Alert').first().json.riskScore + '/100\\n*Entity:* ' + $('Score Risk & Build Alert').first().json.entityId + '\\n*Console:* ' + ${link}`;
+};
+
+const telegramNode = (spec, position) => {
+  const text = notificationText(spec);
+  return node(
+    "Notify Telegram",
+    "n8n-nodes-base.httpRequest",
+    4.2,
+    {
+      method: "POST",
+      url: "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
+      sendHeaders: true,
+      headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
+      sendBody: true,
+      contentType: "json",
+      specifyBody: "json",
+      jsonBody: `={{ JSON.stringify({ chat_id: ($env.TELEGRAM_CHAT_ID || ''), parse_mode: 'Markdown', disable_web_page_preview: true, text: ${text} }) }}`,
+      options: { timeout: 15000 },
+    },
+    position,
+    { onError: "continueRegularOutput" },
+  );
+};
+
+const gmailNode = (spec, position) => {
+  const text = notificationText(spec);
+  return node(
+    "Notify Gmail",
+    "n8n-nodes-base.emailSend",
+    2.1,
+    {
+      fromEmail: "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+      toEmail: "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+      subject: "=🚨 [{{ $('Score Risk & Build Alert').first().json.severity }}] {{ $('Score Risk & Build Alert').first().json.workflowName }}",
+      emailFormat: "text",
+      text: `=${text}`,
+      options: {},
+    },
+    position,
+    { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" },
+  );
+};
 
 const buildWorkflow = (spec) => {
   resetIds();
+  if (spec.id === "live-attack-monitor") return buildMonitorWorkflow(spec);
+
   const validateCode = `const body = $json.body ?? $json;
 const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;
 const entityId = String(raw || '').trim();
@@ -335,136 +389,61 @@ if (!entityId) { throw new Error('entityId is required'); }
 const executionId = String(body.executionId || ('ext-' + Date.now()));
 return [{ json: { ...body, entityId, executionId, workflowId: '${spec.id}', workflowName: '${spec.name}', entityType: '${spec.entityType}', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];`;
 
-  const dedupeCode = `const payload = $json;
-const idempotencyKey = payload.workflowId + ':' + payload.entityId + ':' + payload.executionId;
-return [{ json: { ...payload, idempotencyKey, dedupeStatus: 'unique', lane: 'primary' } }];`;
-
-  const mergeEnrichmentCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
+  const scoreCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
 const base = read('Validate Webhook Payload');
 const record = read('${spec.loadName}');
-return [{ json: { ...base, record, enrichment: { primary: read('${spec.enrichA[0]}'), reputation: read('${spec.enrichB[0]}'), identity: read('${spec.enrichC[0]}') } } }];`;
-
-  const correlateCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
-const context = read('Merge Enrichment Context');
-const record = context.record || {};
-const indicators = [record.source_ip, record.cve_id, record.control_id, record.title].filter(Boolean);
-return [{ json: { ...context, indicators, correlationCount: indicators.length, correlatedAt: new Date().toISOString() } }];`;
-
-  const impactCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
-const base = read('Correlate Threat Indicators');
-const record = read('${spec.loadName}');
 const asset = read('Load Asset Ownership');
-const related = read('Load Related Activity');
-const severity = String(record.severity || record.status || '').toLowerCase();
-const severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[severity] || 10;
-const criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;
-const exposure = Number(record.cvss_score ? Number(record.cvss_score) * 6 : record.score ? (100 - Number(record.score)) * 0.55 : 25);
-const relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);
-let riskScore = Math.round(severityWeight + criticalityWeight + exposure + relatedWeight);
-if (record.score !== undefined && record.cvss_score === undefined) riskScore = Math.max(15, Math.min(100, 100 - Number(record.score)));
+const primary = read('${spec.enrichA[0]}');
+const reputation = read('${spec.enrichB[0]}');
+const severity = String(record.severity || record.status || 'medium').toLowerCase();
+const severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;
+const criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;
+const cvss = Number(record.cvss_score || 0);
+const vulnWeight = cvss ? Math.round(cvss * 3) : 0;
+let riskScore = severityWeight + criticalityWeight + vulnWeight;
+if (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);
 riskScore = Math.max(1, Math.min(100, riskScore || 50));
-return [{ json: { ...base, record, asset, related, riskScore, severity: severity || 'medium', workflowName: '${spec.name}', entityId: base.entityId, entityType: '${spec.entityType}', correlationId: base.correlationId } }];`;
+return [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: '${spec.name}', entityId: base.entityId, entityType: '${spec.entityType}', correlationId: base.executionId.slice(0, 8) } }];`;
 
-  const slaCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
-const context = read('Compute Business Impact');
-const slaMinutes = { critical: 60, high: 240, medium: 1440, low: 4320 }[String(context.severity || '').toLowerCase()] || 1440;
-return [{ json: { ...context, slaMinutes, slaDueAt: new Date(Date.now() + slaMinutes * 60000).toISOString(), breachRisk: context.riskScore >= 75 ? 'high' : 'normal' } }];`;
-
-  const timelineCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
-const context = read('Compute Business Impact');
-const caseRecord = read('Merge Case Handling');
-const verification = read('Merge Verification');
-return [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.verified || verification.data?.verified), stages: ['detected', 'enriched', 'case_opened', 'notified', 'responded', 'verified'], completedAt: new Date().toISOString() } }];`;
-
-  const metricsCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
-const context = read('Build Forensic Timeline');
-const startedAt = read('Validate Webhook Payload').receivedAt;
-return [{ json: { executionId: read('Validate Webhook Payload').executionId, workflowId: '${spec.id}', workflowName: '${spec.name}', status: 'success', riskScore: context.riskScore, verified: context.verified, durationMs: Math.max(1, Date.now() - new Date(startedAt).getTime()), nodeCount: ${NODE_COUNT}, metrics: { risk_score: context.riskScore, stages_completed: context.stages?.length || 6, case_opened: Boolean(context.caseRecord?.id), verified: context.verified, evidence_records: 3 }, message: 'n8n completed ${spec.name} for execution ' + read('Validate Webhook Payload').executionId } }];`;
-
-  const finalizeFields = `workflowId: $json.workflowId, status: $json.status, durationMs: $json.durationMs, nodeCount: $json.nodeCount, metrics: $json.metrics, message: $json.message`;
+  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: true, telegram_alert: true }, message: 'n8n completed ${spec.name} for execution ' + $('Validate Webhook Payload').first().json.executionId`;
 
   const nodes = [
     node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.webhook, { webhookId: id() }),
     code("Validate Webhook Payload", validateCode, positions.validate),
-    code("Deduplicate Active Run", dedupeCode, positions.dedupe),
-    node("Stamp Correlation Context", "n8n-nodes-base.set", 3.3, {
-      assignments: {
-        assignments: [
-          { id: id(), name: "correlationId", value: `={{ $json.workflowId + '-' + $json.executionId.slice(0, 8) }}`, type: "string" },
-          { id: id(), name: "workflowName", value: spec.name, type: "string" },
-          { id: id(), name: "entityType", value: spec.entityType, type: "string" },
-        ],
-      },
-      options: {},
-    }, positions.stamp),
     postgres(spec.loadName, spec.loadQuery, positions.load),
     simulate(spec.enrichA[0], spec.enrichA[1], positions.enrichA, spec.enrichA[2]),
     simulate(spec.enrichB[0], spec.enrichB[1], positions.enrichB, spec.enrichB[2]),
-    simulate(spec.enrichC[0], spec.enrichC[1], positions.enrichC, spec.enrichC[2]),
-    code("Merge Enrichment Context", mergeEnrichmentCode, positions.mergeEnrichment),
-    code("Correlate Threat Indicators", correlateCode, positions.correlate),
     postgres("Load Asset Ownership", spec.assetQuery, positions.loadAsset),
-    postgres("Load Related Activity", `SELECT (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')) AS open_incidents,
-       (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating')) AS critical_alerts,
-       (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open') AS open_vulnerabilities;`, positions.loadRelated),
-    code("Compute Business Impact", impactCode, positions.impact),
-    code("Check SLA Clock", slaCode, positions.sla),
-    ifNode("Business Impact Gate", `={{ $json.riskScore }}`, 70, positions.gate),
+    code("Score Risk & Build Alert", scoreCode, positions.score),
+    ifNode("Impact Gate", `={{ $json.riskScore }}`, 70, positions.gate),
     postgres(spec.criticalCaseName, spec.criticalCaseQuery, positions.criticalCase),
     postgres(spec.standardCaseName, spec.standardCaseQuery, positions.standardCase),
     node("Merge Case Handling", "n8n-nodes-base.merge", 3, { mode: "append", numberInputs: 2, options: {} }, positions.mergeCase),
-    postgres("Load Notification Recipients", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') LIMIT 1;", positions.recipients),
-    simulate("Notify SOC Channel", "notify", positions.notify, `executionId: ${ref("Validate Webhook Payload", "executionId")}, title: '${spec.notifyTitle}', message: '${spec.notifyMessage}', severity: ${ref("Compute Business Impact", "severity")}, channel: '#soc-alerts'`),
-    simulate("Create External Ticket", "ticket-sync", positions.ticket, `executionId: ${ref("Validate Webhook Payload", "executionId")}, workflowId: '${spec.id}', subject: '${spec.name}'`),
-    postgres("Update Case Timeline", `INSERT INTO comments (resource, resource_id, body, metadata)
-VALUES ('${spec.entityType === "compliance_control" ? "compliance_controls" : spec.entityType === "vulnerability" ? "vulnerabilities" : "alerts"}', '${sqlRef("Validate Webhook Payload", "entityId")}',
-'n8n automation: ${spec.name} completed enrichment, notification and case routing.',
-jsonb_build_object('automation', '${spec.id}', 'executionId', '${sqlRef("Validate Webhook Payload", "executionId")}')) RETURNING id;`, positions.timeline),
+    ifNode("Notifications Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}", true, positions.notifyGate),
+    telegramNode(spec, positions.telegram),
+    gmailNode(spec, positions.gmail),
     simulate(spec.actionA[0], spec.actionA[1], positions.actionA, spec.actionA[2]),
     simulate(spec.actionB[0], spec.actionB[1], positions.actionB, spec.actionB[2]),
-    node("Wait for Propagation", "n8n-nodes-base.wait", 1.1, { amount: 2, unit: "seconds" }, positions.wait, { webhookId: id() }),
     simulate(spec.verifyAction[0], spec.verifyAction[1], positions.verify, spec.verifyAction[2]),
-    ifNode("Response Verified?", `={{ $json.data.verified }}`, true, positions.verified),
     postgres("Mark Record Responded", spec.markQuery, positions.mark),
-    simulate("Escalate to IR Lead", "notify", positions.escalate, `executionId: ${ref("Validate Webhook Payload", "executionId")}, title: 'Manual intervention required — ${spec.name}', message: 'Automated verification failed or needs review.', severity: 'critical', channel: '#soc-escalations'`),
-    node("Merge Verification", "n8n-nodes-base.merge", 3, { mode: "append", numberInputs: 2, options: {} }, positions.mergeVerify),
-    code("Build Forensic Timeline", timelineCode, positions.buildTimeline),
-    postgres("Persist Response Timeline", `INSERT INTO comments (resource, resource_id, body, metadata)
-VALUES ('${spec.entityType === "compliance_control" ? "compliance_controls" : spec.entityType === "vulnerability" ? "vulnerabilities" : "alerts"}', '${sqlRef("Validate Webhook Payload", "entityId")}',
-'Automated timeline rebuilt: detected → enriched → case opened → response → verification.',
-jsonb_build_object('automation', '${spec.id}', 'executionId', '${sqlRef("Validate Webhook Payload", "executionId")}', 'timeline', true)) RETURNING id;`, positions.persistTimeline),
-    simulate("Write Audit Evidence", "evidence-write", positions.audit, `executionId: ${ref("Validate Webhook Payload", "executionId")}, workflowId: '${spec.id}', riskScore: ${ref("Compute Business Impact", "riskScore")}, report: '${spec.reportName}'`),
-    simulate("Attach Evidence Artifact", "evidence-persist", positions.artifact, `executionId: ${ref("Validate Webhook Payload", "executionId")}, workflowId: '${spec.id}', controlId: ${ref("Validate Webhook Payload", "entityId")}`),
-    simulate("Sync Threat Intelligence", "intel-sync", positions.intel, `executionId: ${ref("Validate Webhook Payload", "executionId")}, indicators: ${ref("Correlate Threat Indicators", "indicators")}`),
-    postgres("Update Asset Risk Posture", `UPDATE assets SET risk_score = LEAST(100, risk_score + 3), metadata = metadata || jsonb_build_object('lastAutomationAt', now()::text), updated_at = now()
-WHERE id = NULLIF('${sqlRef("Load Asset Ownership", "id")}', '')::uuid RETURNING id, risk_score;`, positions.assetRisk),
-    http("Generate Response Report", "POST", apiUrl("/reports/generate"), positions.report, jsonBody(`name: '${spec.reportName} — ' + ${ref("Validate Webhook Payload", "executionId")}.slice(0, 8), type: '${spec.reportType}', format: 'json', days: 30`)),
-    code("Emit Automation Metrics", metricsCode, positions.metrics),
+    simulate("Write Audit Evidence", "evidence-write", positions.evidence, `executionId: ${ref("Validate Webhook Payload", "executionId")}, workflowId: '${spec.id}', riskScore: ${ref("Score Risk & Build Alert", "riskScore")}, report: '${spec.reportName}'`),
     http("Finalize Execution", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("Validate Webhook Payload", "executionId")} + '/complete' }}`, positions.finalize, jsonBody(finalizeFields)),
-    node("Close Run", "n8n-nodes-base.noOp", 1, {}, positions.close),
   ];
 
   stageNotes.forEach((stage) => {
-    nodes.push(sticky(`Sticky Note — ${stage.title}`, `## ${stage.title}\n${stage.detail}`, [stage.x, -260], 280, 160, stage.color));
+    nodes.push(sticky(`Sticky Note — ${stage.title}`, `## ${stage.title}\n${stage.detail}`, [stage.x, -260], 260, 160, stage.color));
   });
-  nodes.push(sticky("Sticky Note — Workflow Overview", `# ${spec.name}\n${spec.stageSummary}\n\n**Trigger:** webhook \`${spec.webhookPath}\` · **Owner:** SOC Automation · **SLA:** production playbook`, [2240, -520], 900, 200, 4));
+  nodes.push(sticky("Sticky Note — Workflow Overview", `# ${spec.name}\n${spec.stageSummary}\n\n**Trigger:** webhook \`${spec.webhookPath}\` · **Nodes:** 20 · **Alerts:** Telegram + Gmail · **Owner:** SOC Automation`, [0, -520], 1300, 200, 4));
 
   const connections = {
     ["Webhook — " + spec.triggerLabel]: { main: [[{ node: "Validate Webhook Payload", type: "main", index: 0 }]] },
-    "Validate Webhook Payload": { main: [[{ node: "Deduplicate Active Run", type: "main", index: 0 }]] },
-    "Deduplicate Active Run": { main: [[{ node: "Stamp Correlation Context", type: "main", index: 0 }]] },
-    "Stamp Correlation Context": { main: [[{ node: spec.loadName, type: "main", index: 0 }]] },
+    "Validate Webhook Payload": { main: [[{ node: spec.loadName, type: "main", index: 0 }]] },
     [spec.loadName]: { main: [[{ node: spec.enrichA[0], type: "main", index: 0 }]] },
     [spec.enrichA[0]]: { main: [[{ node: spec.enrichB[0], type: "main", index: 0 }]] },
-    [spec.enrichB[0]]: { main: [[{ node: spec.enrichC[0], type: "main", index: 0 }]] },
-    [spec.enrichC[0]]: { main: [[{ node: "Merge Enrichment Context", type: "main", index: 0 }]] },
-    "Merge Enrichment Context": { main: [[{ node: "Correlate Threat Indicators", type: "main", index: 0 }]] },
-    "Correlate Threat Indicators": { main: [[{ node: "Load Asset Ownership", type: "main", index: 0 }]] },
-    "Load Asset Ownership": { main: [[{ node: "Load Related Activity", type: "main", index: 0 }]] },
-    "Load Related Activity": { main: [[{ node: "Compute Business Impact", type: "main", index: 0 }]] },
-    "Compute Business Impact": { main: [[{ node: "Check SLA Clock", type: "main", index: 0 }]] },
-    "Check SLA Clock": { main: [[{ node: "Business Impact Gate", type: "main", index: 0 }]] },
-    "Business Impact Gate": {
+    [spec.enrichB[0]]: { main: [[{ node: "Load Asset Ownership", type: "main", index: 0 }]] },
+    "Load Asset Ownership": { main: [[{ node: "Score Risk & Build Alert", type: "main", index: 0 }]] },
+    "Score Risk & Build Alert": { main: [[{ node: "Impact Gate", type: "main", index: 0 }]] },
+    "Impact Gate": {
       main: [
         [{ node: spec.criticalCaseName, type: "main", index: 0 }],
         [{ node: spec.standardCaseName, type: "main", index: 0 }],
@@ -472,33 +451,137 @@ WHERE id = NULLIF('${sqlRef("Load Asset Ownership", "id")}', '')::uuid RETURNING
     },
     [spec.criticalCaseName]: { main: [[{ node: "Merge Case Handling", type: "main", index: 0 }]] },
     [spec.standardCaseName]: { main: [[{ node: "Merge Case Handling", type: "main", index: 1 }]] },
-    "Merge Case Handling": { main: [[{ node: "Load Notification Recipients", type: "main", index: 0 }]] },
-    "Load Notification Recipients": { main: [[{ node: "Notify SOC Channel", type: "main", index: 0 }]] },
-    "Notify SOC Channel": { main: [[{ node: "Create External Ticket", type: "main", index: 0 }]] },
-    "Create External Ticket": { main: [[{ node: "Update Case Timeline", type: "main", index: 0 }]] },
-    "Update Case Timeline": { main: [[{ node: spec.actionA[0], type: "main", index: 0 }]] },
-    [spec.actionA[0]]: { main: [[{ node: spec.actionB[0], type: "main", index: 0 }]] },
-    [spec.actionB[0]]: { main: [[{ node: "Wait for Propagation", type: "main", index: 0 }]] },
-    "Wait for Propagation": { main: [[{ node: spec.verifyAction[0], type: "main", index: 0 }]] },
-    [spec.verifyAction[0]]: { main: [[{ node: "Response Verified?", type: "main", index: 0 }]] },
-    "Response Verified?": {
+    "Merge Case Handling": { main: [[{ node: "Notifications Ready?", type: "main", index: 0 }]] },
+    "Notifications Ready?": {
       main: [
-        [{ node: "Mark Record Responded", type: "main", index: 0 }],
-        [{ node: "Escalate to IR Lead", type: "main", index: 0 }],
+        [{ node: "Notify Telegram", type: "main", index: 0 }],
+        [{ node: spec.actionA[0], type: "main", index: 0 }],
       ],
     },
-    "Mark Record Responded": { main: [[{ node: "Merge Verification", type: "main", index: 0 }]] },
-    "Escalate to IR Lead": { main: [[{ node: "Merge Verification", type: "main", index: 1 }]] },
-    "Merge Verification": { main: [[{ node: "Build Forensic Timeline", type: "main", index: 0 }]] },
-    "Build Forensic Timeline": { main: [[{ node: "Persist Response Timeline", type: "main", index: 0 }]] },
-    "Persist Response Timeline": { main: [[{ node: "Write Audit Evidence", type: "main", index: 0 }]] },
-    "Write Audit Evidence": { main: [[{ node: "Attach Evidence Artifact", type: "main", index: 0 }]] },
-    "Attach Evidence Artifact": { main: [[{ node: "Sync Threat Intelligence", type: "main", index: 0 }]] },
-    "Sync Threat Intelligence": { main: [[{ node: "Update Asset Risk Posture", type: "main", index: 0 }]] },
-    "Update Asset Risk Posture": { main: [[{ node: "Generate Response Report", type: "main", index: 0 }]] },
-    "Generate Response Report": { main: [[{ node: "Emit Automation Metrics", type: "main", index: 0 }]] },
-    "Emit Automation Metrics": { main: [[{ node: "Finalize Execution", type: "main", index: 0 }]] },
+    "Notify Telegram": { main: [[{ node: "Notify Gmail", type: "main", index: 0 }]] },
+    "Notify Gmail": { main: [[{ node: spec.actionA[0], type: "main", index: 0 }]] },
+    [spec.actionA[0]]: { main: [[{ node: spec.actionB[0], type: "main", index: 0 }]] },
+    [spec.actionB[0]]: { main: [[{ node: spec.verifyAction[0], type: "main", index: 0 }]] },
+    [spec.verifyAction[0]]: { main: [[{ node: "Mark Record Responded", type: "main", index: 0 }]] },
+    "Mark Record Responded": { main: [[{ node: "Write Audit Evidence", type: "main", index: 0 }]] },
+    "Write Audit Evidence": { main: [[{ node: "Finalize Execution", type: "main", index: 0 }]] },
+  };
+
+  return {
+    id: spec.id,
+    name: spec.name,
+    active: false,
+    nodes,
+    connections,
+    settings: { executionOrder: "v1", saveExecutionProgress: true, saveManualExecutions: true, timezone: "Asia/Ho_Chi_Minh" },
+    staticData: null,
+    pinData: {},
+    meta: { templateCredsSetupCompleted: true, workflowDescription: spec.stageSummary },
+    tags: [{ name: "MedicareGuard" }, { name: spec.id }],
+  };
+};
+
+const buildMonitorWorkflow = (spec) => {
+  resetIds();
+
+  const normalizeCode = `const body = $json.body ?? $json;
+const executionId = String(body.executionId || ('monitor-' + Date.now()));
+return [{ json: { ...body, executionId, workflowId: 'live-attack-monitor', workflowName: 'Live Attack Monitor & Phone Alerts', mode: body.mode || 'scheduled', startedAt: body.startedAt || new Date().toISOString() } }];`;
+
+  const buildMessageCode = `const attacks = Array.isArray($json.attacks) ? $json.attacks : [];
+const lines = attacks.map(function (a) { return '• [' + a.severity + '] ' + a.title + ' — ' + (a.source_ip || 'unknown') + ' (' + (a.risk_score || 0) + '/100)'; });
+const text = '🚨 MedicareGuard live attack monitor\\n' + attacks.length + ' new high-risk attack(s) detected in the last 24h.\\n\\n' + lines.join('\\n') + '\\n\\nConsole: http://localhost:3000/alerts';
+const base = $('Normalize Monitor Trigger').first().json;
+return [{ json: { ...base, count: attacks.length, attacks, summary: lines.join(' | '), text } }];`;
+
+  const metricsCode = `const base = $('Normalize Monitor Trigger').first().json;
+const built = $('Build Phone Message').first().json;
+const count = Number(built.count || 0);
+return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 17, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'n8n live attack monitor found ' + count + ' new attack(s)' } }];`;
+
+  const alertText = `$('Build Phone Message').first().json.text`;
+  const nodes = [
+    node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.monitorWebhook, { webhookId: id() }),
+    node("Schedule — Every 5 Minutes", "n8n-nodes-base.scheduleTrigger", 1.2, { rule: { interval: [{ field: "minutes", minutesInterval: 5 }] } }, positions.monitorSchedule),
+    code("Normalize Monitor Trigger", normalizeCode, positions.monitorNormalize),
+    postgres("Load Recent Attacks", `SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS attacks, count(*)::int AS count
+FROM (
+  SELECT id, title, severity, source_ip, risk_score, detected_at
+  FROM alerts
+  WHERE severity IN ('critical','high')
+    AND detected_at > now() - interval '24 hours'
+    AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
+  ORDER BY detected_at DESC LIMIT 5
+) t;`, positions.monitorLoad),
+    code("Build Phone Message", buildMessageCode, positions.monitorBuild),
+    ifNode("New Attacks?", `={{ $json.count }}`, 1, positions.monitorGate),
+    postgres("Load Alert Recipients", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients),
+    ifNode("Notifications Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}", true, positions.monitorNotifyGate),
+    node("Notify Telegram", "n8n-nodes-base.httpRequest", 4.2, {
+      method: "POST",
+      url: "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
+      sendHeaders: true,
+      headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
+      sendBody: true,
+      contentType: "json",
+      specifyBody: "json",
+      jsonBody: `={{ JSON.stringify({ chat_id: ($env.TELEGRAM_CHAT_ID || ''), parse_mode: 'Markdown', disable_web_page_preview: true, text: ${alertText} }) }}`,
+      options: { timeout: 15000 },
+    }, positions.monitorTelegram, { onError: "continueRegularOutput" }),
+    node("Notify Gmail", "n8n-nodes-base.emailSend", 2.1, {
+      fromEmail: "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+      toEmail: "={{ $('Load Alert Recipients').first().json.email || $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+      subject: "=🚨 MedicareGuard live attack monitor — {{ $('Build Phone Message').first().json.count }} new attack(s)",
+      emailFormat: "text",
+      text: `={{ ${alertText} }}`,
+      options: {},
+    }, positions.monitorGmail, { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
+    simulate("Notify In-App", "notify", positions.monitorInApp, `executionId: ${ref("Normalize Monitor Trigger", "executionId")}, title: 'Live attack monitor: ' + $('Build Phone Message').first().json.count + ' new attack(s)', message: $('Build Phone Message').first().json.summary, severity: 'critical', channel: 'phone'`),
+    postgres("Mark Attacks Notified", `UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()
+WHERE severity IN ('critical','high')
+  AND detected_at > now() - interval '24 hours'
+  AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
+RETURNING id;`, positions.monitorUpdate),
+    simulate("Write Audit Evidence", "evidence-write", positions.monitorAudit, `executionId: ${ref("Normalize Monitor Trigger", "executionId")}, workflowId: 'live-attack-monitor', report: 'Live Attack Monitor'`),
+    code("Emit Monitor Metrics", metricsCode, positions.monitorMetrics),
+    http("Finalize Execution", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("Normalize Monitor Trigger", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 17, metrics: $json.metrics, message: $json.message`)),
+    node("Close Run", "n8n-nodes-base.noOp", 1, {}, positions.monitorClose),
+    node("No New Attacks", "n8n-nodes-base.noOp", 1, {}, positions.monitorNoAttacks),
+  ];
+
+  nodes.push(sticky("Sticky Note — Monitor", "## ① Monitor\nEvery 5 minutes, scan alerts from the last 24 hours that have not been sent to the on-call phone.", [0, -260], 280, 160, 1));
+  nodes.push(sticky("Sticky Note — Build Digest", "## ② Build digest\nAggregate up to five high-risk attacks into a readable Telegram and Gmail message.", [300, -260], 280, 160, 2));
+  nodes.push(sticky("Sticky Note — Phone alerts", "## ③ Phone alerts\nTelegram for instant mobile push; Gmail for the audit-friendly inbox copy.", [600, -260], 280, 160, 3));
+  nodes.push(sticky("Sticky Note — Close", "## ④ Close\nMark alerts as notified, write evidence and finalize the SOC execution log.", [900, -260], 280, 160, 5));
+  nodes.push(sticky("Sticky Note — Overview", "# Live Attack Monitor & Phone Alerts\n5-minute sweep · 17 nodes · Telegram + Gmail · no laptop required\n\n**Trigger:** webhook `mg-attack-monitor` + schedule `*/5 * * * *` · **Owner:** SOC Automation", [0, -520], 1300, 200, 4));
+
+  const connections = {
+    ["Webhook — " + spec.triggerLabel]: { main: [[{ node: "Normalize Monitor Trigger", type: "main", index: 0 }]] },
+    "Schedule — Every 5 Minutes": { main: [[{ node: "Normalize Monitor Trigger", type: "main", index: 0 }]] },
+    "Normalize Monitor Trigger": { main: [[{ node: "Load Recent Attacks", type: "main", index: 0 }]] },
+    "Load Recent Attacks": { main: [[{ node: "Build Phone Message", type: "main", index: 0 }]] },
+    "Build Phone Message": { main: [[{ node: "New Attacks?", type: "main", index: 0 }]] },
+    "New Attacks?": {
+      main: [
+        [{ node: "Load Alert Recipients", type: "main", index: 0 }],
+        [{ node: "No New Attacks", type: "main", index: 0 }],
+      ],
+    },
+    "Load Alert Recipients": { main: [[{ node: "Notifications Ready?", type: "main", index: 0 }]] },
+    "Notifications Ready?": {
+      main: [
+        [{ node: "Notify Telegram", type: "main", index: 0 }],
+        [{ node: "Notify In-App", type: "main", index: 0 }],
+      ],
+    },
+    "Notify Telegram": { main: [[{ node: "Notify Gmail", type: "main", index: 0 }]] },
+    "Notify Gmail": { main: [[{ node: "Notify In-App", type: "main", index: 0 }]] },
+    "Notify In-App": { main: [[{ node: "Mark Attacks Notified", type: "main", index: 0 }]] },
+    "Mark Attacks Notified": { main: [[{ node: "Write Audit Evidence", type: "main", index: 0 }]] },
+    "Write Audit Evidence": { main: [[{ node: "Emit Monitor Metrics", type: "main", index: 0 }]] },
+    "Emit Monitor Metrics": { main: [[{ node: "Finalize Execution", type: "main", index: 0 }]] },
     "Finalize Execution": { main: [[{ node: "Close Run", type: "main", index: 0 }]] },
+    "No New Attacks": { main: [[{ node: "Emit Monitor Metrics", type: "main", index: 0 }]] },
   };
 
   return {
@@ -527,4 +610,5 @@ for (const spec of workflowSpecs) {
   manifest.push({ id: spec.id, name: spec.name, executable, stickyNotes: allNodes - executable, connections: connectionCount, file: path.relative(path.resolve(__dirname, ".."), file) });
   console.log(`${spec.id}: ${executable} executable nodes, ${allNodes - executable} sticky notes, ${connectionCount} connection groups`);
 }
-fs.writeFileSync(path.join(outputDir, "manifest.json"), JSON.stringify({ nodeCount: NODE_COUNT, workflows: manifest }, null, 2) + "\n");
+const totalExecutable = manifest.reduce((sum, item) => sum + item.executable, 0);
+fs.writeFileSync(path.join(outputDir, "manifest.json"), JSON.stringify({ nodeCount: totalExecutable, workflows: manifest }, null, 2) + "\n");

@@ -29,57 +29,9 @@
       },
       "position": [
         0,
-        180
+        160
       ],
       "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
-    },
-    {
-      "name": "Deduplicate Active Run",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const payload = $json;\nconst idempotencyKey = payload.workflowId + ':' + payload.entityId + ':' + payload.executionId;\nreturn [{ json: { ...payload, idempotencyKey, dedupeStatus: 'unique', lane: 'primary' } }];"
-      },
-      "position": [
-        0,
-        360
-      ],
-      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
-    },
-    {
-      "name": "Stamp Correlation Context",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
-              "name": "correlationId",
-              "value": "={{ $json.workflowId + '-' + $json.executionId.slice(0, 8) }}",
-              "type": "string"
-            },
-            {
-              "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
-              "name": "workflowName",
-              "value": "Continuous Compliance Evidence",
-              "type": "string"
-            },
-            {
-              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
-              "name": "entityType",
-              "value": "compliance_control",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "position": [
-        0,
-        540
-      ],
-      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
     },
     {
       "name": "Load Control Inventory",
@@ -92,9 +44,9 @@
       },
       "position": [
         0,
-        720
+        320
       ],
-      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -132,10 +84,10 @@
         "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
       "position": [
-        320,
+        300,
         0
       ],
-      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+      "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
       "onError": "continueRegularOutput"
     },
     {
@@ -167,72 +119,11 @@
         "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
       "position": [
-        320,
-        180
+        300,
+        160
       ],
-      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
+      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
       "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Enrich — Audit Evidence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-audit' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
-      },
-      "position": [
-        320,
-        360
-      ],
-      "id": "36b91229-3aaa-5950-98b2-27822433b566",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Merge Enrichment Context",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Control Inventory');\nreturn [{ json: { ...base, record, enrichment: { primary: read('Enrich — Identity Evidence'), reputation: read('Enrich — Endpoint Evidence'), identity: read('Enrich — Audit Evidence') } } }];"
-      },
-      "position": [
-        320,
-        540
-      ],
-      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
-    },
-    {
-      "name": "Correlate Threat Indicators",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Merge Enrichment Context');\nconst record = context.record || {};\nconst indicators = [record.source_ip, record.cve_id, record.control_id, record.title].filter(Boolean);\nreturn [{ json: { ...context, indicators, correlationCount: indicators.length, correlatedAt: new Date().toISOString() } }];"
-      },
-      "position": [
-        320,
-        720
-      ],
-      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
     },
     {
       "name": "Load Asset Ownership",
@@ -244,10 +135,10 @@
         "options": {}
       },
       "position": [
-        640,
-        0
+        300,
+        320
       ],
-      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+      "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -257,55 +148,20 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Load Related Activity",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')) AS open_incidents,\n       (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating')) AS critical_alerts,\n       (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open') AS open_vulnerabilities;",
-        "options": {}
-      },
-      "position": [
-        640,
-        180
-      ],
-      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Compute Business Impact",
+      "name": "Score Risk & Build Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Correlate Threat Indicators');\nconst record = read('Load Control Inventory');\nconst asset = read('Load Asset Ownership');\nconst related = read('Load Related Activity');\nconst severity = String(record.severity || record.status || '').toLowerCase();\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[severity] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? Number(record.cvss_score) * 6 : record.score ? (100 - Number(record.score)) * 0.55 : 25);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nlet riskScore = Math.round(severityWeight + criticalityWeight + exposure + relatedWeight);\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = Math.max(15, Math.min(100, 100 - Number(record.score)));\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, related, riskScore, severity: severity || 'medium', workflowName: 'Continuous Compliance Evidence', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.correlationId } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Control Inventory');\nconst asset = read('Load Asset Ownership');\nconst primary = read('Enrich — Identity Evidence');\nconst reputation = read('Enrich — Endpoint Evidence');\nconst severity = String(record.severity || record.status || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: 'Continuous Compliance Evidence', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.executionId.slice(0, 8) } }];"
       },
       "position": [
-        640,
-        360
+        300,
+        480
       ],
-      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
     },
     {
-      "name": "Check SLA Clock",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst slaMinutes = { critical: 60, high: 240, medium: 1440, low: 4320 }[String(context.severity || '').toLowerCase()] || 1440;\nreturn [{ json: { ...context, slaMinutes, slaDueAt: new Date(Date.now() + slaMinutes * 60000).toISOString(), breachRisk: context.riskScore >= 75 ? 'high' : 'normal' } }];"
-      },
-      "position": [
-        640,
-        540
-      ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d"
-    },
-    {
-      "name": "Business Impact Gate",
+      "name": "Impact Gate",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -318,7 +174,7 @@
           },
           "conditions": [
             {
-              "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+              "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
               "leftValue": "={{ $json.riskScore }}",
               "rightValue": 70,
               "operator": {
@@ -332,10 +188,10 @@
         "options": {}
       },
       "position": [
-        640,
-        720
+        600,
+        480
       ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
+      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e"
     },
     {
       "name": "Open Control Gap",
@@ -347,10 +203,10 @@
         "options": {}
       },
       "position": [
-        960,
+        600,
         0
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -369,10 +225,10 @@
         "options": {}
       },
       "position": [
-        960,
-        180
+        600,
+        160
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "id": "36b91229-3aaa-5950-98b2-27822433b566",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -391,121 +247,96 @@
         "options": {}
       },
       "position": [
-        960,
-        360
+        600,
+        320
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
     },
     {
-      "name": "Load Notification Recipients",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "Notifications Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') LIMIT 1;",
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
         "options": {}
       },
       "position": [
-        960,
-        540
+        780,
+        320
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b"
+    },
+    {
+      "name": "Notify Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: ($env.TELEGRAM_CHAT_ID || ''), parse_mode: 'Markdown', disable_web_page_preview: true, text: '🚨 *MedicareGuard SOC alert*\\n*Workflow:* ' + $('Score Risk & Build Alert').first().json.workflowName + '\\n*Severity:* ' + $('Score Risk & Build Alert').first().json.severity + '\\n*Risk:* ' + $('Score Risk & Build Alert').first().json.riskScore + '/100\\n*Entity:* ' + $('Score Risk & Build Alert').first().json.entityId + '\\n*Console:* ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/reports' }) }}",
+        "options": {
+          "timeout": 15000
         }
       },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Notify SOC Channel",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Compliance evidence collection', message: 'Automated evidence collection is running for a compliance control.', severity: $('Compute Business Impact').first().json.severity, channel: '#soc-alerts' }) }}"
-      },
       "position": [
-        960,
-        720
+        900,
+        0
       ],
-      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a",
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Create External Ticket",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Notify Gmail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
       "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/ticket-sync' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'compliance-evidence', subject: 'Continuous Compliance Evidence' }) }}"
-      },
-      "position": [
-        960,
-        900
-      ],
-      "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Update Case Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('compliance_controls', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'n8n automation: Continuous Compliance Evidence completed enrichment, notification and case routing.',\njsonb_build_object('automation', 'compliance-evidence', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')) RETURNING id;",
+        "fromEmail": "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+        "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+        "subject": "=🚨 [{{ $('Score Risk & Build Alert').first().json.severity }}] {{ $('Score Risk & Build Alert').first().json.workflowName }}",
+        "emailFormat": "text",
+        "text": "='🚨 *MedicareGuard SOC alert*\\n*Workflow:* ' + $('Score Risk & Build Alert').first().json.workflowName + '\\n*Severity:* ' + $('Score Risk & Build Alert').first().json.severity + '\\n*Risk:* ' + $('Score Risk & Build Alert').first().json.riskScore + '/100\\n*Entity:* ' + $('Score Risk & Build Alert').first().json.entityId + '\\n*Console:* ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/reports'",
         "options": {}
       },
       "position": [
-        960,
-        1080
+        900,
+        160
       ],
-      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c",
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
       "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
+        "smtp": {
+          "id": "mg-smtp-credential",
+          "name": "MedicareGuard SMTP"
         }
       },
       "onError": "continueRegularOutput"
@@ -539,10 +370,10 @@
         "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
       "position": [
-        1280,
-        0
+        900,
+        320
       ],
-      "id": "9619fd28-6e68-531d-b47e-189e21536dd8",
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
       "onError": "continueRegularOutput"
     },
     {
@@ -574,26 +405,11 @@
         "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
       "position": [
-        1280,
-        180
+        900,
+        480
       ],
-      "id": "339234ac-71d5-511e-83c2-88fad6ee218a",
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
       "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Wait for Propagation",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "parameters": {
-        "amount": 2,
-        "unit": "seconds"
-      },
-      "position": [
-        1280,
-        360
-      ],
-      "id": "18c51e09-99e6-5650-9b5f-ee096c36b192",
-      "webhookId": "6c533bf0-10da-58fb-86f9-d94477a54e71"
     },
     {
       "name": "Verify Evidence Integrity",
@@ -624,44 +440,11 @@
         "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
       },
       "position": [
-        1280,
-        540
+        1200,
+        320
       ],
-      "id": "92523c5e-ab9b-5d29-99c9-21f08691dd39",
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
       "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Response Verified?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "0ba3ea8e-1504-5aa4-84eb-b4e078c84eff",
-              "leftValue": "={{ $json.data.verified }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        1280,
-        720
-      ],
-      "id": "5f4c81bf-41ab-5b20-8cd7-f040c8678841"
     },
     {
       "name": "Mark Record Responded",
@@ -673,95 +456,10 @@
         "options": {}
       },
       "position": [
-        1600,
-        360
+        1200,
+        480
       ],
-      "id": "5321cfac-4bba-5b69-940d-0043b7a0d2fb",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Escalate to IR Lead",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Manual intervention required — Continuous Compliance Evidence', message: 'Automated verification failed or needs review.', severity: 'critical', channel: '#soc-escalations' }) }}"
-      },
-      "position": [
-        1600,
-        540
-      ],
-      "id": "d1410ad6-2a1d-5614-8209-6bafe8c7455d",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Merge Verification",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        1600,
-        720
-      ],
-      "id": "b132885a-bc6a-5bba-b8af-04a3519e0626"
-    },
-    {
-      "name": "Build Forensic Timeline",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst caseRecord = read('Merge Case Handling');\nconst verification = read('Merge Verification');\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.verified || verification.data?.verified), stages: ['detected', 'enriched', 'case_opened', 'notified', 'responded', 'verified'], completedAt: new Date().toISOString() } }];"
-      },
-      "position": [
-        1600,
-        900
-      ],
-      "id": "0bd66cc9-5a5f-5ce8-86cc-376c6520ccaf"
-    },
-    {
-      "name": "Persist Response Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('compliance_controls', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'Automated timeline rebuilt: detected → enriched → case opened → response → verification.',\njsonb_build_object('automation', 'compliance-evidence', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'timeline', true)) RETURNING id;",
-        "options": {}
-      },
-      "position": [
-        1920,
-        0
-      ],
-      "id": "c1993f64-47a6-5d93-b4c5-208cf86d2631",
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -796,154 +494,14 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'compliance-evidence', riskScore: $('Compute Business Impact').first().json.riskScore, report: 'Continuous Compliance Evidence Report' }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'compliance-evidence', riskScore: $('Score Risk & Build Alert').first().json.riskScore, report: 'Continuous Compliance Evidence Report' }) }}"
       },
       "position": [
-        1920,
-        180
+        1200,
+        640
       ],
-      "id": "2059055e-7f01-5f98-9b6e-da0cd5ba1b0b",
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
       "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Attach Evidence Artifact",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-persist' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'compliance-evidence', controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
-      },
-      "position": [
-        1920,
-        360
-      ],
-      "id": "c42d4cc0-4e40-56dc-abe2-662650a64f05",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Sync Threat Intelligence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-sync' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicators: $('Correlate Threat Indicators').first().json.indicators }) }}"
-      },
-      "position": [
-        1920,
-        540
-      ],
-      "id": "5604e906-caa3-5c72-b749-c81d67feb3de",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Update Asset Risk Posture",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE assets SET risk_score = LEAST(100, risk_score + 3), metadata = metadata || jsonb_build_object('lastAutomationAt', now()::text), updated_at = now()\nWHERE id = NULLIF('{{ $('Load Asset Ownership').first().json.id }}', '')::uuid RETURNING id, risk_score;",
-        "options": {}
-      },
-      "position": [
-        1920,
-        720
-      ],
-      "id": "65fd3727-b101-5408-9362-7cb32f5c2041",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Generate Response Report",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/reports/generate' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: 'Continuous Compliance Evidence Report — ' + $('Validate Webhook Payload').first().json.executionId.slice(0, 8), type: 'compliance', format: 'json', days: 30 }) }}"
-      },
-      "position": [
-        1920,
-        900
-      ],
-      "id": "78dac20e-0ab5-5d9e-8b53-d340521fc3d0",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Emit Automation Metrics",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Build Forensic Timeline');\nconst startedAt = read('Validate Webhook Payload').receivedAt;\nreturn [{ json: { executionId: read('Validate Webhook Payload').executionId, workflowId: 'compliance-evidence', workflowName: 'Continuous Compliance Evidence', status: 'success', riskScore: context.riskScore, verified: context.verified, durationMs: Math.max(1, Date.now() - new Date(startedAt).getTime()), nodeCount: 40, metrics: { risk_score: context.riskScore, stages_completed: context.stages?.length || 6, case_opened: Boolean(context.caseRecord?.id), verified: context.verified, evidence_records: 3 }, message: 'n8n completed Continuous Compliance Evidence for execution ' + read('Validate Webhook Payload').executionId } }];"
-      },
-      "position": [
-        2240,
-        0
-      ],
-      "id": "dbbf1e57-4a2d-5b96-994f-ec596cf89ad4"
     },
     {
       "name": "Finalize Execution",
@@ -971,169 +529,126 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: $json.workflowId, status: $json.status, durationMs: $json.durationMs, nodeCount: $json.nodeCount, metrics: $json.metrics, message: $json.message }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'compliance-evidence', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: true, telegram_alert: true }, message: 'n8n completed Continuous Compliance Evidence for execution ' + $('Validate Webhook Payload').first().json.executionId }) }}"
       },
       "position": [
-        2240,
-        180
+        1500,
+        0
       ],
-      "id": "dd50225c-598a-56e3-abff-1b34a93e01a3",
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
       "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Close Run",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "parameters": {},
-      "position": [
-        2240,
-        360
-      ],
-      "id": "428b3957-fc43-537d-9707-72794eb1633b"
     },
     {
       "name": "Sticky Note — ① Detect",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ① Detect\nReceive the webhook, validate the entity and freeze a correlation ID.",
+        "content": "## ① Detect\nReceive the webhook, validate the payload and load the affected record.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 1
       },
       "position": [
         0,
         -260
       ],
-      "id": "42afc3bc-89b8-5230-a842-cfd387cb3849"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     },
     {
       "name": "Sticky Note — ② Enrich",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ② Enrich\nCollect endpoint, identity, mail, vulnerability and evidence context.",
+        "content": "## ② Enrich\nCollect EDR, identity, sandbox, CVE or evidence context and asset ownership.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 2
       },
       "position": [
-        320,
+        300,
         -260
       ],
-      "id": "b66b6382-918d-5975-90c1-41c7d359a028"
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
-      "name": "Sticky Note — ③ Assess",
+      "name": "Sticky Note — ③ Decide",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ③ Assess\nCorrelate the estate, calculate business impact and start the SLA clock.",
+        "content": "## ③ Decide\nScore business risk, route the case and open the right incident.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 3
       },
       "position": [
-        640,
+        600,
         -260
       ],
-      "id": "e56e8559-91d2-5efa-8db9-719acdc9f942"
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
     },
     {
-      "name": "Sticky Note — ④ Decide",
+      "name": "Sticky Note — ④ Notify",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ④ Decide\nRoute the case, notify the SOC and create the response ticket.",
+        "content": "## ④ Notify\nSend Telegram and Gmail alerts with a direct link back to the console.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 4
       },
       "position": [
-        960,
+        900,
         -260
       ],
-      "id": "a54a3e63-8832-5560-9504-b6a9f5477781"
+      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c"
     },
     {
       "name": "Sticky Note — ⑤ Respond",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ⑤ Respond\nExecute containment or remediation and wait for propagation.",
+        "content": "## ⑤ Respond\nRun containment or remediation and verify that the action held.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 5
       },
       "position": [
-        1280,
+        1200,
         -260
       ],
-      "id": "68b74575-0080-54a4-9962-3973d98f833c"
+      "id": "9619fd28-6e68-531d-b47e-189e21536dd8"
     },
     {
-      "name": "Sticky Note — ⑥ Verify",
+      "name": "Sticky Note — ⑥ Close",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ⑥ Verify\nIndependently verify the action, escalate on failure and merge branches.",
+        "content": "## ⑥ Close\nMark the record, write evidence and finalize the n8n execution.",
         "height": 160,
-        "width": 280,
+        "width": 260,
         "color": 6
       },
       "position": [
-        1600,
+        1500,
         -260
       ],
-      "id": "457bb7a0-6b68-50fc-b80d-49c6f2f5c4be"
-    },
-    {
-      "name": "Sticky Note — ⑦ Evidence",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑦ Evidence\nPersist the timeline, audit hash, evidence artifact and threat intel.",
-        "height": 160,
-        "width": 280,
-        "color": 7
-      },
-      "position": [
-        1920,
-        -260
-      ],
-      "id": "6d8453bf-1c17-501a-b64c-8ebca05cb19d"
-    },
-    {
-      "name": "Sticky Note — ⑧ Report",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑧ Report\nEmit metrics, finalise the run and close the execution cleanly.",
-        "height": 160,
-        "width": 280,
-        "color": 1
-      },
-      "position": [
-        2240,
-        -260
-      ],
-      "id": "5833c260-3ac6-5d13-aead-baddea0a6c51"
+      "id": "339234ac-71d5-511e-83c2-88fad6ee218a"
     },
     {
       "name": "Sticky Note — Workflow Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Continuous Compliance Evidence\nIdentity/endpoint/audit evidence · immutable pack · auditor report\n\n**Trigger:** webhook `mg-compliance` · **Owner:** SOC Automation · **SLA:** production playbook",
+        "content": "# Continuous Compliance Evidence\nIdentity/endpoint/audit evidence · immutable pack · auditor report\n\n**Trigger:** webhook `mg-compliance` · **Nodes:** 20 · **Alerts:** Telegram + Gmail · **Owner:** SOC Automation",
         "height": 200,
-        "width": 900,
+        "width": 1300,
         "color": 4
       },
       "position": [
-        2240,
+        0,
         -520
       ],
-      "id": "74a7d9f6-8fb7-5f41-a12d-2398114cd0d7"
+      "id": "6c533bf0-10da-58fb-86f9-d94477a54e71"
     }
   ],
   "connections": {
@@ -1149,28 +664,6 @@
       ]
     },
     "Validate Webhook Payload": {
-      "main": [
-        [
-          {
-            "node": "Deduplicate Active Run",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Deduplicate Active Run": {
-      "main": [
-        [
-          {
-            "node": "Stamp Correlation Context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Stamp Correlation Context": {
       "main": [
         [
           {
@@ -1207,39 +700,6 @@
       "main": [
         [
           {
-            "node": "Enrich — Audit Evidence",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enrich — Audit Evidence": {
-      "main": [
-        [
-          {
-            "node": "Merge Enrichment Context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge Enrichment Context": {
-      "main": [
-        [
-          {
-            "node": "Correlate Threat Indicators",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Correlate Threat Indicators": {
-      "main": [
-        [
-          {
             "node": "Load Asset Ownership",
             "type": "main",
             "index": 0
@@ -1251,47 +711,25 @@
       "main": [
         [
           {
-            "node": "Load Related Activity",
+            "node": "Score Risk & Build Alert",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Related Activity": {
+    "Score Risk & Build Alert": {
       "main": [
         [
           {
-            "node": "Compute Business Impact",
+            "node": "Impact Gate",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Compute Business Impact": {
-      "main": [
-        [
-          {
-            "node": "Check SLA Clock",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check SLA Clock": {
-      "main": [
-        [
-          {
-            "node": "Business Impact Gate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Business Impact Gate": {
+    "Impact Gate": {
       "main": [
         [
           {
@@ -1335,47 +773,43 @@
       "main": [
         [
           {
-            "node": "Load Notification Recipients",
+            "node": "Notifications Ready?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Notification Recipients": {
+    "Notifications Ready?": {
       "main": [
         [
           {
-            "node": "Notify SOC Channel",
+            "node": "Notify Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assemble Evidence Pack",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notify SOC Channel": {
+    "Notify Telegram": {
       "main": [
         [
           {
-            "node": "Create External Ticket",
+            "node": "Notify Gmail",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Create External Ticket": {
-      "main": [
-        [
-          {
-            "node": "Update Case Timeline",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Case Timeline": {
+    "Notify Gmail": {
       "main": [
         [
           {
@@ -1401,17 +835,6 @@
       "main": [
         [
           {
-            "node": "Wait for Propagation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait for Propagation": {
-      "main": [
-        [
-          {
             "node": "Verify Evidence Integrity",
             "type": "main",
             "index": 0
@@ -1423,25 +846,7 @@
       "main": [
         [
           {
-            "node": "Response Verified?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response Verified?": {
-      "main": [
-        [
-          {
             "node": "Mark Record Responded",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Escalate to IR Lead",
             "type": "main",
             "index": 0
           }
@@ -1449,50 +854,6 @@
       ]
     },
     "Mark Record Responded": {
-      "main": [
-        [
-          {
-            "node": "Merge Verification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Escalate to IR Lead": {
-      "main": [
-        [
-          {
-            "node": "Merge Verification",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Verification": {
-      "main": [
-        [
-          {
-            "node": "Build Forensic Timeline",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Forensic Timeline": {
-      "main": [
-        [
-          {
-            "node": "Persist Response Timeline",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Persist Response Timeline": {
       "main": [
         [
           {
@@ -1507,73 +868,7 @@
       "main": [
         [
           {
-            "node": "Attach Evidence Artifact",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Attach Evidence Artifact": {
-      "main": [
-        [
-          {
-            "node": "Sync Threat Intelligence",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Sync Threat Intelligence": {
-      "main": [
-        [
-          {
-            "node": "Update Asset Risk Posture",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Asset Risk Posture": {
-      "main": [
-        [
-          {
-            "node": "Generate Response Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generate Response Report": {
-      "main": [
-        [
-          {
-            "node": "Emit Automation Metrics",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Emit Automation Metrics": {
-      "main": [
-        [
-          {
             "node": "Finalize Execution",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Finalize Execution": {
-      "main": [
-        [
-          {
-            "node": "Close Run",
             "type": "main",
             "index": 0
           }

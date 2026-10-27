@@ -1,0 +1,690 @@
+{
+  "id": "live-attack-monitor",
+  "name": "Live Attack Monitor & Phone Alerts",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Webhook — Monitor Tick",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mg-attack-monitor",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "position": [
+        0,
+        0
+      ],
+      "id": "5ca3c280-ddaa-5b6c-9686-ededda1d1efd",
+      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
+    },
+    {
+      "name": "Schedule — Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        160
+      ],
+      "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
+    },
+    {
+      "name": "Normalize Monitor Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst executionId = String(body.executionId || ('monitor-' + Date.now()));\nreturn [{ json: { ...body, executionId, workflowId: 'live-attack-monitor', workflowName: 'Live Attack Monitor & Phone Alerts', mode: body.mode || 'scheduled', startedAt: body.startedAt || new Date().toISOString() } }];"
+      },
+      "position": [
+        0,
+        320
+      ],
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
+    },
+    {
+      "name": "Load Recent Attacks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS attacks, count(*)::int AS count\nFROM (\n  SELECT id, title, severity, source_ip, risk_score, detected_at\n  FROM alerts\n  WHERE severity IN ('critical','high')\n    AND detected_at > now() - interval '24 hours'\n    AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\n  ORDER BY detected_at DESC LIMIT 5\n) t;",
+        "options": {}
+      },
+      "position": [
+        300,
+        0
+      ],
+      "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Build Phone Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const attacks = Array.isArray($json.attacks) ? $json.attacks : [];\nconst lines = attacks.map(function (a) { return '• [' + a.severity + '] ' + a.title + ' — ' + (a.source_ip || 'unknown') + ' (' + (a.risk_score || 0) + '/100)'; });\nconst text = '🚨 MedicareGuard live attack monitor\\n' + attacks.length + ' new high-risk attack(s) detected in the last 24h.\\n\\n' + lines.join('\\n') + '\\n\\nConsole: http://localhost:3000/alerts';\nconst base = $('Normalize Monitor Trigger').first().json;\nreturn [{ json: { ...base, count: attacks.length, attacks, summary: lines.join(' | '), text } }];"
+      },
+      "position": [
+        300,
+        160
+      ],
+      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e"
+    },
+    {
+      "name": "New Attacks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        300,
+        320
+      ],
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
+    },
+    {
+      "name": "Load Alert Recipients",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        600,
+        0
+      ],
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Notifications Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        780,
+        160
+      ],
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1"
+    },
+    {
+      "name": "Notify Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: ($env.TELEGRAM_CHAT_ID || ''), parse_mode: 'Markdown', disable_web_page_preview: true, text: $('Build Phone Message').first().json.text }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "position": [
+        600,
+        160
+      ],
+      "id": "36b91229-3aaa-5950-98b2-27822433b566",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Notify Gmail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "fromEmail": "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+        "toEmail": "={{ $('Load Alert Recipients').first().json.email || $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+        "subject": "=🚨 MedicareGuard live attack monitor — {{ $('Build Phone Message').first().json.count }} new attack(s)",
+        "emailFormat": "text",
+        "text": "={{ $('Build Phone Message').first().json.text }}",
+        "options": {}
+      },
+      "position": [
+        600,
+        320
+      ],
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
+      "credentials": {
+        "smtp": {
+          "id": "mg-smtp-credential",
+          "name": "MedicareGuard SMTP"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Notify In-App",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Normalize Monitor Trigger').first().json.executionId, title: 'Live attack monitor: ' + $('Build Phone Message').first().json.count + ' new attack(s)', message: $('Build Phone Message').first().json.summary, severity: 'critical', channel: 'phone' }) }}"
+      },
+      "position": [
+        900,
+        0
+      ],
+      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Mark Attacks Notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()\nWHERE severity IN ('critical','high')\n  AND detected_at > now() - interval '24 hours'\n  AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\nRETURNING id;",
+        "options": {}
+      },
+      "position": [
+        900,
+        160
+      ],
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Write Audit Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-write' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('Normalize Monitor Trigger').first().json.executionId, workflowId: 'live-attack-monitor', report: 'Live Attack Monitor' }) }}"
+      },
+      "position": [
+        900,
+        320
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Emit Monitor Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('Normalize Monitor Trigger').first().json;\nconst built = $('Build Phone Message').first().json;\nconst count = Number(built.count || 0);\nreturn [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 17, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'n8n live attack monitor found ' + count + ' new attack(s)' } }];"
+      },
+      "position": [
+        1200,
+        0
+      ],
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
+    },
+    {
+      "name": "Finalize Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('Normalize Monitor Trigger').first().json.executionId + '/complete' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 17, metrics: $json.metrics, message: $json.message }) }}"
+      },
+      "position": [
+        1200,
+        160
+      ],
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Close Run",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1500,
+        160
+      ],
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+    },
+    {
+      "name": "No New Attacks",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        900,
+        480
+      ],
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
+    },
+    {
+      "name": "Sticky Note — Monitor",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Monitor\nEvery 5 minutes, scan alerts from the last 24 hours that have not been sent to the on-call phone.",
+        "height": 160,
+        "width": 280,
+        "color": 1
+      },
+      "position": [
+        0,
+        -260
+      ],
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
+    },
+    {
+      "name": "Sticky Note — Build Digest",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ② Build digest\nAggregate up to five high-risk attacks into a readable Telegram and Gmail message.",
+        "height": 160,
+        "width": 280,
+        "color": 2
+      },
+      "position": [
+        300,
+        -260
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+    },
+    {
+      "name": "Sticky Note — Phone alerts",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ③ Phone alerts\nTelegram for instant mobile push; Gmail for the audit-friendly inbox copy.",
+        "height": 160,
+        "width": 280,
+        "color": 3
+      },
+      "position": [
+        600,
+        -260
+      ],
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+    },
+    {
+      "name": "Sticky Note — Close",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ④ Close\nMark alerts as notified, write evidence and finalize the SOC execution log.",
+        "height": 160,
+        "width": 280,
+        "color": 5
+      },
+      "position": [
+        900,
+        -260
+      ],
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+    },
+    {
+      "name": "Sticky Note — Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "# Live Attack Monitor & Phone Alerts\n5-minute sweep · 17 nodes · Telegram + Gmail · no laptop required\n\n**Trigger:** webhook `mg-attack-monitor` + schedule `*/5 * * * *` · **Owner:** SOC Automation",
+        "height": 200,
+        "width": 1300,
+        "color": 4
+      },
+      "position": [
+        0,
+        -520
+      ],
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
+    }
+  ],
+  "connections": {
+    "Webhook — Monitor Tick": {
+      "main": [
+        [
+          {
+            "node": "Normalize Monitor Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Normalize Monitor Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Monitor Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Recent Attacks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Recent Attacks": {
+      "main": [
+        [
+          {
+            "node": "Build Phone Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Phone Message": {
+      "main": [
+        [
+          {
+            "node": "New Attacks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Attacks?": {
+      "main": [
+        [
+          {
+            "node": "Load Alert Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Attacks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Alert Recipients": {
+      "main": [
+        [
+          {
+            "node": "Notifications Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notifications Ready?": {
+      "main": [
+        [
+          {
+            "node": "Notify Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify In-App",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Telegram": {
+      "main": [
+        [
+          {
+            "node": "Notify Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Gmail": {
+      "main": [
+        [
+          {
+            "node": "Notify In-App",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify In-App": {
+      "main": [
+        [
+          {
+            "node": "Mark Attacks Notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Attacks Notified": {
+      "main": [
+        [
+          {
+            "node": "Write Audit Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Audit Evidence": {
+      "main": [
+        [
+          {
+            "node": "Emit Monitor Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Monitor Metrics": {
+      "main": [
+        [
+          {
+            "node": "Finalize Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Execution": {
+      "main": [
+        [
+          {
+            "node": "Close Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No New Attacks": {
+      "main": [
+        [
+          {
+            "node": "Emit Monitor Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "workflowDescription": "5-minute attack sweep · Telegram + Gmail · on-call visibility"
+  },
+  "tags": [
+    {
+      "name": "MedicareGuard"
+    },
+    {
+      "name": "live-attack-monitor"
+    }
+  ]
+}

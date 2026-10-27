@@ -62,6 +62,10 @@ const sampleEntity = async (workflowId) => {
     const result = await query("SELECT id FROM compliance_controls ORDER BY score ASC LIMIT 1");
     return result.rows[0]?.id || null;
   }
+  if (workflowId === "live-attack-monitor") {
+    const result = await query("SELECT id FROM alerts WHERE severity IN ('critical','high') ORDER BY detected_at DESC LIMIT 1");
+    return result.rows[0]?.id || null;
+  }
   return null;
 };
 
