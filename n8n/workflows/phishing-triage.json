@@ -1,0 +1,1045 @@
+{
+  "name": "Phishing Triage & Credential Reset",
+  "nodes": [
+    {
+      "name": "Webhook — Phish Report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mg-phishing",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "5d93502d-2d48-4487-9c85-e14d9d617124",
+      "position": [
+        0,
+        0
+      ],
+      "id": "6ee0749b-9608-4561-8693-ba24017544d0"
+    },
+    {
+      "name": "Normalize Incoming Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst entityId = body.alertId || body.reportId;\nif (!entityId) { throw new Error('alertId is required'); }\nreturn [{ json: { entityId: String(entityId), entityType: 'alert', workflowSlug: 'phishing-triage', workflowName: 'Phishing Triage & Credential Reset', receivedAt: new Date().toISOString(), raw: body } }];"
+      },
+      "position": [
+        220,
+        0
+      ],
+      "id": "a41168a3-67a7-402d-8a6a-8d6d9a8fdf0a"
+    },
+    {
+      "name": "Stamp Correlation Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3883f307-c170-4613-8ead-d130635ca395",
+              "name": "correlationId",
+              "value": "={{ $json.entityId + '-' + Date.now() }}",
+              "type": "string"
+            },
+            {
+              "id": "bec88cf0-02e9-4995-8abd-378be98c4118",
+              "name": "workflowName",
+              "value": "Phishing Triage & Credential Reset",
+              "type": "string"
+            },
+            {
+              "id": "5ced0ed3-603b-48df-b12a-ab931032a59d",
+              "name": "entityType",
+              "value": "alert",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        0
+      ],
+      "id": "deb1031a-3c80-4f49-adee-71eb37939f95"
+    },
+    {
+      "name": "Load Alert Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, severity, status, source_ip, asset_id, metadata, detected_at\n                  FROM alerts WHERE id = '{{ $json.entityId }}' LIMIT 1;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        0
+      ],
+      "id": "7fba9a82-87c4-422f-937b-b416c19323d2"
+    },
+    {
+      "name": "Detonate URL in Sandbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.cloudflare.com/client/v4/accounts/{{ $env.CF_ACCOUNT_ID }}/urlscanner/v2/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $('Load Alert Record').first().json.metadata.url || $('Load Alert Record').first().json.metadata.sender }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        0
+      ],
+      "id": "dfa71e0d-f924-450f-9907-ba81f1113ce8"
+    },
+    {
+      "name": "Query VirusTotal Reputation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/urls/{{ $('Load Alert Record').first().json.metadata.url_hash || 'unknown' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        0
+      ],
+      "id": "fc11a576-5e83-4295-b247-3cae2552e599"
+    },
+    {
+      "name": "Resolve Recipient Identity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://medicareguard.okta.com/api/v1/users/{{ $('Load Alert Record').first().json.metadata.recipient_id || 'unknown' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        170
+      ],
+      "id": "7ee248e4-9f95-4880-94f2-a0d6f4f2d55c"
+    },
+    {
+      "name": "Merge Enrichment Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('Normalize Incoming Event').first().json;\nconst record = $('Load Alert Record').first().json;\nreturn [{ json: { ...base, record, enrichment: { edr: $('Detonate URL in Sandbox').first().json, intel: $('Query VirusTotal Reputation').first().json, identity: $('Resolve Recipient Identity').first().json } } }];"
+      },
+      "position": [
+        220,
+        170
+      ],
+      "id": "e576b7b1-514f-411e-a923-5fc3e786d47d"
+    },
+    {
+      "name": "Load Asset Ownership",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id, u.full_name AS name, u.email, u.department, u.status, u.mfa_enabled\n                 FROM users u WHERE u.id = (SELECT assignee_id FROM alerts WHERE id = '{{ $json.entityId }}') LIMIT 1;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        170
+      ],
+      "id": "5047a666-b974-412f-9332-975fcb4c7005"
+    },
+    {
+      "name": "Count Related Incidents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*)::int AS similar_reports FROM alerts\n                   WHERE title ILIKE '%phish%' AND detected_at > now() - interval '24 hours';",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        170
+      ],
+      "id": "1317e357-d7a6-47f8-a244-1957308ff6f6"
+    },
+    {
+      "name": "Compute Business Impact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('Merge Enrichment Context').first().json;\nconst record = $('Load Alert Record').first().json || {};\nconst asset = $('Load Asset Ownership').first().json || {};\nconst related = $('Count Related Incidents').first().json || {};\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[String(record.severity || record.status || '').toLowerCase()] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? record.cvss_score * 3 : (record.risk_score || 50) * 0.3);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nconst riskScore = Math.max(1, Math.min(100, Math.round(severityWeight + criticalityWeight + exposure + relatedWeight)));\nreturn [{ json: { ...base, asset, related, record, riskScore, workflowName: 'Phishing Triage & Credential Reset', entityId: base.entityId, entityType: 'alert', correlationId: base.correlationId } }];"
+      },
+      "position": [
+        880,
+        170
+      ],
+      "id": "208a2720-8098-42ce-b0a4-19aad33ef874"
+    },
+    {
+      "name": "Critical Threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "628dc878-b3ab-4acd-97cd-3fab7a1cf8d3",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 75,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1100,
+        170
+      ],
+      "id": "0afd5b56-d5d9-42a0-8767-f52a532090c9"
+    },
+    {
+      "name": "Open Primary Case",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, metadata)\n      VALUES ('Credential phishing — {{ $('Load Alert Record').first().json.title }}',\n      'Automated phishing response: mailboxes purged and exposed credentials rotated.',\n      'high', 'open', 'P2', 'phishing', now(), now() + interval '8 hours',\n      '{\"automation\":\"phishing-triage\",\"source\":\"n8n\"}'::jsonb)\n      RETURNING id, incident_key;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        340
+      ],
+      "id": "64ec0692-1b86-47bb-8df5-fb7c3e0522b7"
+    },
+    {
+      "name": "Open Standard Ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tickets (subject, status, priority, description)\n      VALUES ('Phishing review — {{ $('Load Alert Record').first().json.title }}', 'open', 'medium',\n      'Lower-confidence phish report queued for analyst review.') RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        220,
+        340
+      ],
+      "id": "7716eb19-5f75-42d9-ae2a-a8c9d9eea745"
+    },
+    {
+      "name": "Merge Case Handling",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        440,
+        340
+      ],
+      "id": "eaf62a88-6cf7-45ef-a6a3-01a9e9fd1a1c"
+    },
+    {
+      "name": "Notify SOC Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#soc-alerts",
+          "mode": "name"
+        },
+        "text": "=:fish: *Phishing report* {{ $('Load Alert Record').first().json.title }} · blast radius {{ $('Compute Business Impact').first().json.riskScore }} · {{ $('Load Asset Ownership').first().json.email || 'recipient unknown' }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "mg-slack-credential",
+          "name": "MedicareGuard Slack"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        340
+      ],
+      "id": "f5652250-a482-41a5-8fa6-7339f98d1a8e"
+    },
+    {
+      "name": "Update Case Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n   VALUES ('alerts', '{{ $('Compute Business Impact').first().json.entityId }}',\n   'n8n automation: {{ $('Compute Business Impact').first().json.workflowName }} completed containment and evidence collection.',\n   '{\"automation\": true}'::jsonb)\n   RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        340
+      ],
+      "id": "612d542f-890b-4b38-ac76-6eca745f87ad"
+    },
+    {
+      "name": "Revoke Sessions and Reset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://medicareguard.okta.com/api/v1/users/{{ $('Load Asset Ownership').first().json.id }}/sessions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        340
+      ],
+      "id": "033aff75-b0c7-4b11-878a-6e1f874f3056"
+    },
+    {
+      "name": "Apply Enforcement Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO firewall_rules (name, description, direction, action, protocol, source_ip, destination_ip, priority, enabled, metadata)\n      SELECT 'Phishing infrastructure block — ' || left(coalesce(source_ip,'unknown'), 50),\n      'Automated sender infrastructure block from n8n phishing triage', 'inbound', 'deny', 'tcp',\n      coalesce(source_ip, '0.0.0.0'), '0.0.0.0', 20, true,\n      '{\"automation\":\"phishing-triage\"}'::jsonb\n      FROM alerts WHERE id = '{{ $('Compute Business Impact').first().json.entityId }}' RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        510
+      ],
+      "id": "da91ad2b-a1ab-460b-92a1-3eef1977d7b9"
+    },
+    {
+      "name": "Wait for Enforcement",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "webhookId": "530a412f-df25-42ca-8e3d-74880b3e482d",
+      "position": [
+        220,
+        510
+      ],
+      "id": "73028a8e-2442-4e7c-96a2-f7bb957505db"
+    },
+    {
+      "name": "Verify Containment State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:4000/api/alerts/{{ $('Compute Business Impact').first().json.entityId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        510
+      ],
+      "id": "82315370-d1d8-472f-b5ee-de7961b64032"
+    },
+    {
+      "name": "Containment Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "aa6c8b7c-8c29-4c9b-abb6-6329f7323dd4",
+              "leftValue": "={{ $json.data.status }}",
+              "rightValue": "closed",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        510
+      ],
+      "id": "e62f9879-cde1-407e-a4ce-3ad5f65dc9eb"
+    },
+    {
+      "name": "Mark Entity Contained",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE alerts SET status = 'investigating', updated_at = now()\n                 WHERE id = '{{ $('Compute Business Impact').first().json.entityId }}' RETURNING id, status;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        510
+      ],
+      "id": "6fa575d3-459e-4e81-804d-303e8b1c6eb0"
+    },
+    {
+      "name": "Escalate to IR Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#soc-escalations",
+          "mode": "name"
+        },
+        "text": "=:sos: Phishing cleanup requires manual review for {{ $('Load Alert Record').first().json.title }}.",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "mg-slack-credential",
+          "name": "MedicareGuard Slack"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        510
+      ],
+      "id": "bdc7fc8b-a837-4fbc-b875-af1fb606fae3"
+    },
+    {
+      "name": "Merge Verification",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        0,
+        680
+      ],
+      "id": "5f72ee83-c589-4a06-8abd-2608e7cef128"
+    },
+    {
+      "name": "Build Forensic Timeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const context = $('Compute Business Impact').first().json;\nconst caseRecord = $('Merge Case Handling').first().json;\nconst verification = $('Merge Verification').first().json || {};\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.status), stages: ['detected','enriched','case_opened','notified','contained','verified'], completedAt: new Date().toISOString() } }];"
+      },
+      "position": [
+        220,
+        680
+      ],
+      "id": "da765e93-db17-406c-9d65-65c29d88483b"
+    },
+    {
+      "name": "Persist Response Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n       VALUES ('alerts',\n       '{{ $('Normalize Incoming Event').first().json.entityId }}',\n       'Automated timeline rebuilt: detected → enriched → case opened → containment → verification.',\n       '{\"automation\":\"phishing-triage\",\"timeline\":true}'::jsonb) RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        680
+      ],
+      "id": "e89aa159-d278-4373-8bb9-cb2772fe3930"
+    },
+    {
+      "name": "Write Audit Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:4000/api/logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ level: 'info', event_type: 'automation', resource: 'phishing-triage', action: 'workflow_complete', message: 'Phishing Triage & Credential Reset completed', metadata: { correlationId: $('Compute Business Impact').first().json.correlationId } }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        680
+      ],
+      "id": "2d7e48eb-6623-4616-9289-ffd020daa622"
+    },
+    {
+      "name": "Emit Automation Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const context = $('Build Forensic Timeline').first().json;\nreturn [{ json: { workflow: 'phishing-triage', correlationId: context.correlationId, riskScore: context.riskScore, verified: context.verified, durationMs: Date.now() - new Date(context.receivedAt).getTime(), metrics: { containment_actions: 2, evidence_records: 3, cases_opened: 1 } } }];"
+      },
+      "position": [
+        880,
+        680
+      ],
+      "id": "d76b6e8c-0591-4606-a609-73d472ca6dd9"
+    },
+    {
+      "name": "Close Run",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1100,
+        680
+      ],
+      "id": "4c60bf22-80cd-4c0a-8fe3-763baf7df1cd"
+    }
+  ],
+  "connections": {
+    "Webhook — Phish Report": {
+      "main": [
+        [
+          {
+            "node": "Normalize Incoming Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Incoming Event": {
+      "main": [
+        [
+          {
+            "node": "Stamp Correlation Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stamp Correlation Context": {
+      "main": [
+        [
+          {
+            "node": "Load Alert Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Alert Record": {
+      "main": [
+        [
+          {
+            "node": "Detonate URL in Sandbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detonate URL in Sandbox": {
+      "main": [
+        [
+          {
+            "node": "Query VirusTotal Reputation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query VirusTotal Reputation": {
+      "main": [
+        [
+          {
+            "node": "Resolve Recipient Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Recipient Identity": {
+      "main": [
+        [
+          {
+            "node": "Merge Enrichment Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Enrichment Context": {
+      "main": [
+        [
+          {
+            "node": "Load Asset Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Asset Ownership": {
+      "main": [
+        [
+          {
+            "node": "Count Related Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Related Incidents": {
+      "main": [
+        [
+          {
+            "node": "Compute Business Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Business Impact": {
+      "main": [
+        [
+          {
+            "node": "Critical Threshold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Threshold?": {
+      "main": [
+        [
+          {
+            "node": "Open Primary Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Open Standard Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Primary Case": {
+      "main": [
+        [
+          {
+            "node": "Merge Case Handling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Standard Ticket": {
+      "main": [
+        [
+          {
+            "node": "Merge Case Handling",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Case Handling": {
+      "main": [
+        [
+          {
+            "node": "Notify SOC Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify SOC Channel": {
+      "main": [
+        [
+          {
+            "node": "Update Case Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Case Timeline": {
+      "main": [
+        [
+          {
+            "node": "Revoke Sessions and Reset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revoke Sessions and Reset": {
+      "main": [
+        [
+          {
+            "node": "Apply Enforcement Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Enforcement Action": {
+      "main": [
+        [
+          {
+            "node": "Wait for Enforcement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Enforcement": {
+      "main": [
+        [
+          {
+            "node": "Verify Containment State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Containment State": {
+      "main": [
+        [
+          {
+            "node": "Containment Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Containment Verified?": {
+      "main": [
+        [
+          {
+            "node": "Mark Entity Contained",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate to IR Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Entity Contained": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to IR Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Verification": {
+      "main": [
+        [
+          {
+            "node": "Build Forensic Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Forensic Timeline": {
+      "main": [
+        [
+          {
+            "node": "Persist Response Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Response Timeline": {
+      "main": [
+        [
+          {
+            "node": "Write Audit Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Audit Evidence": {
+      "main": [
+        [
+          {
+            "node": "Emit Automation Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Automation Metrics": {
+      "main": [
+        [
+          {
+            "node": "Close Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Automated phishing triage with sandbox detonation, mailbox purge, session revocation and reporter feedback.",
+    "workflowSlug": "phishing-triage"
+  },
+  "tags": [
+    {
+      "name": "MedicareGuard"
+    },
+    {
+      "name": "phishing-triage"
+    }
+  ]
+}

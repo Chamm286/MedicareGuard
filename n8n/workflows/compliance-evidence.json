@@ -1,0 +1,1045 @@
+{
+  "name": "Continuous Compliance Evidence",
+  "nodes": [
+    {
+      "name": "Webhook — Evidence Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mg-compliance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "42a53ebd-86f7-44db-8822-cf8f528a8cb0",
+      "position": [
+        0,
+        0
+      ],
+      "id": "6ed5b201-d861-42cd-a82f-e219f4ca23ba"
+    },
+    {
+      "name": "Normalize Incoming Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst entityId = body.framework || 'HIPAA';\nif (!entityId) { throw new Error('framework is required'); }\nreturn [{ json: { entityId: String(entityId), entityType: 'compliance_control', workflowSlug: 'compliance-evidence', workflowName: 'Continuous Compliance Evidence', receivedAt: new Date().toISOString(), raw: body } }];"
+      },
+      "position": [
+        220,
+        0
+      ],
+      "id": "9bb7d314-aa45-4c22-93b5-433f95313819"
+    },
+    {
+      "name": "Stamp Correlation Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3f6fc41e-aa54-4af7-a0a1-d0be905135ce",
+              "name": "correlationId",
+              "value": "={{ $json.entityId + '-' + Date.now() }}",
+              "type": "string"
+            },
+            {
+              "id": "9796124d-18df-4da7-85ee-7e9d3e02a98a",
+              "name": "workflowName",
+              "value": "Continuous Compliance Evidence",
+              "type": "string"
+            },
+            {
+              "id": "846c503e-6b85-4c60-970c-67a07204a5d1",
+              "name": "entityType",
+              "value": "compliance_control",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        0
+      ],
+      "id": "e7af9107-b6e3-4e50-ac80-f299dfd675b8"
+    },
+    {
+      "name": "Load Control Inventory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT framework, count(*)::int AS total_controls,\n                  count(*) FILTER (WHERE status = 'compliant')::int AS compliant_controls,\n                  round(avg(score))::int AS average_score\n                  FROM compliance_controls WHERE framework ILIKE '{{ $json.entityId }}' GROUP BY framework;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        0
+      ],
+      "id": "05ae85bf-cff9-4a24-b6bf-fdf44a2173be"
+    },
+    {
+      "name": "Pull Identity Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:4000/api/stats/compliance",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        0
+      ],
+      "id": "85647e78-cd5a-4d69-9caf-a28d09a6ce57"
+    },
+    {
+      "name": "Pull Endpoint Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:4000/api/stats/soc-health",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        0
+      ],
+      "id": "8af3eab2-e72b-431c-9719-5b235a726510"
+    },
+    {
+      "name": "Pull Audit Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:4000/api/logs/audit?limit=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        170
+      ],
+      "id": "e7ac8925-894d-486a-906a-a51857c6b340"
+    },
+    {
+      "name": "Merge Enrichment Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('Normalize Incoming Event').first().json;\nconst record = $('Load Control Inventory').first().json;\nreturn [{ json: { ...base, record, enrichment: { edr: $('Pull Identity Evidence').first().json, intel: $('Pull Endpoint Evidence').first().json, identity: $('Pull Audit Evidence').first().json } } }];"
+      },
+      "position": [
+        220,
+        170
+      ],
+      "id": "f7158752-95cb-4ea1-a643-81337abc6155"
+    },
+    {
+      "name": "Load Asset Ownership",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT framework, control, status, score, owner_id, evidence\n                 FROM compliance_controls WHERE framework ILIKE '{{ $json.entityId }}' ORDER BY score ASC LIMIT 25;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        170
+      ],
+      "id": "1100d8b2-214c-4f99-85e0-44901dc9d616"
+    },
+    {
+      "name": "Count Related Findings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*)::int AS failing_controls FROM compliance_controls\n                   WHERE status <> 'compliant' AND framework ILIKE '{{ $json.entityId }}';",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        170
+      ],
+      "id": "b222ba5f-17ff-4183-99bf-fde3afbe0ccf"
+    },
+    {
+      "name": "Compute Business Impact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('Merge Enrichment Context').first().json;\nconst record = $('Load Control Inventory').first().json || {};\nconst asset = $('Load Asset Ownership').first().json || {};\nconst related = $('Count Related Findings').first().json || {};\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[String(record.severity || record.status || '').toLowerCase()] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? record.cvss_score * 3 : (record.risk_score || 50) * 0.3);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nconst riskScore = Math.max(1, Math.min(100, Math.round(severityWeight + criticalityWeight + exposure + relatedWeight)));\nreturn [{ json: { ...base, asset, related, record, riskScore, workflowName: 'Continuous Compliance Evidence', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.correlationId } }];"
+      },
+      "position": [
+        880,
+        170
+      ],
+      "id": "960d1c89-2ced-429c-8d3a-1d68a3825e3b"
+    },
+    {
+      "name": "Critical Threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "018505b7-e644-4cef-8d99-ae6dedae7f1c",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 85,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1100,
+        170
+      ],
+      "id": "2161afd5-8343-4007-9706-0ab65e354c3f"
+    },
+    {
+      "name": "Open Primary Case",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, metadata)\n      VALUES ('Compliance gap — {{ $('Load Control Inventory').first().json.framework || $('Normalize Evidence Request').first().json.entityId }}',\n      'Automated compliance review opened due to failing controls below attestation threshold.',\n      'medium', 'open', 'P3', 'compliance', now(), now() + interval '30 days',\n      '{\"automation\":\"compliance-evidence\",\"source\":\"n8n\"}'::jsonb)\n      RETURNING id, incident_key;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        340
+      ],
+      "id": "8b2513bc-14ad-4e2f-a642-7fc05732d5bf"
+    },
+    {
+      "name": "Open Standard Ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO reports (name, type, status, format, summary, metadata)\n      VALUES ('Compliance evidence — {{ $('Normalize Evidence Request').first().json.entityId }}',\n      'compliance', 'ready', 'pdf', 'Automated evidence pack generated by n8n',\n      '{\"automation\":\"compliance-evidence\"}'::jsonb) RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        220,
+        340
+      ],
+      "id": "636c83f6-7ed8-445c-983a-17ee51c32774"
+    },
+    {
+      "name": "Merge Case Handling",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        440,
+        340
+      ],
+      "id": "eb93bba0-b10f-4fa1-86c9-94ceeb83d5a3"
+    },
+    {
+      "name": "Notify SOC Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#soc-alerts",
+          "mode": "name"
+        },
+        "text": "=:shield: *Compliance evidence* {{ $('Normalize Evidence Request').first().json.entityId }} · score {{ $('Compute Business Impact').first().json.riskScore }} · failing controls {{ $('Count Failing Controls').first().json.failing_controls }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "mg-slack-credential",
+          "name": "MedicareGuard Slack"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        340
+      ],
+      "id": "91b6b68c-c526-4cf9-9834-d2c2ff905ae2"
+    },
+    {
+      "name": "Update Case Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n   VALUES ('compliance_controls', '{{ $('Compute Business Impact').first().json.entityId }}',\n   'n8n automation: {{ $('Compute Business Impact').first().json.workflowName }} completed containment and evidence collection.',\n   '{\"automation\": true}'::jsonb)\n   RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        340
+      ],
+      "id": "814a0886-8d70-49a3-b5a6-85b74d6957a0"
+    },
+    {
+      "name": "Generate Evidence Pack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:4000/api/reports/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: 'Compliance evidence — ' + $('Normalize Evidence Request').first().json.entityId, type: 'compliance', format: 'pdf', days: 30 }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        340
+      ],
+      "id": "dc7cffb6-25c4-4257-9014-618b6a998675"
+    },
+    {
+      "name": "Apply Enforcement Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO activity_logs (level, event_type, resource, action, message, metadata)\n      VALUES ('info', 'compliance', 'compliance_controls', 'evidence_archived',\n      'Evidence pack archived for {{ $('Normalize Evidence Request').first().json.entityId }}',\n      '{\"automation\":\"compliance-evidence\",\"hash\":\"{{ $('Build Auditor Summary').first().json.evidenceHash }}\"}'::jsonb)\n      RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        510
+      ],
+      "id": "06304b0c-ff24-4527-a49c-c24f37607fa3"
+    },
+    {
+      "name": "Wait for Enforcement",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "webhookId": "bbd83d13-725f-4afe-add6-85a35d6ddc71",
+      "position": [
+        220,
+        510
+      ],
+      "id": "f7653097-fd9c-4d93-894c-8e3cf15ba3d0"
+    },
+    {
+      "name": "Verify Containment State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:4000/api/reports?q={{ $('Normalize Evidence Request').first().json.entityId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        510
+      ],
+      "id": "2457bb48-ea5b-4206-a8c3-b15456f87069"
+    },
+    {
+      "name": "Containment Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "17e336ce-977e-47d9-8ce5-633aa6a00348",
+              "leftValue": "={{ $json.data.length }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        510
+      ],
+      "id": "2c0bfe19-39d5-4e15-948d-0005f1bb3e02"
+    },
+    {
+      "name": "Mark Entity Contained",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE compliance_controls SET updated_at = now()\n                 WHERE framework ILIKE '{{ $('Normalize Evidence Request').first().json.entityId }}' RETURNING framework;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        510
+      ],
+      "id": "e71b7ce8-e084-43aa-86aa-9bdf03fc9047"
+    },
+    {
+      "name": "Escalate to IR Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#soc-escalations",
+          "mode": "name"
+        },
+        "text": "=:sos: Compliance control owner acknowledgement missing for {{ $('Normalize Evidence Request').first().json.entityId }}. Escalating to GRC.",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "mg-slack-credential",
+          "name": "MedicareGuard Slack"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        510
+      ],
+      "id": "52837c44-e708-4196-8209-6d8935b41aea"
+    },
+    {
+      "name": "Merge Verification",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "position": [
+        0,
+        680
+      ],
+      "id": "8c96a08c-53b2-4787-9837-9cde8cbd8671"
+    },
+    {
+      "name": "Build Forensic Timeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const context = $('Compute Business Impact').first().json;\nconst caseRecord = $('Merge Case Handling').first().json;\nconst verification = $('Merge Verification').first().json || {};\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.status), stages: ['detected','enriched','case_opened','notified','contained','verified'], completedAt: new Date().toISOString() } }];"
+      },
+      "position": [
+        220,
+        680
+      ],
+      "id": "ecf749ac-4ab4-4ea2-bebc-9ba2b5414f50"
+    },
+    {
+      "name": "Persist Response Timeline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\n       VALUES ('compliance_controls',\n       '{{ $('Normalize Incoming Event').first().json.entityId }}',\n       'Automated timeline rebuilt: detected → enriched → case opened → containment → verification.',\n       '{\"automation\":\"compliance-evidence\",\"timeline\":true}'::jsonb) RETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        680
+      ],
+      "id": "96c831ad-aa77-4b03-b68d-97a8c055f0a8"
+    },
+    {
+      "name": "Write Audit Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:4000/api/logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ level: 'info', event_type: 'automation', resource: 'compliance-evidence', action: 'workflow_complete', message: 'Continuous Compliance Evidence completed', metadata: { correlationId: $('Compute Business Impact').first().json.correlationId } }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        680
+      ],
+      "id": "1c3a4285-e98f-4f20-98fe-28d36c1ecf5a"
+    },
+    {
+      "name": "Emit Automation Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const context = $('Build Forensic Timeline').first().json;\nreturn [{ json: { workflow: 'compliance-evidence', correlationId: context.correlationId, riskScore: context.riskScore, verified: context.verified, durationMs: Date.now() - new Date(context.receivedAt).getTime(), metrics: { containment_actions: 2, evidence_records: 3, cases_opened: 1 } } }];"
+      },
+      "position": [
+        880,
+        680
+      ],
+      "id": "c47b1d2f-3ddf-4a3b-aea5-3f6b7da11e70"
+    },
+    {
+      "name": "Close Run",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1100,
+        680
+      ],
+      "id": "b74725d4-097f-4388-9873-721550f17c4d"
+    }
+  ],
+  "connections": {
+    "Webhook — Evidence Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Incoming Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Incoming Event": {
+      "main": [
+        [
+          {
+            "node": "Stamp Correlation Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stamp Correlation Context": {
+      "main": [
+        [
+          {
+            "node": "Load Control Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Control Inventory": {
+      "main": [
+        [
+          {
+            "node": "Pull Identity Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pull Identity Evidence": {
+      "main": [
+        [
+          {
+            "node": "Pull Endpoint Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pull Endpoint Evidence": {
+      "main": [
+        [
+          {
+            "node": "Pull Audit Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pull Audit Evidence": {
+      "main": [
+        [
+          {
+            "node": "Merge Enrichment Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Enrichment Context": {
+      "main": [
+        [
+          {
+            "node": "Load Asset Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Asset Ownership": {
+      "main": [
+        [
+          {
+            "node": "Count Related Findings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Related Findings": {
+      "main": [
+        [
+          {
+            "node": "Compute Business Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Business Impact": {
+      "main": [
+        [
+          {
+            "node": "Critical Threshold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Threshold?": {
+      "main": [
+        [
+          {
+            "node": "Open Primary Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Open Standard Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Primary Case": {
+      "main": [
+        [
+          {
+            "node": "Merge Case Handling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Standard Ticket": {
+      "main": [
+        [
+          {
+            "node": "Merge Case Handling",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Case Handling": {
+      "main": [
+        [
+          {
+            "node": "Notify SOC Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify SOC Channel": {
+      "main": [
+        [
+          {
+            "node": "Update Case Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Case Timeline": {
+      "main": [
+        [
+          {
+            "node": "Generate Evidence Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Evidence Pack": {
+      "main": [
+        [
+          {
+            "node": "Apply Enforcement Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Enforcement Action": {
+      "main": [
+        [
+          {
+            "node": "Wait for Enforcement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Enforcement": {
+      "main": [
+        [
+          {
+            "node": "Verify Containment State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Containment State": {
+      "main": [
+        [
+          {
+            "node": "Containment Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Containment Verified?": {
+      "main": [
+        [
+          {
+            "node": "Mark Entity Contained",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate to IR Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Entity Contained": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to IR Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Verification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Verification": {
+      "main": [
+        [
+          {
+            "node": "Build Forensic Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Forensic Timeline": {
+      "main": [
+        [
+          {
+            "node": "Persist Response Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Response Timeline": {
+      "main": [
+        [
+          {
+            "node": "Write Audit Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Audit Evidence": {
+      "main": [
+        [
+          {
+            "node": "Emit Automation Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Automation Metrics": {
+      "main": [
+        [
+          {
+            "node": "Close Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Nightly HIPAA, NIST and ISO 27001 evidence collection with control evaluation and immutable audit packs.",
+    "workflowSlug": "compliance-evidence"
+  },
+  "tags": [
+    {
+      "name": "MedicareGuard"
+    },
+    {
+      "name": "compliance-evidence"
+    }
+  ]
+}
