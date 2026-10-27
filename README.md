@@ -189,7 +189,7 @@ Useful commands:
 
 ```bash
 make test          # 57-check API smoke suite (541 endpoints)
-make lint          # frontend lint
+make typecheck     # frontend TypeScript check
 make screenshots   # recapture docs/screenshots with Playwright
 make docker-reset  # stop stack and delete volumes
 ```
