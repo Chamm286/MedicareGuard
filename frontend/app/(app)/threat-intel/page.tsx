@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Copy, Crosshair, Fingerprint, Globe2, Radar, Radio, RefreshCw, Search, ShieldAlert, Users } from "lucide-react";
+import { Copy, Fingerprint, Plus, Radio, RefreshCw, ShieldAlert, Users } from "lucide-react";
 import { api, buildQuery, useApi, useDebounced } from "@/lib/api";
 import { cn, countryFlag, formatDate, formatNumber, relativeTime, titleCase } from "@/lib/utils";
 import { ThreatMap } from "@/components/ThreatMap";
@@ -196,7 +196,7 @@ export default function ThreatIntelPage() {
               <option value="">Type</option>
               {TYPES.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
             </Select>
-            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-30">
+            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-32">
               <option value="">Severity</option>
               {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>

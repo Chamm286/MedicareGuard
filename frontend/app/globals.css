@@ -145,11 +145,11 @@ body::before {
   }
 
   .table-th {
-    @apply whitespace-nowrap px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500;
+    @apply whitespace-nowrap px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500;
   }
 
   .table-td {
-    @apply whitespace-nowrap px-4 py-3.5 text-sm text-slate-300;
+    @apply whitespace-nowrap px-3 py-3.5 text-sm text-slate-300;
   }
 
   .table-row {

@@ -258,15 +258,15 @@ export default function FirewallPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput value={search} onChange={setSearch} placeholder="Search rule, IP…" className="w-full sm:w-56" />
-            <Select value={direction} onChange={(event) => setDirection(event.target.value)} className="w-30">
+            <Select value={direction} onChange={(event) => setDirection(event.target.value)} className="w-32">
               <option value="">Direction</option>
               {DIRECTIONS.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>
-            <Select value={action} onChange={(event) => setAction(event.target.value)} className="w-26">
+            <Select value={action} onChange={(event) => setAction(event.target.value)} className="w-28">
               <option value="">Action</option>
               {ACTIONS.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>
-            <Select value={protocol} onChange={(event) => setProtocol(event.target.value)} className="w-26">
+            <Select value={protocol} onChange={(event) => setProtocol(event.target.value)} className="w-28">
               <option value="">Protocol</option>
               {PROTOCOLS.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
             </Select>

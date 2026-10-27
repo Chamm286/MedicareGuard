@@ -81,30 +81,30 @@ export default function AssetsPage() {
             {["database", "storage"].includes(row.type) ? <Database className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}
           </span>
           <div className="min-w-0">
-            <p className="max-w-[220px] truncate text-[12.5px] font-medium text-slate-200">{row.name}</p>
+            <p className="max-w-[150px] truncate text-[12.5px] font-medium text-slate-200">{row.name}</p>
             <p className="truncate font-mono text-[9.5px] text-slate-600">{row.hostname || row.ip_address || "no hostname"}</p>
           </div>
         </div>
       ),
     },
-    { key: "type", header: "Type", width: "120px", render: (row) => <Badge>{titleCase(row.type)}</Badge> },
+    { key: "type", header: "Type", width: "105px", render: (row) => <Badge>{titleCase(row.type)}</Badge> },
     {
       key: "criticality",
       header: "Criticality",
-      width: "100px",
+      width: "95px",
       render: (row) => (
         <span className={cn("chip", row.criticality === "critical" ? "border-critical/30 bg-critical/10 text-critical" : row.criticality === "high" ? "border-high/30 bg-high/10 text-high" : "border-white/10 bg-white/5 text-slate-400")}>
           {titleCase(row.criticality)}
         </span>
       ),
     },
-    { key: "ip_address", header: "IP address", width: "120px", render: (row) => <span className="font-mono text-[10px] text-slate-500">{row.ip_address || "—"}</span> },
-    { key: "os", header: "Operating system", width: "150px", render: (row) => <span className="text-[10.5px] text-slate-500">{row.os || "—"}</span> },
-    { key: "owner", header: "Owner", width: "150px", render: (row) => <span className="text-[10.5px] text-slate-500">{row.owner_name || <span className="text-slate-700">Unowned</span>}</span> },
+    { key: "ip_address", header: "IP address", width: "105px", render: (row) => <span className="font-mono text-[10px] text-slate-500">{row.ip_address || "—"}</span> },
+    { key: "os", header: "Operating system", width: "110px", render: (row) => <span className="text-[10.5px] text-slate-500">{row.os || "—"}</span> },
+    { key: "owner", header: "Owner", width: "110px", render: (row) => <span className="text-[10.5px] text-slate-500">{row.owner_name || <span className="text-slate-700">Unowned</span>}</span> },
     {
       key: "risk_score",
       header: "Risk",
-      width: "120px",
+      width: "105px",
       render: (row) => (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
@@ -115,9 +115,8 @@ export default function AssetsPage() {
         </div>
       ),
     },
-    { key: "status", header: "Status", width: "100px", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "last_seen", header: "Last seen", width: "90px", render: (row) => <span className="text-[9.5px] text-slate-600">{relativeTime(row.last_seen)}</span> },
-    { key: "open", header: "", width: "34px", render: () => <ArrowUpRight className="h-3.5 w-3.5 text-slate-700" /> },
+    { key: "status", header: "Status", width: "95px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "last_seen", header: "Last seen", width: "80px", render: (row) => <span className="text-[9.5px] text-slate-600">{relativeTime(row.last_seen)}</span> },
   ];
 
   return (

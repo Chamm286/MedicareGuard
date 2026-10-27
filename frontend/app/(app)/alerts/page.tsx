@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  ArrowUpRight,
   CheckCircle2,
   Download,
   Plus,
@@ -93,7 +92,7 @@ export default function AlertsPage() {
     {
       key: "severity",
       header: "Severity",
-      width: "96px",
+      width: "85px",
       render: (row) => <SeverityBadge severity={row.severity} />,
     },
     {
@@ -101,10 +100,10 @@ export default function AlertsPage() {
       header: "Alert",
       render: (row) => (
         <div className="min-w-0">
-          <p className="max-w-[360px] truncate text-[12.5px] font-medium text-slate-200">{row.title}</p>
+          <p className="max-w-[260px] truncate text-[12.5px] font-medium text-slate-200">{row.title}</p>
           <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-600">
             <span>{row.source || "sensor"}</span>
-            {row.threat_name && <><span className="text-slate-800">·</span><span className="max-w-[180px] truncate">{row.threat_name}</span></>}
+            {row.threat_name && <><span className="text-slate-800">·</span><span className="max-w-[110px] truncate">{row.threat_name}</span></>}
           </p>
         </div>
       ),
@@ -112,7 +111,7 @@ export default function AlertsPage() {
     {
       key: "source_ip",
       header: "Origin",
-      width: "160px",
+      width: "120px",
       render: (row) => (
         <div>
           <p className="font-mono text-[10.5px] text-slate-400">{row.source_ip || "internal"}</p>
@@ -123,24 +122,24 @@ export default function AlertsPage() {
     {
       key: "mitre",
       header: "MITRE ATT&CK",
-      width: "190px",
+      width: "120px",
       render: (row) => (
         <div>
-          <p className="max-w-[170px] truncate text-[10.5px] text-slate-400">{row.mitre_tactic?.replace(/^T\d+\s/, "") || "—"}</p>
-          <p className="mt-0.5 max-w-[170px] truncate font-mono text-[9px] text-slate-600">{row.mitre_technique?.split(" ")[0] || "unmapped"}</p>
+          <p className="max-w-[150px] truncate text-[10.5px] text-slate-400">{row.mitre_tactic?.replace(/^T\d+\s/, "") || "—"}</p>
+          <p className="mt-0.5 max-w-[150px] truncate font-mono text-[9px] text-slate-600">{row.mitre_technique?.split(" ")[0] || "unmapped"}</p>
         </div>
       ),
     },
     {
       key: "assignee",
       header: "Assignee",
-      width: "140px",
+      width: "100px",
       render: (row) => <span className="text-[11px] text-slate-500">{row.assignee_name || <span className="text-slate-700">Unassigned</span>}</span>,
     },
     {
       key: "risk_score",
       header: "Risk",
-      width: "90px",
+      width: "75px",
       render: (row) => (
         <div className="flex items-center gap-2">
           <div className="h-1 w-9 overflow-hidden rounded-full bg-white/[0.06]">
@@ -150,18 +149,12 @@ export default function AlertsPage() {
         </div>
       ),
     },
-    { key: "status", header: "Status", width: "120px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "status", header: "Status", width: "100px", render: (row) => <StatusBadge status={row.status} /> },
     {
       key: "detected_at",
       header: "Detected",
-      width: "100px",
+      width: "85px",
       render: (row) => <span title={formatDate(row.detected_at)} className="text-[10px] text-slate-600">{relativeTime(row.detected_at)}</span>,
-    },
-    {
-      key: "open",
-      header: "",
-      width: "40px",
-      render: () => <ArrowUpRight className="h-3.5 w-3.5 text-slate-700" />,
     },
   ];
 
