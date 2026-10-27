@@ -2,7 +2,7 @@
 
 **A full-stack security operations platform for healthcare environments.**
 
-MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 544-endpoint REST API, a 21-route Next.js console, four 40-node n8n workflows and a realistic seeded dataset for demos.
+MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 544-endpoint REST API, a 21-route Next.js console, five focused n8n workflows (16–20 nodes each) and a realistic seeded dataset for demos.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white">
@@ -66,7 +66,7 @@ flowchart LR
 
   subgraph Services
     A["Express API<br/>544 endpoints"]
-    W["n8n 2.41<br/>4 × 40-node workflows"]
+    W["n8n 2.41<br/>5 focused workflows"]
   end
 
   subgraph Data
@@ -92,7 +92,7 @@ flowchart LR
 | Frontend | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Recharts, Lucide |
 | Backend | Node.js 20+, Express 4, PostgreSQL (`pg`), JWT, bcrypt, Helmet, rate limiting |
 | Database | PostgreSQL 16 — 42 tables, 5 analytics views, triggers and indexes |
-| Automation | n8n 2.41 — 4 workflows × 40 executable nodes |
+| Automation | n8n 2.41 — 5 focused workflows, 16–20 nodes each |
 | Infrastructure | Docker Compose, multi-stage Dockerfiles, nginx reverse proxy |
 | AI | Deterministic, telemetry-grounded analyst with optional OpenAI provider |
 | Testing | 58-check integration smoke suite, TypeScript checks, Playwright screenshots |
@@ -191,7 +191,7 @@ Useful commands:
 make test          # 58-check API smoke suite (544 endpoints)
 make typecheck     # frontend TypeScript check
 make screenshots   # recapture docs/screenshots with Playwright
-make n8n-build     # regenerate the four 40-node n8n workflows
+make n8n-build     # regenerate the five focused n8n workflows (16–20 nodes each)
 make n8n-token     # mint a 30-day JWT for n8n callbacks
 make n8n-setup     # import, publish and activate the workflows
 make docker-reset  # stop stack and delete volumes
@@ -207,6 +207,13 @@ cd backend && npm run --silent token:n8n > /tmp/mg-n8n-token
 export MG_API_URL=http://localhost:4000/api
 export MG_API_TOKEN="$(cat /tmp/mg-n8n-token)"
 export N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+export TELEGRAM_BOT_TOKEN="<bot token>"
+export TELEGRAM_CHAT_ID="<chat id>"
+export MG_SMTP_HOST=smtp.gmail.com
+export MG_SMTP_USER="<gmail address>"
+export MG_SMTP_PASSWORD="<gmail app password>"
+export MG_ALERT_EMAIL="<where to receive alerts>"
+export MG_SMTP_FROM="<sender address>"
 
 # 2. From the repository root, import the credential and workflows
 bash scripts/setup-n8n.sh
@@ -256,8 +263,9 @@ See `GET /api/_meta/resources` for the full resource registry.
 | Phishing Triage & Credential Reset | `/webhook/mg-phishing` | Detonate URL, revoke sessions, reset MFA, notify SOC |
 | Vulnerability SLA Escalation | `/webhook/mg-vulnerability` | Enrich CVE, assign owner, create change request, escalate SLA |
 | Continuous Compliance Evidence | `/webhook/mg-compliance` | Collect HIPAA/NIST/ISO evidence and write audit trail |
+| Live Attack Monitor & Phone Alerts | `/webhook/mg-attack-monitor` | Sweep critical/high alerts every 5 minutes and push Telegram + Gmail |
 
-Each playbook contains 40 executable nodes and 9 sticky notes across ingest, enrichment, correlation, decision, response, verification, documentation and notification stages. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
+Each playbook contains **16–20 executable nodes** so it stays readable in class and in the n8n canvas. Every response flow includes a **Telegram + Gmail notification branch**, and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
 
 Setup, credential overrides, environment variables and verification commands are documented in [`n8n/README.md`](n8n/README.md).
 
@@ -289,7 +297,7 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 │   ├── app/(app)/         dashboard and all operational modules
 │   ├── components/        shell, tables, charts, threat map, command palette
 │   └── lib/               API client, auth, navigation and formatting
-├── n8n/                   4 importable 40-node workflows + setup guide
+├── n8n/                   5 importable 16–20-node workflows + setup guide
 ├── nginx/                 reverse proxy for console, API and n8n
 ├── docs/screenshots/      Playwright captures of every module
 ├── docker-compose.yml     PostgreSQL, backend, frontend, n8n and nginx
