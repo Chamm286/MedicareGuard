@@ -192,7 +192,7 @@ export default function ThreatsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput value={search} onChange={setSearch} placeholder="Search name, IP, IOC…" className="w-full sm:w-60" />
-            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-30">
+            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-32">
               <option value="">Severity</option>
               {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>

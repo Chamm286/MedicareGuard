@@ -183,7 +183,7 @@ export default function VulnerabilitiesPage() {
           </div>
           <div className="flex items-center gap-2">
             <SearchInput value={search} onChange={setSearch} placeholder="Search CVE, title…" className="w-full sm:w-60" />
-            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-30">
+            <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-32">
               <option value="">Severity</option>
               {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>
