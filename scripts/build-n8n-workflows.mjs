@@ -366,7 +366,7 @@ const gmailNode = (spec, position) => {
     "n8n-nodes-base.emailSend",
     2.1,
     {
-      fromEmail: "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
+      fromEmail: "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
       toEmail: "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
       subject: "=🚨 [{{ $('Score Risk & Build Alert').first().json.severity }}] {{ $('Score Risk & Build Alert').first().json.workflowName }}",
       emailFormat: "text",
@@ -529,8 +529,8 @@ FROM (
       options: { timeout: 15000 },
     }, positions.monitorTelegram, { onError: "continueRegularOutput" }),
     node("Notify Gmail", "n8n-nodes-base.emailSend", 2.1, {
-      fromEmail: "={{ $env.MG_SMTP_FROM || 'alerts@medicareguard.io' }}",
-      toEmail: "={{ $('Load Alert Recipients').first().json.email || $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+      fromEmail: "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
+      toEmail: "={{ $env.MG_ALERT_EMAIL || $('Load Alert Recipients').first().json.email || 'soc@medicareguard.io' }}",
       subject: "=🚨 MedicareGuard live attack monitor — {{ $('Build Phone Message').first().json.count }} new attack(s)",
       emailFormat: "text",
       text: `={{ ${alertText} }}`,
