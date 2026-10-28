@@ -272,7 +272,7 @@ See `GET /api/_meta/resources` for the full resource registry.
 | Continuous Compliance Evidence | `/webhook/mg-compliance` | Collect HIPAA/NIST/ISO evidence and write audit trail |
 | Live Attack Monitor & Phone Alerts | `/webhook/mg-attack-monitor` | Sweep critical/high alerts every 5 minutes and push Telegram + Gmail |
 
-Each playbook contains **16–20 executable nodes** so it stays readable in class and in the n8n canvas. Every response flow includes a **Telegram + Gmail notification branch**, and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
+Each playbook contains **16–20 executable nodes** so it stays readable in class and in the n8n canvas. Every response flow includes **independent Telegram and Gmail branches** — Telegram works with a bot token and chat ID alone, Gmail is optional — and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
 
 Setup, credential overrides, environment variables and verification commands are documented in [`n8n/README.md`](n8n/README.md).
 

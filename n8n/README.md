@@ -8,7 +8,7 @@ MedicareGuard ships five focused n8n playbooks. Every workflow stays between **1
 | Phishing Triage & Credential Reset | 20 | `POST /webhook/mg-phishing` | Sandbox detonation, mailbox purge, session revocation, phone alert |
 | Vulnerability SLA Escalation | 20 | `POST /webhook/mg-vulnerability` | EPSS/KEV scoring, owner assignment, change request, phone alert |
 | Continuous Compliance Evidence | 20 | `POST /webhook/mg-compliance` | HIPAA/NIST/ISO evidence pack, immutable audit trail |
-| Live Attack Monitor & Phone Alerts | 17 | `POST /webhook/mg-attack-monitor` + every 5 minutes | Telegram + Gmail digest of new critical/high attacks |
+| Live Attack Monitor & Phone Alerts | 18 | `POST /webhook/mg-attack-monitor` + every 5 minutes | Telegram + Gmail digest of new critical/high attacks |
 
 ## Integration flow
 
@@ -83,11 +83,24 @@ make n8n-setup   # rebuild, import, publish and activate
 
 ## Phone alerts
 
-The four scenario flows check `Notifications Ready?` before their alert branch. Both channels are enabled when `TELEGRAM_BOT_TOKEN` and `MG_SMTP_USER` are set:
+Every scenario flow checks **Telegram Ready?** and **Gmail Ready?** independently, so one channel can work without the other:
 
-- **Telegram** — instant push to the on-call phone, with workflow, severity, risk score and a direct console link.
-- **Gmail** — an inbox and audit-friendly copy of the same alert through the imported SMTP credential.
+- **Telegram** — enabled by `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`; instant push to the on-call phone with workflow, severity, risk score and a direct console link.
+- **Gmail** — enabled by `MG_SMTP_HOST` + `MG_SMTP_USER` + `MG_SMTP_PASSWORD`; inbox and audit-friendly copy through the imported SMTP credential.
 - **Live Attack Monitor** — runs every five minutes, aggregates up to five unnotified critical/high alerts and pushes one digest; this is the "away from the laptop" view.
+
+If Gmail is not configured, Telegram still fires and the flow continues. If Telegram is not configured, Gmail still fires. The execution metrics record which channels were actually ready.
+
+### Telegram bot in 30 seconds
+
+1. Open Telegram, start **@BotFather**, send `/newbot`, choose a name and username.
+2. Copy the bot token into `TELEGRAM_BOT_TOKEN`.
+3. Send any message to your new bot, then put your numeric chat ID in `TELEGRAM_CHAT_ID`.
+4. Run `bash scripts/check-alerts.sh --send` and confirm the message arrives.
+
+A chat ID alone cannot send messages; Telegram always requires the bot token.
+
+### Gmail App Password
 
 Gmail requires an **App Password**, not the normal Google account password. Enable 2-Step Verification, create an App Password for Mail, and use that value for `MG_SMTP_PASSWORD`.
 
@@ -139,7 +152,7 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:4000/api/automation/executions?limit=10"
 ```
 
-A healthy run returns `202 dispatched`, then transitions to `success` with `nodeCount: 20` for a scenario flow or `nodeCount: 17` for the monitor. When both notification channels are configured, the same run also sends a Telegram message and a Gmail email.
+A healthy run returns `202 dispatched`, then transitions to `success` with `nodeCount: 20` for a scenario flow or `nodeCount: 18` for the monitor. When both notification channels are configured, the same run also sends a Telegram message and a Gmail email.
 
 ## Credentials
 
