@@ -89,8 +89,8 @@ export default function StoreHomePage() {
             <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-500/20 to-cyan-500/10 blur-3xl" />
             <div className="relative grid grid-cols-2 gap-4">
               <div className="panel overflow-hidden p-0">
-                <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80" alt="Máy đo huyết áp" className="h-52 w-full object-cover" />
-                <div className="p-4"><p className="text-[10px] uppercase tracking-[0.16em] text-brand-300">Bán chạy</p><p className="mt-1 text-sm font-semibold text-white">Máy đo huyết áp Omron M7</p><p className="mt-1 text-xs text-slate-400">1.590.000 ₫</p></div>
+                <img src="/products/may-do-huyet-ap.jpg" alt="Máy đo huyết áp Omron HEM-7000" className="h-52 w-full object-cover" />
+                <div className="p-4"><p className="text-[10px] uppercase tracking-[0.16em] text-brand-300">Bán chạy</p><p className="mt-1 text-sm font-semibold text-white">Máy đo huyết áp Omron HEM-7000</p><p className="mt-1 text-xs text-slate-400">1.590.000 ₫</p></div>
               </div>
               <div className="mt-8 space-y-4">
                 <div className="panel flex items-center gap-3 p-4"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-low/10 text-low"><HeartPulse className="h-5 w-5" /></span><div><p className="text-xs font-medium text-white">Theo dõi sức khỏe</p><p className="text-[10px] text-slate-500">Thiết bị đo tại nhà</p></div></div>
