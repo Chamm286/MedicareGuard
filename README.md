@@ -223,6 +223,13 @@ curl -X POST http://localhost:4000/api/automation/workflows/phishing-triage/run 
   -H "Authorization: Bearer $MG_API_TOKEN"
 ```
 
+Verify the phone and inbox channels after adding credentials:
+
+```bash
+bash scripts/check-alerts.sh          # authenticate only
+bash scripts/check-alerts.sh --send   # send Telegram + Gmail test alerts
+```
+
 Full details, credential overrides and verification commands are in [`n8n/README.md`](n8n/README.md).
 
 ## API

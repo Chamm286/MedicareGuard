@@ -91,6 +91,16 @@ The four scenario flows check `Notifications Ready?` before their alert branch. 
 
 Gmail requires an **App Password**, not the normal Google account password. Enable 2-Step Verification, create an App Password for Mail, and use that value for `MG_SMTP_PASSWORD`.
 
+### Verify channels
+
+```bash
+# Reads ~/n8n-safe/n8n.env by default; override with N8N_ENV_FILE=/path/to/env
+bash scripts/check-alerts.sh          # login/connectivity only
+bash scripts/check-alerts.sh --send   # send a Telegram and Gmail test alert
+```
+
+The check never prints the token or app password. A successful run reports the Telegram bot username and the Gmail sender. Use `--send` once to confirm delivery to the phone and inbox.
+
 ## Environment variables
 
 | Variable | Purpose |
