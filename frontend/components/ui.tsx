@@ -60,7 +60,7 @@ export function Avatar({ name, email, src, size = "md" }: { name?: string | null
   const sizes = { xs: "h-6 w-6 text-[9px]", sm: "h-8 w-8 text-[10px]", md: "h-10 w-10 text-xs", lg: "h-12 w-12 text-sm" };
   return (
     <div className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-gradient-to-br from-brand-500/30 to-cyan-500/20 font-semibold text-brand-100", sizes[size])}>
-      {src ? <img src={src} alt={name || "avatar"} className="h-full w-full object-cover" /> : initials(name, email)}
+      {src ? <img src={src} alt={name || "ảnh đại diện"} className="h-full w-full object-cover" /> : initials(name, email)}
     </div>
   );
 }
@@ -179,7 +179,7 @@ export function Modal({
             <h3 className="font-display text-lg font-semibold text-white">{title}</h3>
             {description && <p className="mt-1 text-xs text-slate-500">{description}</p>}
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Đóng">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -194,9 +194,9 @@ export function ConfirmDialog({
   open,
   onClose,
   onConfirm,
-  title = "Confirm action",
+  title = "Xác nhận hành động",
   message,
-  confirmLabel = "Confirm",
+  confirmLabel = "Xác nhận",
   loading,
   danger = true,
 }: {
@@ -217,7 +217,7 @@ export function ConfirmDialog({
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
           <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} loading={loading}>{confirmLabel}</Button>
         </>
       }
@@ -261,7 +261,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       onClick={() => onChange(!checked)}
       className={cn("relative h-6 w-11 shrink-0 rounded-full border transition", checked ? "border-brand-400/50 bg-brand-500" : "border-white/10 bg-surface-700")}
       aria-pressed={checked}
-      aria-label={label || "Toggle"}
+      aria-label={label || "Bật/tắt"}
     >
       <span className={cn("absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-all", "h-[18px] w-[18px]", checked ? "left-[22px]" : "left-0.5")} />
     </button>
@@ -296,10 +296,10 @@ export function Pagination({ page, pages, total, limit, onPage }: { page: number
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] px-4 py-3">
       <p className="text-[11px] text-slate-500">
-        Showing <span className="text-slate-300">{from}</span>–<span className="text-slate-300">{to}</span> of <span className="text-slate-300">{total}</span>
+        Đang hiển thị <span className="text-slate-300">{from}</span>–<span className="text-slate-300">{to}</span> trong <span className="text-slate-300">{total}</span>
       </p>
       <div className="flex items-center gap-1">
-        <Button size="icon" variant="ghost" onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Previous page">
+        <Button size="icon" variant="ghost" onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Trang trước">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         {Array.from({ length: Math.min(5, pages) }).map((_, index) => {
@@ -316,7 +316,7 @@ export function Pagination({ page, pages, total, limit, onPage }: { page: number
             </button>
           );
         })}
-        <Button size="icon" variant="ghost" onClick={() => onPage(page + 1)} disabled={page >= pages} aria-label="Next page">
+        <Button size="icon" variant="ghost" onClick={() => onPage(page + 1)} disabled={page >= pages} aria-label="Trang sau">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -324,7 +324,7 @@ export function Pagination({ page, pages, total, limit, onPage }: { page: number
   );
 }
 
-export function EmptyState({ title = "Nothing here yet", message, icon: Icon = Inbox, action }: { title?: string; message?: string; icon?: LucideIcon; action?: ReactNode }) {
+export function EmptyState({ title = "Chưa có dữ liệu", message, icon: Icon = Inbox, action }: { title?: string; message?: string; icon?: LucideIcon; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-slate-500">
@@ -343,9 +343,9 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-critical/20 bg-critical/10 text-critical">
         <AlertCircle className="h-5 w-5" />
       </div>
-      <p className="mt-3 text-sm font-medium text-slate-300">Unable to load data</p>
+      <p className="mt-3 text-sm font-medium text-slate-300">Không thể tải dữ liệu</p>
       <p className="mt-1 max-w-sm text-xs text-slate-600">{message}</p>
-      {onRetry && <Button className="mt-4" size="sm" onClick={onRetry}>Retry</Button>}
+      {onRetry && <Button className="mt-4" size="sm" onClick={onRetry}>Thử lại</Button>}
     </div>
   );
 }
@@ -420,7 +420,7 @@ export function KeyValue({ label, value, mono }: { label: string; value: ReactNo
   );
 }
 
-export function SearchInput({ value, onChange, placeholder = "Search…", className }: { value: string; onChange: (value: string) => void; placeholder?: string; className?: string }) {
+export function SearchInput({ value, onChange, placeholder = "Tìm kiếm…", className }: { value: string; onChange: (value: string) => void; placeholder?: string; className?: string }) {
   const [focused, setFocused] = useState(false);
   return (
     <div className={cn("relative", className)}>

@@ -19,7 +19,7 @@ export default function PlaybooksPage() {
   const active = playbooks.filter((item: any) => item.status === "active").length;
   const categories = useMemo(() => {
     const grouped: Record<string, number> = {};
-    playbooks.forEach((item: any) => { grouped[item.category || "uncategorised"] = (grouped[item.category || "uncategorised"] || 0) + 1; });
+    playbooks.forEach((item: any) => { grouped[item.category || "chưa phân loại"] = (grouped[item.category || "chưa phân loại"] || 0) + 1; });
     return Object.entries(grouped).sort((a, b) => b[1] - a[1]);
   }, [playbooks]);
   const totalSteps = playbooks.reduce((sum: number, item: any) => sum + (item.steps?.length || 0), 0);
@@ -42,7 +42,7 @@ export default function PlaybooksPage() {
       if (index >= steps) {
         clearInterval(interval);
         setRunning(false);
-        success("Playbook completed", `${selected.name} finished ${steps} steps successfully.`);
+        success("Đã hoàn thành cẩm nang", `${selected.name} đã hoàn tất ${steps} bước.`);
       }
     }, 800);
   };
@@ -50,14 +50,14 @@ export default function PlaybooksPage() {
   return (
     <div>
       <PageHeader
-        title="Response Playbooks"
-        subtitle="Repeatable, auditable procedures for every incident class the SOC handles"
+        title="Cẩm nang ứng phó"
+        subtitle="Các quy trình có thể lặp lại, có thể kiểm tra được đối với mọi loại sự cố mà SOC xử lý"
         icon={ListTree}
-        badge={<Badge tone="low" dot>{active} active</Badge>}
+        badge={<Badge tone="low" dot>{active} đang hoạt động</Badge>}
         actions={
           <>
-            <Button icon={RefreshCw} onClick={refetch} loading={refreshing}>Refresh</Button>
-            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>New playbook</Button>
+            <Button icon={RefreshCw} onClick={refetch} loading={refreshing}>Làm mới</Button>
+            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Cẩm nang mới</Button>
           </>
         }
       />
@@ -67,10 +67,10 @@ export default function PlaybooksPage() {
           Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[112px] rounded-xl" />)
         ) : (
           <>
-            <StatCard label="Playbooks" value={playbooks.length} hint={`${categories.length} categories`} icon={BookOpen} tone="brand" />
-            <StatCard label="Active" value={active} hint="Ready for execution" icon={ShieldCheck} tone="success" />
-            <StatCard label="Response steps" value={totalSteps} hint="Documented procedures" icon={Workflow} tone="cyan" />
-            <StatCard label="Coverage" value={`${categories.length}`} hint="Incident classes" icon={Sparkles} tone="warning" />
+            <StatCard label="Cẩm nang" value={playbooks.length} hint={`${categories.length} danh mục`} icon={BookOpen} tone="brand" />
+            <StatCard label="Đang hoạt động" value={active} hint="Sẵn sàng thực hiện" icon={ShieldCheck} tone="success" />
+            <StatCard label="Các bước phản hồi" value={totalSteps} hint="Thủ tục dạng văn bản" icon={Workflow} tone="cyan" />
+            <StatCard label="Phạm vi bao phủ" value={`${categories.length}`} hint="Lớp sự cố" icon={Sparkles} tone="warning" />
           </>
         )}
       </div>
@@ -88,10 +88,10 @@ export default function PlaybooksPage() {
                 <StatusBadge status={playbook.status} />
               </div>
               <h2 className="mt-3 font-display text-[14px] font-semibold text-slate-100">{playbook.name}</h2>
-              <p className="mt-1 line-clamp-2 min-h-[30px] text-[10.5px] leading-relaxed text-slate-600">{playbook.description || "No description provided."}</p>
+              <p className="mt-1 line-clamp-2 min-h-[30px] text-[10.5px] leading-relaxed text-slate-600">{playbook.description || "Chưa có mô tả."}</p>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <Badge>{titleCase(playbook.category)}</Badge>
-                <Badge>{playbook.steps?.length || 0} steps</Badge>
+                <Badge>{playbook.steps?.length || 0} bước</Badge>
               </div>
               <div className="mt-3 space-y-1.5 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
                 {(playbook.steps || []).slice(0, 3).map((step: any) => (
@@ -100,11 +100,11 @@ export default function PlaybooksPage() {
                     <span className="truncate">{step.title}</span>
                   </div>
                 ))}
-                {(playbook.steps?.length || 0) > 3 && <p className="pl-6 text-[9px] text-slate-700">+{playbook.steps.length - 3} more steps</p>}
+                {(playbook.steps?.length || 0) > 3 && <p className="pl-6 text-[9px] text-slate-700">+{playbook.steps.length - 3} bước khác</p>}
               </div>
               <div className="mt-auto flex items-center justify-between pt-3">
-                <span className="text-[9px] text-slate-700">Updated {formatDate(playbook.updated_at, { day: "2-digit", month: "short" })}</span>
-                <Button size="sm" variant="ghost" onClick={() => openPlaybook(playbook)}>Open <ArrowRight className="h-3 w-3" /></Button>
+                <span className="text-[9px] text-slate-700">Cập nhật {formatDate(playbook.updated_at, { day: "2-digit", month: "short" })}</span>
+                <Button size="sm" variant="ghost" onClick={() => openPlaybook(playbook)}>Mở <ArrowRight className="h-3 w-3" /></Button>
               </div>
             </Card>
           ))}
@@ -112,8 +112,8 @@ export default function PlaybooksPage() {
             <Card className="md:col-span-2 xl:col-span-3">
               <div className="flex flex-col items-center py-14">
                 <ListTree className="h-8 w-8 text-slate-700" />
-                <p className="mt-3 text-sm text-slate-400">No playbooks yet</p>
-                <Button className="mt-3" onClick={() => setCreateOpen(true)}>Create the first playbook</Button>
+                <p className="mt-3 text-sm text-slate-400">Chưa có cẩm nang nào</p>
+                <Button className="mt-3" onClick={() => setCreateOpen(true)}>Tạo cẩm nang đầu tiên</Button>
               </div>
             </Card>
           )}
@@ -123,13 +123,13 @@ export default function PlaybooksPage() {
       <Modal
         open={Boolean(selected)}
         onClose={() => { setSelected(null); setRunning(false); }}
-        title={selected?.name || "Playbook"}
-        description={selected ? `${titleCase(selected.category)} · ${selected.steps?.length || 0} response steps` : undefined}
+        title={selected?.name || "Cẩm nang"}
+        description={selected ? `${titleCase(selected.category)} · ${selected.steps?.length || 0} bước phản hồi` : undefined}
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
-            <Button variant="primary" icon={Play} loading={running} onClick={simulate} disabled={!selected || running}>Execute playbook</Button>
+            <Button variant="ghost" onClick={() => setSelected(null)}>Đóng</Button>
+            <Button variant="primary" icon={Play} loading={running} onClick={simulate} disabled={!selected || running}>Thực thi cẩm nang</Button>
           </>
         }
       >
@@ -138,7 +138,7 @@ export default function PlaybooksPage() {
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={selected.status} />
               <Badge>{titleCase(selected.category)}</Badge>
-              <Badge>{selected.steps?.length || 0} steps</Badge>
+              <Badge>{selected.steps?.length || 0} bước</Badge>
             </div>
             <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{selected.description}</p>
             <div className="mt-4 space-y-2.5">
@@ -152,17 +152,17 @@ export default function PlaybooksPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className={cn("text-[11.5px] font-medium", done ? "text-emerald-200" : "text-slate-300")}>{step.title}</p>
-                      {step.owner && <p className="mt-0.5 text-[9px] text-slate-600">Owner · {step.owner} {step.sla_minutes ? `· ${step.sla_minutes}m SLA` : ""}</p>}
+                      {step.owner && <p className="mt-0.5 text-[9px] text-slate-600">Người sở hữu · {step.owner} {step.sla_minutes ? `· ${step.sla_minutes}m SLA` : ""}</p>}
                     </div>
-                    {current && <span className="text-[9px] text-brand-300">running…</span>}
-                    {done && <span className="text-[9px] text-low">done</span>}
+                    {current && <span className="text-[9px] text-brand-300">đang chạy…</span>}
+                    {done && <span className="text-[9px] text-low">xong</span>}
                   </div>
                 );
               })}
             </div>
             <div className="mt-3">
               <div className="mb-1 flex items-center justify-between text-[9px] text-slate-600">
-                <span>Execution progress</span>
+                <span>Tiến độ thực hiện</span>
                 <span>{Math.min(runStep, selected.steps?.length || 0)} / {selected.steps?.length || 0}</span>
               </div>
               <ProgressBar value={(Math.min(runStep, selected.steps?.length || 0) / Math.max(selected.steps?.length || 1, 1)) * 100} barClassName="from-low to-cyan-400" />
@@ -194,10 +194,10 @@ function CreatePlaybookModal({ open, onClose, onCreated }: { open: boolean; onCl
     try {
       const steps = form.steps.split("\n").map((line) => line.trim()).filter(Boolean).map((title, index) => ({ order: index + 1, title }));
       await api("/playbooks", { method: "POST", body: { name: form.name, category: form.category, status: form.status, description: form.description, steps } });
-      success("Playbook created", "The procedure is available to the response team.");
+      success("Đã tạo cẩm nang", "Quy trình đã sẵn sàng cho đội ứng phó.");
       onCreated();
     } catch (err) {
-      toastError("Could not create playbook", err instanceof Error ? err.message : "Unknown error");
+      toastError("Không thể tạo cẩm nang", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setSaving(false);
     }
@@ -207,37 +207,37 @@ function CreatePlaybookModal({ open, onClose, onCreated }: { open: boolean; onCl
     <Modal
       open={open}
       onClose={onClose}
-      title="New response playbook"
-      description="Document the steps analysts should follow for an incident class."
+      title="Cẩm nang phản hồi mới"
+      description="Ghi lại các bước mà nhà phân tích nên tuân theo đối với một lớp sự cố."
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={submit}>Create playbook</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
+          <Button variant="primary" loading={saving} onClick={submit}>Tạo cẩm nang</Button>
         </>
       }
     >
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        <Field label="Playbook name" className="md:col-span-2">
-          <Input value={form.name} onChange={(event) => set("name", event.target.value)} placeholder="e.g. Ransomware containment" required />
+        <Field label="Tên cẩm nang" className="md:col-span-2">
+          <Input value={form.name} onChange={(event) => set("name", event.target.value)} placeholder="Ví dụ: Ngăn chặn ransomware" required />
         </Field>
-        <Field label="Category">
+        <Field label="Danh mục">
           <Select value={form.category} onChange={(event) => set("category", event.target.value)}>
             {["malware", "ransomware", "phishing", "data-breach", "vulnerability", "availability", "insider", "generic"].map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
           </Select>
         </Field>
-        <Field label="Status">
+        <Field label="Trạng thái">
           <Select value={form.status} onChange={(event) => set("status", event.target.value)}>
-            <option value="active">Active</option>
-            <option value="draft">Draft</option>
-            <option value="disabled">Disabled</option>
+            <option value="active">Đang hoạt động</option>
+            <option value="draft">Bản nháp</option>
+            <option value="disabled">Tắt</option>
           </Select>
         </Field>
-        <Field label="Description" className="md:col-span-2">
-          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="When to use this playbook and what outcome it achieves…" />
+        <Field label="Mô tả" className="md:col-span-2">
+          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="Khi nào nên sử dụng cẩm nang này và nó đạt được kết quả gì…" />
         </Field>
-        <Field label="Response steps" hint="One step per line" className="md:col-span-2">
-          <Textarea value={form.steps} onChange={(event) => set("steps", event.target.value)} placeholder={"Validate the detection\nIsolate affected assets\nCollect forensic evidence\nEradicate persistence\nRestore from backup"} className="min-h-[130px]" />
+        <Field label="Các bước phản hồi" hint="Một bước trên mỗi dòng" className="md:col-span-2">
+          <Textarea value={form.steps} onChange={(event) => set("steps", event.target.value)} placeholder={"Xác minh phát hiện\nCô lập tài sản bị ảnh hưởng\nThu thập bằng chứng pháp y\nLoại bỏ cơ chế duy trì\nKhôi phục từ bản sao lưu"} className="min-h-[130px]" />
         </Field>
       </form>
     </Modal>

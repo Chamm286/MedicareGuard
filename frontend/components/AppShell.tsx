@@ -42,7 +42,7 @@ function Brand({ collapsed }: { collapsed: boolean }) {
           <p className="truncate font-display text-[15px] font-semibold tracking-tight text-white">
             Medicare<span className="text-brand-300">Guard</span>
           </p>
-          <p className="text-[8px] font-medium uppercase tracking-[0.28em] text-slate-600">Security Operations</p>
+          <p className="text-[8px] font-medium uppercase tracking-[0.28em] text-slate-600">Vận hành an ninh</p>
         </div>
       )}
     </Link>
@@ -94,24 +94,24 @@ function NotificationsMenu({ onClose }: { onClose: () => void }) {
     const unreadItems = notifications.filter((item: any) => !item.read);
     await Promise.allSettled(unreadItems.map((item: any) => api(`/notifications/${item.id}`, { method: "PATCH", body: { read: true } })));
     refetch();
-    success("Inbox cleared", `${unreadItems.length} notifications marked as read.`);
+    success("Đã dọn hộp thư", `${unreadItems.length} thông báo đã được đánh dấu đã đọc.`);
   };
 
   return (
     <div className="absolute right-0 top-11 z-50 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-surface-850/95 shadow-2xl backdrop-blur-2xl">
       <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-white">Notifications</p>
-          {unread > 0 && <span className="rounded-full bg-critical/15 px-1.5 py-0.5 text-[9px] font-semibold text-critical">{unread} new</span>}
+          <p className="text-sm font-medium text-white">Thông báo</p>
+          {unread > 0 && <span className="rounded-full bg-critical/15 px-1.5 py-0.5 text-[9px] font-semibold text-critical">{unread} mới</span>}
         </div>
         {unread > 0 && (
           <button onClick={markAll} className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">
-            <CheckCheck className="h-3 w-3" /> Mark all read
+            <CheckCheck className="h-3 w-3" /> Đánh dấu tất cả đã đọc
           </button>
         )}
       </div>
       <div className="max-h-[360px] overflow-y-auto">
-        {notifications.length === 0 && <p className="px-4 py-10 text-center text-xs text-slate-600">No notifications yet.</p>}
+        {notifications.length === 0 && <p className="px-4 py-10 text-center text-xs text-slate-600">Chưa có thông báo nào.</p>}
         {notifications.map((item: any) => (
           <button key={item.id} onClick={() => open(item)} className="flex w-full gap-3 border-b border-white/[0.03] px-4 py-3 text-left transition last:border-0 hover:bg-white/[0.03]">
             <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border", item.read ? "border-white/[0.06] bg-white/[0.02] text-slate-600" : "border-brand-400/25 bg-brand-500/10 text-brand-300")}>
@@ -127,7 +127,7 @@ function NotificationsMenu({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <Link href="/logs" onClick={onClose} className="flex items-center justify-center gap-1 border-t border-white/[0.06] bg-surface-900/40 py-2.5 text-[10px] text-slate-500 transition hover:text-brand-300">
-        View activity log <ChevronLeft className="h-3 w-3 rotate-180" />
+        Xem nhật ký hoạt động <ChevronLeft className="h-3 w-3 rotate-180" />
       </Link>
     </div>
   );
@@ -221,7 +221,7 @@ function ShellInner({ children }: { children: ReactNode }) {
     const match = Object.keys(pageTitles)
       .filter((key) => pathname === key || pathname.startsWith(`${key}/`))
       .sort((a, b) => b.length - a.length)[0];
-    return match ? pageTitles[match] : { title: "MedicareGuard", subtitle: "Security Operations Center", icon: Shield };
+    return match ? pageTitles[match] : { title: "MedicareGuard", subtitle: "Trung tâm vận hành an ninh", icon: Shield };
   }, [pathname]);
 
   if (checking) {
@@ -232,7 +232,7 @@ function ShellInner({ children }: { children: ReactNode }) {
             <Shield className="h-6 w-6 text-white" />
             <span className="absolute -inset-2 animate-ping rounded-3xl border border-brand-400/30" />
           </div>
-          <p className="text-xs text-slate-500">Establishing secure session…</p>
+          <p className="text-xs text-slate-500">Đang thiết lập phiên bảo mật…</p>
         </div>
       </div>
     );
@@ -251,7 +251,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         <button
           onClick={toggleSidebar}
           className="absolute -right-3 top-7 hidden h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-surface-850 text-slate-500 transition hover:text-white lg:flex"
-          aria-label="Toggle sidebar"
+          aria-label="Thu gọn thanh bên"
         >
           <ChevronLeft className={cn("h-3.5 w-3.5 transition-transform", collapsed && "rotate-180")} />
         </button>
@@ -292,26 +292,26 @@ function ShellInner({ children }: { children: ReactNode }) {
         {!collapsed ? (
           <div className="rounded-xl border border-white/[0.06] bg-gradient-to-b from-white/[0.035] to-transparent p-3">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600">SOC status</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600">Trạng thái SOC</span>
               <span className="flex items-center gap-1 text-[9px] text-low">
-                <span className="h-1.5 w-1.5 rounded-full bg-low" /> Operational
+                <span className="h-1.5 w-1.5 rounded-full bg-low" /> Hoạt động
               </span>
             </div>
             <div className="mt-2.5 space-y-1.5">
               <div className="flex items-center gap-2 text-[10px]">
                 <Activity className="h-3 w-3 text-brand-400" />
-                <span className="flex-1 text-slate-500">Core API</span>
-                <span className={health.data ? "text-emerald-400" : "text-medium"}>{health.data ? "online" : "checking"}</span>
+                <span className="flex-1 text-slate-500">API cốt lõi</span>
+                <span className={health.data ? "text-emerald-400" : "text-medium"}>{health.data ? "trực tuyến" : "đang kiểm tra"}</span>
               </div>
               <div className="flex items-center gap-2 text-[10px]">
                 <Workflow className="h-3 w-3 text-cyan-400" />
-                <span className="flex-1 text-slate-500">n8n SOAR</span>
-                <span className="text-emerald-400">connected</span>
+                <span className="flex-1 text-slate-500">Tự động hóa n8n</span>
+                <span className="text-emerald-400">đã kết nối</span>
               </div>
               <div className="flex items-center gap-2 text-[10px]">
                 <Sparkles className="h-3 w-3 text-violet-400" />
-                <span className="flex-1 text-slate-500">AI analyst</span>
-                <span className="text-emerald-400">ready</span>
+                <span className="flex-1 text-slate-500">Chuyên viên AI</span>
+                <span className="text-emerald-400">sẵn sàng</span>
               </div>
             </div>
           </div>
@@ -330,12 +330,12 @@ function ShellInner({ children }: { children: ReactNode }) {
           <Avatar name={user?.fullName} email={user?.email} src={user?.avatarUrl} size="sm" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-medium text-slate-200">{user?.fullName || "Analyst"}</p>
+              <p className="truncate text-[11px] font-medium text-slate-200">{user?.fullName || "Chuyên viên"}</p>
               <p className="truncate text-[9px] uppercase tracking-wider text-slate-600">{titleCase(user?.role) || "SOC"}</p>
             </div>
           )}
         </Link>
-        {!collapsed && <p className="mt-2 text-center font-mono text-[8px] text-slate-800">v1.0.0 · build 2026.10</p>}
+        {!collapsed && <p className="mt-2 text-center font-mono text-[8px] text-slate-800">v1.0.0 · bản dựng 2026.10</p>}
       </div>
     </aside>
   );
@@ -348,7 +348,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       <div className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-[82px]" : "lg:pl-[264px]")}>
         <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-surface-950/80 backdrop-blur-2xl">
           <div className="flex h-16 items-center gap-3 px-4 md:px-6">
-            <button onClick={() => setMobileOpen(true)} className="rounded-lg p-2 text-slate-400 transition hover:bg-white/[0.05] lg:hidden" aria-label="Open menu">
+            <button onClick={() => setMobileOpen(true)} className="rounded-lg p-2 text-slate-400 transition hover:bg-white/[0.05] lg:hidden" aria-label="Mở menu">
               <Menu className="h-5 w-5" />
             </button>
 
@@ -366,12 +366,12 @@ function ShellInner({ children }: { children: ReactNode }) {
               className="hidden h-9 w-64 items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-left text-xs text-slate-600 transition hover:border-white/[0.12] hover:bg-white/[0.04] md:flex xl:w-80"
             >
               <Search className="h-3.5 w-3.5" />
-              <span className="flex-1">Search the SOC…</span>
+              <span className="flex-1">Tìm kiếm SOC…</span>
               <kbd className="flex items-center gap-0.5 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px]">
                 <Command className="h-2.5 w-2.5" />K
               </kbd>
             </button>
-            <button onClick={() => setCommandOpen(true)} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.05] md:hidden" aria-label="Search">
+            <button onClick={() => setCommandOpen(true)} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.05] md:hidden" aria-label="Tìm kiếm">
               <Search className="h-4.5 w-4.5" />
             </button>
 
@@ -387,7 +387,7 @@ function ShellInner({ children }: { children: ReactNode }) {
                   setUserMenuOpen(false);
                 }}
                 className="relative rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.05] hover:text-white"
-                aria-label="Notifications"
+                aria-label="Thông báo"
               >
                 <Bell className="h-4.5 w-4.5" />
                 {unread > 0 && <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-critical px-0.5 text-[8px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
@@ -428,18 +428,18 @@ function ShellInner({ children }: { children: ReactNode }) {
                     </div>
                     <div className="p-1.5">
                       <Link href="/settings" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-                        <Settings className="h-3.5 w-3.5" /> Profile & settings
+                        <Settings className="h-3.5 w-3.5" /> Hồ sơ &amp; cài đặt
                       </Link>
                       <Link href="/ai" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-                        <Bot className="h-3.5 w-3.5" /> AI analyst
+                        <Bot className="h-3.5 w-3.5" /> Chuyên viên AI
                       </Link>
                       <Link href="/automation" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-                        <Workflow className="h-3.5 w-3.5" /> Automation
+                        <Workflow className="h-3.5 w-3.5" /> Tự động hóa
                       </Link>
                     </div>
                     <div className="border-t border-white/[0.06] p-1.5">
                       <button onClick={signOut} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-500 transition hover:bg-critical/10 hover:text-critical">
-                        <LogOut className="h-3.5 w-3.5" /> Sign out
+                        <LogOut className="h-3.5 w-3.5" /> Đăng xuất
                       </button>
                     </div>
                   </div>

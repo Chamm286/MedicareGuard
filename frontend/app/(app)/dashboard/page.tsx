@@ -18,7 +18,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
-import { cn, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
+import { cn, countryName, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
 import { AttackAreaChart, SeverityDonut, SeverityLegend, TopAttackersBar } from "@/components/charts";
 import { ThreatMap } from "@/components/ThreatMap";
 import { Button, Card, ErrorState, PageHeader, ProgressBar, SeverityBadge, Skeleton, StatCard, StatusBadge } from "@/components/ui";
@@ -40,8 +40,8 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Command Center"
-        subtitle="Live detection, response and exposure telemetry across the Medicare platform"
+        title="Trung tâm chỉ huy"
+        subtitle="Phát hiện trực tiếp, phản hồi và đo lường phơi nhiễm từ xa trên nền tảng Medicare"
         icon={Gauge}
         badge={
           <span className="flex items-center gap-1.5 rounded-full border border-low/25 bg-low/[0.07] px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-emerald-300">
@@ -49,18 +49,18 @@ export default function DashboardPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-low opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-low" />
             </span>
-            live
+            trực tiếp
           </span>
         }
         actions={
           <>
             <span className="hidden items-center gap-1.5 text-[10px] text-slate-600 md:flex">
               <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
-              {summary?.generatedAt ? relativeTime(summary.generatedAt) : "syncing"}
+              {summary?.generatedAt ? relativeTime(summary.generatedAt) : "đang đồng bộ"}
             </span>
-            <Button icon={RefreshCw} onClick={() => refetch()} loading={refreshing}>Refresh</Button>
+            <Button icon={RefreshCw} onClick={() => refetch()} loading={refreshing}>Làm mới</Button>
             <Link href="/reports">
-              <Button variant="primary" icon={Download}>Export brief</Button>
+              <Button variant="primary" icon={Download}>Xuất tóm tắt</Button>
             </Link>
           </>
         }
@@ -83,41 +83,41 @@ export default function DashboardPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             <StatCard
-              label="Open alerts"
+              label="Cảnh báo đang mở"
               value={formatNumber(overview?.open_alerts)}
-              delta={`${overview?.alert_change_percent > 0 ? "+" : ""}${overview?.alert_change_percent}% vs prior 24h`}
-              hint={`${overview?.alerts_24h} detected in last 24h`}
+              delta={`${overview?.alert_change_percent > 0 ? "+" : ""}${overview?.alert_change_percent}% so với 24 giờ trước`}
+              hint={`${overview?.alerts_24h} phát hiện trong 24 giờ qua`}
               icon={ShieldAlert}
               tone="warning"
               spark={timelineSpark}
             />
             <StatCard
-              label="Critical alerts"
+              label="Cảnh báo nghiêm trọng"
               value={formatNumber(overview?.critical_alerts)}
-              hint="Requires immediate triage"
+              hint="Yêu cầu phân loại ngay lập tức"
               icon={Activity}
               tone="critical"
               spark={criticalSpark}
             />
             <StatCard
-              label="Active threats"
+              label="Mối đe dọa đang hoạt động"
               value={formatNumber(overview?.active_threats)}
-              hint={`${overview?.threats_24h} observed in last 24h`}
+              hint={`${overview?.threats_24h} quan sát trong 24 giờ qua`}
               icon={Radar}
               tone="cyan"
               spark={criticalSpark.map((value: number) => value + 3)}
             />
             <StatCard
-              label="Open incidents"
+              label="Sự cố đang mở"
               value={formatNumber(overview?.open_incidents)}
-              hint="Across all response queues"
+              hint="Trên tất cả các hàng đợi phản hồi"
               icon={Siren}
               tone="brand"
             />
             <StatCard
-              label="High-risk assets"
+              label="Tài sản rủi ro cao"
               value={formatNumber(overview?.high_risk_assets)}
-              hint={`${overview?.total_assets} assets inventoried`}
+              hint={`${overview?.total_assets} tài sản đã kiểm kê`}
               icon={HardDrive}
               tone="success"
               spark={timelineSpark.map((value: number) => value + 1)}
@@ -128,12 +128,12 @@ export default function DashboardPage() {
             <Card className="p-4 xl:col-span-2">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Detection volume</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Alert detections by hour over the last 7 days</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Khối lượng phát hiện</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Phát hiện cảnh báo theo giờ trong 7 ngày qua</p>
                 </div>
                 <div className="flex items-center gap-4 text-[10px] text-slate-500">
-                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-brand-400" /> All alerts</span>
-                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-critical" /> Critical / high</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-brand-400" /> Tất cả cảnh báo</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-critical" /> Nghiêm trọng / cao</span>
                 </div>
               </div>
               <AttackAreaChart data={summary?.timeline || []} height={268} />
@@ -142,11 +142,11 @@ export default function DashboardPage() {
             <Card className="p-4">
               <div className="mb-1 flex items-start justify-between">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Severity mix</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Total alert distribution</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Phân bố mức độ nghiêm trọng</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Tổng phân bố cảnh báo</p>
                 </div>
                 <Link href="/alerts" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">
-                  Triage <ArrowUpRight className="h-3 w-3" />
+                  Phân loại <ArrowUpRight className="h-3 w-3" />
                 </Link>
               </div>
               <SeverityDonut data={summary?.severity || []} height={176} />
@@ -154,7 +154,7 @@ export default function DashboardPage() {
                 <SeverityLegend data={summary?.severity || []} />
               </div>
               <div className="mt-3 flex items-center justify-between rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                <span className="text-[10px] text-slate-600">Mean time to acknowledge</span>
+                <span className="text-[10px] text-slate-600">Thời gian xác nhận trung bình</span>
                 <span className="font-mono text-[11px] text-slate-300">4m 12s</span>
               </div>
             </Card>
@@ -167,11 +167,11 @@ export default function DashboardPage() {
             <Card className="p-4">
               <div className="mb-2 flex items-start justify-between">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Top attack sources</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Grouped by source IP</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Các nguồn tấn công hàng đầu</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Được nhóm theo IP nguồn</p>
                 </div>
                 <Link href="/threats" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">
-                  Intel <ArrowUpRight className="h-3 w-3" />
+                  Tình báo <ArrowUpRight className="h-3 w-3" />
                 </Link>
               </div>
               <TopAttackersBar data={summary?.attackers || []} height={272} />
@@ -191,11 +191,11 @@ export default function DashboardPage() {
             <Card className="xl:col-span-2">
               <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Recent detections</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Newest alerts across every sensor</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Phát hiện gần đây</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Cảnh báo mới nhất trên mọi cảm biến</p>
                 </div>
                 <Link href="/alerts" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">
-                  View queue <ArrowRight className="h-3 w-3" />
+                  Xem hàng đợi <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
               <div className="divide-y divide-white/[0.03]">
@@ -205,9 +205,9 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-slate-300 group-hover:text-white">{alert.title}</p>
                       <p className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-600">
-                        <span className="font-mono">{alert.source_ip || "internal"}</span>
-                        {alert.country && <span>· {alert.country}</span>}
-                        <span>· {alert.assignee_name || "Unassigned"}</span>
+                        <span className="font-mono">{alert.source_ip || "nội bộ"}</span>
+                        {alert.country && <span>· {countryName(alert.country)}</span>}
+                        <span>· {alert.assignee_name || "Chưa phân công"}</span>
                       </p>
                     </div>
                     <div className="hidden items-center gap-2 sm:flex">
@@ -220,9 +220,9 @@ export default function DashboardPage() {
                 ))}
               </div>
               <div className="flex items-center justify-between border-t border-white/[0.05] px-4 py-2.5">
-                <span className="text-[10px] text-slate-600">{overview?.total_alerts} alerts · {overview?.active_users} analysts online</span>
+                <span className="text-[10px] text-slate-600">{overview?.total_alerts} cảnh báo · {overview?.active_users} chuyên viên đang trực tuyến</span>
                 <Link href="/ai" className="flex items-center gap-1 text-[10px] text-brand-300/80 transition hover:text-brand-200">
-                  Ask AI analyst <ArrowRight className="h-3 w-3" />
+                  Hỏi Chuyên viên AI <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
             </Card>
@@ -230,11 +230,11 @@ export default function DashboardPage() {
             <Card>
               <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Active incidents</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Open response cases</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Sự cố đang mở</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Các trường hợp đang phản hồi</p>
                 </div>
                 <Link href="/incidents" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">
-                  All <ArrowRight className="h-3 w-3" />
+                  Tất cả <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
               <div className="divide-y divide-white/[0.03]">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
                     </div>
                   </Link>
                 ))}
-                {!summary?.openIncidents?.length && <p className="px-4 py-8 text-center text-xs text-slate-600">No open incidents. Nice work.</p>}
+                {!summary?.openIncidents?.length && <p className="px-4 py-8 text-center text-xs text-slate-600">Không có sự cố mở. Làm tốt lắm.</p>}
               </div>
             </Card>
           </div>
@@ -261,8 +261,8 @@ export default function DashboardPage() {
             <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Compliance posture</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Control coverage by framework</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Tư thế tuân thủ</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Kiểm soát phạm vi bảo hiểm theo khung</p>
                 </div>
                 <CheckCircle2 className="h-4 w-4 text-low" />
               </div>
@@ -280,7 +280,7 @@ export default function DashboardPage() {
                   </svg>
                   <div className="text-center">
                     <p className="font-display text-xl font-semibold text-white">{complianceAverage}%</p>
-                    <p className="text-[7px] uppercase tracking-[0.16em] text-slate-600">average</p>
+                    <p className="text-[7px] uppercase tracking-[0.16em] text-slate-600">trung bình</p>
                   </div>
                 </div>
                 <div className="flex-1 space-y-2">
@@ -300,8 +300,8 @@ export default function DashboardPage() {
             <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Firewall enforcement</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Policy actions and session hits</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Thực thi tường lửa</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Hành động chính sách và số lần truy cập phiên</p>
                 </div>
                 <Link href="/firewall" className="text-slate-600 transition hover:text-brand-300"><ArrowUpRight className="h-4 w-4" /></Link>
               </div>
@@ -315,44 +315,44 @@ export default function DashboardPage() {
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between text-[10px]">
-                <span className="text-slate-600">Active rules</span>
+                <span className="text-slate-600">Quy tắc hoạt động</span>
                 <span className="text-slate-300">{overview?.active_rules} enforcing</span>
               </div>
               <div className="mt-2 flex items-center justify-between text-[10px]">
-                <span className="text-slate-600">Total matched traffic</span>
+                <span className="text-slate-600">Tổng lưu lượng truy cập phù hợp</span>
                 <span className="font-mono text-slate-300">{formatNumber(firewallHits)}</span>
               </div>
               <Link href="/firewall" className="mt-3 flex items-center justify-center gap-1 rounded-lg border border-white/[0.06] py-1.5 text-[10px] text-slate-500 transition hover:border-brand-400/20 hover:text-brand-300">
-                Manage policy <ArrowRight className="h-3 w-3" />
+                Quản lý chính sách <ArrowRight className="h-3 w-3" />
               </Link>
             </Card>
 
             <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="font-display text-sm font-semibold text-slate-200">Operational health</h2>
-                  <p className="mt-0.5 text-[11px] text-slate-600">Platform availability and coverage</p>
+                  <h2 className="font-display text-sm font-semibold text-slate-200">Sức khỏe hoạt động</h2>
+                  <p className="mt-0.5 text-[11px] text-slate-600">Tính khả dụng và phạm vi phủ sóng của nền tảng</p>
                 </div>
                 <ServerCog className="h-4 w-4 text-brand-400" />
               </div>
               <div className="mt-3 space-y-3">
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px]">
-                    <span className="text-slate-500">Monitors online</span>
+                    <span className="text-slate-500">Màn hình trực tuyến</span>
                     <span className="text-slate-300">{summary?.monitors?.monitors_up}/{summary?.monitors?.monitors_total}</span>
                   </div>
                   <ProgressBar value={((summary?.monitors?.monitors_up || 0) / Math.max(summary?.monitors?.monitors_total || 1, 1)) * 100} barClassName="from-cyan-500 to-brand-400" />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px]">
-                    <span className="text-slate-500">Platform uptime</span>
+                    <span className="text-slate-500">Thời gian hoạt động của nền tảng</span>
                     <span className="text-emerald-300">{overview?.uptime_percent}%</span>
                   </div>
                   <ProgressBar value={overview?.uptime_percent || 0} barClassName="from-emerald-500 to-teal-400" />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px]">
-                    <span className="text-slate-500">Average asset risk</span>
+                    <span className="text-slate-500">Rủi ro tài sản trung bình</span>
                     <span className="text-amber-300">{overview?.avg_asset_risk}/100</span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
@@ -365,14 +365,14 @@ export default function DashboardPage() {
                   <Bug className="h-3.5 w-3.5 text-high" />
                   <div>
                     <p className="text-[13px] font-semibold text-slate-200">{overview?.open_vulnerabilities}</p>
-                    <p className="text-[8px] uppercase tracking-wider text-slate-600">Open CVEs</p>
+                    <p className="text-[8px] uppercase tracking-wider text-slate-600">CVE mở</p>
                   </div>
                 </Link>
                 <Link href="/automation" className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 transition hover:bg-white/[0.04]">
                   <Workflow className="h-3.5 w-3.5 text-cyan-400" />
                   <div>
                     <p className="text-[13px] font-semibold text-slate-200">n8n</p>
-                    <p className="text-[8px] uppercase tracking-wider text-slate-600">SOAR health</p>
+                    <p className="text-[8px] uppercase tracking-wider text-slate-600">sức khỏe SOAR</p>
                   </div>
                 </Link>
               </div>
@@ -382,10 +382,10 @@ export default function DashboardPage() {
           <div className="flex flex-col items-start justify-between gap-2 rounded-xl border border-white/[0.05] bg-gradient-to-r from-brand-500/[0.07] via-transparent to-cyan-500/[0.05] px-4 py-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2 text-[11px] text-slate-400">
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand-500/10 text-brand-300"><ShieldAlert className="h-3.5 w-3.5" /></span>
-              <span><span className="font-medium text-slate-200">{overview?.critical_alerts} critical alerts</span> remain open — AI triage can correlate them with active incidents and threat intel.</span>
+              <span><span className="font-medium text-slate-200">{overview?.critical_alerts} cảnh báo quan trọng</span> vẫn mở - phân loại AI có thể liên hệ chúng với các sự cố đang diễn ra và thông tin về mối đe dọa.</span>
             </div>
             <Link href="/ai" className="flex items-center gap-1 text-[11px] font-medium text-brand-300 transition hover:text-brand-200">
-              Investigate with AI <ArrowRight className="h-3.5 w-3.5" />
+              Điều tra bằng AI <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>

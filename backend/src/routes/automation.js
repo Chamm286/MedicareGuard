@@ -151,7 +151,7 @@ router.post(
       "evidence-audit", "evidence-pack", "evidence-verify", "evidence-persist",
       "evidence-write", "intel-sync", "notify", "ticket-sync",
     ]);
-    if (!allowed.has(req.params.action)) throw new HttpError(404, "Unknown automation action");
+    if (!allowed.has(req.params.action)) throw new HttpError(404, "Hành động tự động hóa không xác định");
     const result = await simulateAction(req.params.action, req.body || {});
     res.json({ data: { action: result.action, simulated: result.simulated, ...result.data } });
   }),
@@ -188,9 +188,9 @@ router.post(
   requirePermission("write"),
   asyncHandler(async (req, res) => {
     const workflow = byId(req.params.id);
-    if (!workflow) throw new HttpError(404, "Workflow not found");
+    if (!workflow) throw new HttpError(404, "Không tìm thấy quy trình");
     const enabled = (await readOverrides())[workflow.id] ?? workflow.enabled;
-    if (!enabled) throw new HttpError(409, "Workflow is paused. Enable it before running.");
+    if (!enabled) throw new HttpError(409, "Quy trình đang tạm dừng. Hãy bật trước khi chạy.");
 
     const executionId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
@@ -222,7 +222,7 @@ router.post(
       resource: "automation_workflow",
       resourceId: workflow.id,
       action: "run",
-      message: dispatched ? `Workflow dispatched to n8n: ${workflow.name}` : `Workflow queued (n8n offline): ${workflow.name}`,
+      message: dispatched ? `Đã gửi quy trình tới n8n: ${workflow.name}` : `Đã xếp hàng quy trình (n8n ngoại tuyến): ${workflow.name}`,
       metadata: { executionId, workflowId: workflow.id, workflowName: workflow.name, status, mode: "manual", durationMs, nodeCount: workflow.nodeCount, triggeredBy: req.user?.email },
     });
     await recordAudit({ req, action: "run_workflow", resource: "automation", resourceId: workflow.id, details: { executionId, status } });
@@ -238,7 +238,7 @@ router.post(
         nodeCount: workflow.nodeCount,
         startedAt,
         durationMs,
-        message: dispatched ? "Workflow dispatched to n8n" : "Workflow queued — n8n is not reachable from the API",
+        message: dispatched ? "Đã gửi quy trình tới n8n" : "Đã xếp hàng quy trình — API không thể kết nối tới n8n",
       },
     });
   }),
@@ -249,13 +249,13 @@ router.patch(
   requirePermission("write"),
   asyncHandler(async (req, res) => {
     const workflow = byId(req.params.id);
-    if (!workflow) throw new HttpError(404, "Workflow not found");
-    if (typeof req.body.enabled !== "boolean") throw new HttpError(400, "enabled must be a boolean");
+    if (!workflow) throw new HttpError(404, "Không tìm thấy quy trình");
+    if (typeof req.body.enabled !== "boolean") throw new HttpError(400, "enabled phải là kiểu boolean");
     const key = `automation.workflow.${workflow.id}.enabled`;
     await query(
       `INSERT INTO settings (key, value, scope, description, updated_by) VALUES ($1,$2,'automation',$3,$4)
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-      [key, JSON.stringify(req.body.enabled), `Enable or pause ${workflow.name}`, req.user?.id || null],
+      [key, JSON.stringify(req.body.enabled), `Bật hoặc tạm dừng ${workflow.name}`, req.user?.id || null],
     );
     await recordAudit({ req, action: req.body.enabled ? "enable_workflow" : "pause_workflow", resource: "automation", resourceId: workflow.id });
     res.json({ data: { id: workflow.id, enabled: req.body.enabled, status: req.body.enabled ? "active" : "paused" } });

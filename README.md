@@ -2,7 +2,7 @@
 
 **A full-stack security operations platform for healthcare environments.**
 
-MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 544-endpoint REST API, a 21-route Next.js console, five focused n8n workflows (16–20 nodes each) and a realistic seeded dataset for demos.
+MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 42-table PostgreSQL schema, a 547-endpoint REST API, a 21-route Next.js console, five focused Vietnamese n8n workflows (17 nodes each, 16 for the monitor) and a realistic seeded dataset for demos.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white">
@@ -65,7 +65,7 @@ flowchart LR
   end
 
   subgraph Services
-    A["Express API<br/>544 endpoints"]
+    A["Express API<br/>547 endpoints"]
     W["n8n 2.41<br/>5 focused workflows"]
   end
 
@@ -92,10 +92,10 @@ flowchart LR
 | Frontend | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Recharts, Lucide |
 | Backend | Node.js 20+, Express 4, PostgreSQL (`pg`), JWT, bcrypt, Helmet, rate limiting |
 | Database | PostgreSQL 16 — 42 tables, 5 analytics views, triggers and indexes |
-| Automation | n8n 2.41 — 5 focused workflows, 16–20 nodes each |
+| Automation | n8n 2.41 — 5 focused workflows, 17 nodes each (16 for the monitor), Vietnamese labels |
 | Infrastructure | Docker Compose, multi-stage Dockerfiles, nginx reverse proxy |
 | AI | Deterministic, telemetry-grounded analyst with optional OpenAI provider |
-| Testing | 58-check integration smoke suite, TypeScript checks, Playwright screenshots |
+| Testing | 61-check integration smoke suite, TypeScript checks, Playwright screenshots |
 
 ## Feature map
 
@@ -144,6 +144,7 @@ docker compose up -d --build
 | SOC console | http://localhost:3000 |
 | REST API | http://localhost:4000/api |
 | API health | http://localhost:4000/api/health |
+| Swagger / OpenAPI | http://localhost:4000/api/docs · http://localhost:4000/api/openapi.json |
 | n8n | http://localhost:5678 |
 | nginx entrypoint (optional) | http://localhost:8080 (`docker compose --profile proxy up -d`) |
 
@@ -183,15 +184,16 @@ make dev
 
 - Console: http://localhost:3000
 - API: http://localhost:4000/api
+- Swagger UI: http://localhost:4000/api/docs
 - n8n (optional): `docker compose up -d n8n`
 
 Useful commands:
 
 ```bash
-make test          # 58-check API smoke suite (544 endpoints)
+make test          # 61-check API smoke suite (547 endpoints)
 make typecheck     # frontend TypeScript check
 make screenshots   # recapture docs/screenshots with Playwright
-make n8n-build     # regenerate the five focused n8n workflows (16–20 nodes each)
+make n8n-build     # regenerate the five focused n8n workflows (17 nodes each)
 make n8n-token     # mint a 30-day JWT for n8n callbacks
 make n8n-setup     # import, publish and activate the workflows
 make docker-reset  # stop stack and delete volumes
@@ -253,7 +255,7 @@ curl -s -X POST http://localhost:4000/api/automation/workflows/ransomware-contai
   -H "Authorization: Bearer $TOKEN"
 ```
 
-The API exposes 544 routes covering:
+The API exposes 547 routes covering:
 
 - `auth`, `users`, `roles`, `system`, `search`
 - `alerts`, `incidents`, `threats`, `assets`, `vulnerabilities`, `firewall-rules`
@@ -266,13 +268,13 @@ See `GET /api/_meta/resources` for the full resource registry.
 
 | Workflow | Webhook | Outcome |
 | --- | --- | --- |
-| Ransomware Containment & Recovery | `/webhook/mg-ransomware` | Isolate endpoint, block C2, open P1 case, preserve evidence |
-| Phishing Triage & Credential Reset | `/webhook/mg-phishing` | Detonate URL, revoke sessions, reset MFA, notify SOC |
-| Vulnerability SLA Escalation | `/webhook/mg-vulnerability` | Enrich CVE, assign owner, create change request, escalate SLA |
-| Continuous Compliance Evidence | `/webhook/mg-compliance` | Collect HIPAA/NIST/ISO evidence and write audit trail |
-| Live Attack Monitor & Phone Alerts | `/webhook/mg-attack-monitor` | Sweep critical/high alerts every 5 minutes and push Telegram + Gmail |
+| Cô lập & Phục hồi Ransomware | `/webhook/mg-ransomware` | Cô lập máy trạm, chặn C2, mở sự cố P1, lưu bằng chứng |
+| Phân tích & Xử lý Phishing | `/webhook/mg-phishing` | Detonate URL, thu hồi phiên, đặt lại MFA, báo SOC |
+| Leo thang SLA Lỗ hổng | `/webhook/mg-vulnerability` | Làm giàu CVE, giao chủ sở hữu, tạo yêu cầu thay đổi, leo thang SLA |
+| Bằng chứng Tuân thủ Liên tục | `/webhook/mg-compliance` | Thu thập bằng chứng HIPAA/NIST/ISO và ghi nhật ký kiểm toán |
+| Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | `/webhook/mg-attack-monitor` | Quét cảnh báo critical/high mỗi 5 phút và đẩy Telegram + Gmail |
 
-Each playbook contains **16–20 executable nodes** so it stays readable in class and in the n8n canvas. Every response flow includes **independent Telegram and Gmail branches** — Telegram works with a bot token and chat ID alone, Gmail is optional — and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
+Each playbook contains **17 executable nodes** (**16** for the monitor) so it stays readable in class and in the n8n canvas, with Vietnamese node labels and three colour-coded sticky notes. Every response flow includes **independent Telegram and Gmail branches** — Telegram works with a bot token and chat ID alone, Gmail is optional — and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
 
 Setup, credential overrides, environment variables and verification commands are documented in [`n8n/README.md`](n8n/README.md).
 
@@ -293,7 +295,7 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 ```
 .
 ├── backend/               Express API, services, middleware and scripts
-│   ├── scripts/           migrate, seed, service-token and 58-check smoke suite
+│   ├── scripts/           migrate, seed, service-token and 61-check smoke suite
 │   └── src/
 │       ├── config/        env, database, resource and automation registries
 │       ├── middleware/    JWT authentication, RBAC and error handling
@@ -304,7 +306,7 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 │   ├── app/(app)/         dashboard and all operational modules
 │   ├── components/        shell, tables, charts, threat map, command palette
 │   └── lib/               API client, auth, navigation and formatting
-├── n8n/                   5 importable 16–20-node workflows + setup guide
+├── n8n/                   5 importable 17-node Vietnamese workflows + setup guide
 ├── nginx/                 reverse proxy for console, API and n8n
 ├── docs/screenshots/      Playwright captures of every module
 ├── docker-compose.yml     PostgreSQL, backend, frontend, n8n and nginx
@@ -328,7 +330,7 @@ cd backend && npm test
 ```
 
 ```
-Endpoints discovered: 544
+Endpoints discovered: 547
 Checks: 58/58 passed
 ```
 

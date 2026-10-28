@@ -83,7 +83,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query(`SELECT ${USER_FIELDS} FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     res.json({ data: serialize(result.rows[0]) });
   }),
 );
@@ -92,7 +92,7 @@ router.get(
   "/:id/permissions",
   asyncHandler(async (req, res) => {
     const result = await query(`SELECT r.name AS role, r.permissions FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     res.json({ data: { role: result.rows[0].role, permissions: result.rows[0].permissions || [] } });
   }),
 );
@@ -135,10 +135,10 @@ router.post(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const { email, password, fullName, roleId, role_id, department, phone, status = "active", mfaEnabled = false } = req.body;
-    if (!email || !password || !fullName) throw new HttpError(400, "email, password and fullName are required");
-    if (String(password).length < 8) throw new HttpError(400, "Password must be at least 8 characters");
+    if (!email || !password || !fullName) throw new HttpError(400, "Email, mật khẩu và họ tên là bắt buộc");
+    if (String(password).length < 8) throw new HttpError(400, "Mật khẩu phải có ít nhất 8 ký tự");
     const exists = await query("SELECT id FROM users WHERE lower(email) = lower($1)", [email]);
-    if (exists.rows.length) throw new HttpError(409, "Email already exists");
+    if (exists.rows.length) throw new HttpError(409, "Email đã tồn tại");
 
     const hash = await bcrypt.hash(password, config.bcryptRounds);
     const result = await query(
@@ -157,7 +157,7 @@ router.post(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
-    if (!items.length) throw new HttpError(400, "items array is required");
+    if (!items.length) throw new HttpError(400, "Mảng items là bắt buộc");
     const created = await withTransaction(async (client) => {
       const rows = [];
       for (const item of items) {
@@ -198,17 +198,17 @@ const updateUser = asyncHandler(async (req, res) => {
     }
   });
   if (req.body.password) {
-    if (String(req.body.password).length < 8) throw new HttpError(400, "Password must be at least 8 characters");
+    if (String(req.body.password).length < 8) throw new HttpError(400, "Mật khẩu phải có ít nhất 8 ký tự");
     fields.push("password_hash");
     values.push(await bcrypt.hash(req.body.password, config.bcryptRounds));
   }
-  if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+  if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
   values.push(req.params.id);
   const result = await query(
     `UPDATE users SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING id`,
     values,
   );
-  if (!result.rows.length) throw new HttpError(404, "User not found");
+  if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
   await recordAudit({ req, action: "update", resource: "users", resourceId: req.params.id, details: { fields } });
   const updated = await query(`SELECT ${USER_FIELDS} FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [req.params.id]);
   res.json({ data: serialize(updated.rows[0]) });
@@ -222,13 +222,13 @@ router.post(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const temporaryPassword = req.body.password || `MG-${crypto.randomBytes(6).toString("base64url")}`;
-    if (String(temporaryPassword).length < 8) throw new HttpError(400, "Password must be at least 8 characters");
+    if (String(temporaryPassword).length < 8) throw new HttpError(400, "Mật khẩu phải có ít nhất 8 ký tự");
     const hash = await bcrypt.hash(temporaryPassword, config.bcryptRounds);
     const result = await query("UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id", [hash, req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     await query("UPDATE sessions SET revoked = true WHERE user_id = $1", [req.params.id]);
     await recordAudit({ req, action: "reset_password", resource: "users", resourceId: req.params.id });
-    res.json({ message: "Password reset", temporaryPassword, sessionsRevoked: true });
+    res.json({ message: "Đặt lại mật khẩu", temporaryPassword, sessionsRevoked: true });
   }),
 );
 
@@ -237,7 +237,7 @@ router.post(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const result = await query("UPDATE users SET status = 'active' WHERE id = $1 RETURNING id, email, status", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     await recordAudit({ req, action: "activate", resource: "users", resourceId: req.params.id });
     res.json({ data: result.rows[0] });
   }),
@@ -247,9 +247,9 @@ router.post(
   "/:id/deactivate",
   authorize("admin"),
   asyncHandler(async (req, res) => {
-    if (req.params.id === req.user.id) throw new HttpError(400, "You cannot deactivate your own account");
+    if (req.params.id === req.user.id) throw new HttpError(400, "Bạn không thể vô hiệu hóa tài khoản của chính mình");
     const result = await query("UPDATE users SET status = 'disabled' WHERE id = $1 RETURNING id, email, status", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     await query("UPDATE sessions SET revoked = true WHERE user_id = $1", [req.params.id]);
     await recordAudit({ req, action: "deactivate", resource: "users", resourceId: req.params.id });
     res.json({ data: result.rows[0] });
@@ -260,9 +260,9 @@ router.delete(
   "/:id",
   authorize("admin"),
   asyncHandler(async (req, res) => {
-    if (req.params.id === req.user.id) throw new HttpError(400, "You cannot delete your own account");
+    if (req.params.id === req.user.id) throw new HttpError(400, "Bạn không thể xóa tài khoản của chính mình");
     const result = await query("DELETE FROM users WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     await recordAudit({ req, action: "delete", resource: "users", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

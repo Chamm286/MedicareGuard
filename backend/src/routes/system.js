@@ -96,7 +96,7 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const q = String(req.query.q || "").trim();
-    if (q.length < 2) return res.status(400).json({ error: "Search term must be at least 2 characters" });
+    if (q.length < 2) return res.status(400).json({ error: "Từ khóa tìm kiếm phải có ít nhất 2 ký tự" });
     const like = `%${q}%`;
     const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 6));
     const [alerts, threats, assets, incidents, users, vulnerabilities, reports] = await Promise.all([
