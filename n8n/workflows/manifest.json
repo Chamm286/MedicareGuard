@@ -1,5 +1,5 @@
 {
-  "nodeCount": 97,
+  "nodeCount": 98,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -36,9 +36,9 @@
     {
       "id": "live-attack-monitor",
       "name": "Live Attack Monitor & Phone Alerts",
-      "executable": 17,
+      "executable": 18,
       "stickyNotes": 5,
-      "connections": 16,
+      "connections": 17,
       "file": "n8n/workflows/live-attack-monitor.json"
     }
   ]

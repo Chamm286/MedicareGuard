@@ -118,7 +118,7 @@ export default function AutomationPage() {
           <div className="relative mt-4 grid gap-2 sm:grid-cols-5">
             {[
               { label: "SOC API", icon: Server, detail: "REST + webhooks" },
-              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 97} nodes` },
+              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 98} nodes` },
               { label: "EDR / SIEM", icon: ShieldCheck, detail: "CrowdStrike · Elastic" },
               { label: "Identity", icon: Settings2, detail: "Okta · Microsoft 365" },
               { label: "On-call alerts", icon: Bell, detail: "Telegram · Gmail" },
@@ -142,7 +142,7 @@ export default function AutomationPage() {
         ) : (
           <>
             <StatCard label="Active workflows" value={active} hint={`${list.length} production playbooks`} icon={Workflow} tone="brand" />
-            <StatCard label="Orchestrated nodes" value={summary?.nodes || 97} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
+            <StatCard label="Orchestrated nodes" value={summary?.nodes || 98} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
             <StatCard label="Executions" value={formatNumber(totalRuns)} hint={`${successRate}% successful`} icon={Activity} tone={successRate >= 95 ? "success" : "warning"} />
             <StatCard label="Mean duration" value={avgDuration ? `${avgDuration}ms` : "—"} hint="Manual and triggered runs" icon={Timer} tone="warning" />
           </>

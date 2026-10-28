@@ -39,7 +39,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, framework, control_id, title, status, score, owner_id, description, metadata\nFROM compliance_controls WHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' LIMIT 1;",
+        "query": "SELECT c.id, c.framework, c.control_id, c.title, c.status, c.score, c.owner_id, c.description, c.metadata,\n  u.full_name AS asset_owner_name, u.email AS asset_owner_email\nFROM compliance_controls c LEFT JOIN users u ON u.id = c.owner_id\nWHERE c.id = '{{ $('Validate Webhook Payload').first().json.entityId }}' LIMIT 1;",
         "options": {}
       },
       "position": [
@@ -126,39 +126,17 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Load Asset Ownership",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email\nFROM assets a LEFT JOIN users u ON u.id = a.owner_id ORDER BY a.risk_score DESC LIMIT 1;",
-        "options": {}
-      },
-      "position": [
-        300,
-        320
-      ],
-      "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
       "name": "Score Risk & Build Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Control Inventory');\nconst asset = read('Load Asset Ownership');\nconst primary = read('Enrich — Identity Evidence');\nconst reputation = read('Enrich — Endpoint Evidence');\nconst severity = String(record.severity || record.status || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: 'Continuous Compliance Evidence', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.executionId.slice(0, 8) } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Control Inventory');\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('Enrich — Identity Evidence');\nconst reputation = read('Enrich — Endpoint Evidence');\nconst severity = String(record.severity || record.status || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: 'Continuous Compliance Evidence', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.executionId.slice(0, 8) } }];"
       },
       "position": [
         300,
         480
       ],
-      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
+      "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897"
     },
     {
       "name": "Impact Gate",
@@ -174,7 +152,7 @@
           },
           "conditions": [
             {
-              "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+              "id": "3781867b-9ba7-530c-ba92-305f00776b3e",
               "leftValue": "={{ $json.riskScore }}",
               "rightValue": 70,
               "operator": {
@@ -191,7 +169,7 @@
         600,
         480
       ],
-      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e"
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9"
     },
     {
       "name": "Open Control Gap",
@@ -206,7 +184,7 @@
         600,
         0
       ],
-      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
+      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -228,7 +206,7 @@
         600,
         160
       ],
-      "id": "36b91229-3aaa-5950-98b2-27822433b566",
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -250,10 +228,10 @@
         600,
         320
       ],
-      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
+      "id": "36b91229-3aaa-5950-98b2-27822433b566"
     },
     {
-      "name": "Notifications Ready?",
+      "name": "Telegram Ready?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -266,8 +244,8 @@
           },
           "conditions": [
             {
-              "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
-              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}",
+              "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -283,7 +261,40 @@
         780,
         320
       ],
-      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b"
+      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
+    },
+    {
+      "name": "Gmail Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+              "leftValue": "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        780,
+        480
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631"
     },
     {
       "name": "Notify Telegram",
@@ -313,7 +324,7 @@
         900,
         0
       ],
-      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
       "onError": "continueRegularOutput"
     },
     {
@@ -332,7 +343,7 @@
         900,
         160
       ],
-      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
       "credentials": {
         "smtp": {
           "id": "mg-smtp-credential",
@@ -373,7 +384,7 @@
         900,
         320
       ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
       "onError": "continueRegularOutput"
     },
     {
@@ -408,7 +419,7 @@
         900,
         480
       ],
-      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
       "onError": "continueRegularOutput"
     },
     {
@@ -443,7 +454,7 @@
         1200,
         320
       ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
       "onError": "continueRegularOutput"
     },
     {
@@ -459,7 +470,7 @@
         1200,
         480
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -500,7 +511,7 @@
         1200,
         640
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
       "onError": "continueRegularOutput"
     },
     {
@@ -529,13 +540,13 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'compliance-evidence', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: true, telegram_alert: true }, message: 'n8n completed Continuous Compliance Evidence for execution ' + $('Validate Webhook Payload').first().json.executionId }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'compliance-evidence', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n completed Continuous Compliance Evidence for execution ' + $('Validate Webhook Payload').first().json.executionId }) }}"
       },
       "position": [
         1500,
         0
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
       "onError": "continueRegularOutput"
     },
     {
@@ -552,7 +563,7 @@
         0,
         -260
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
       "name": "Sticky Note — ② Enrich",
@@ -568,7 +579,7 @@
         300,
         -260
       ],
-      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
     },
     {
       "name": "Sticky Note — ③ Decide",
@@ -584,14 +595,14 @@
         600,
         -260
       ],
-      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
+      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c"
     },
     {
       "name": "Sticky Note — ④ Notify",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ④ Notify\nSend Telegram and Gmail alerts with a direct link back to the console.",
+        "content": "## ④ Notify\nTelegram pushes to the on-call phone and Gmail sends the audit copy. Each channel is gated independently.",
         "height": 160,
         "width": 260,
         "color": 4
@@ -600,7 +611,7 @@
         900,
         -260
       ],
-      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c"
+      "id": "9619fd28-6e68-531d-b47e-189e21536dd8"
     },
     {
       "name": "Sticky Note — ⑤ Respond",
@@ -616,7 +627,7 @@
         1200,
         -260
       ],
-      "id": "9619fd28-6e68-531d-b47e-189e21536dd8"
+      "id": "339234ac-71d5-511e-83c2-88fad6ee218a"
     },
     {
       "name": "Sticky Note — ⑥ Close",
@@ -632,14 +643,14 @@
         1500,
         -260
       ],
-      "id": "339234ac-71d5-511e-83c2-88fad6ee218a"
+      "id": "6c533bf0-10da-58fb-86f9-d94477a54e71"
     },
     {
       "name": "Sticky Note — Workflow Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Continuous Compliance Evidence\nIdentity/endpoint/audit evidence · immutable pack · auditor report\n\n**Trigger:** webhook `mg-compliance` · **Nodes:** 20 · **Alerts:** Telegram + Gmail · **Owner:** SOC Automation",
+        "content": "# Continuous Compliance Evidence\nIdentity/endpoint/audit evidence · immutable pack · auditor report\n\n**Trigger:** webhook `mg-compliance` · **Nodes:** 20 · **Alerts:** 🟢 Telegram + 🔵 Gmail · **Owner:** SOC Automation",
         "height": 200,
         "width": 1300,
         "color": 4
@@ -648,7 +659,7 @@
         0,
         -520
       ],
-      "id": "6c533bf0-10da-58fb-86f9-d94477a54e71"
+      "id": "18c51e09-99e6-5650-9b5f-ee096c36b192"
     }
   ],
   "connections": {
@@ -697,17 +708,6 @@
       ]
     },
     "Enrich — Endpoint Evidence": {
-      "main": [
-        [
-          {
-            "node": "Load Asset Ownership",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Asset Ownership": {
       "main": [
         [
           {
@@ -773,14 +773,14 @@
       "main": [
         [
           {
-            "node": "Notifications Ready?",
+            "node": "Telegram Ready?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notifications Ready?": {
+    "Telegram Ready?": {
       "main": [
         [
           {
@@ -791,7 +791,7 @@
         ],
         [
           {
-            "node": "Assemble Evidence Pack",
+            "node": "Gmail Ready?",
             "type": "main",
             "index": 0
           }
@@ -802,7 +802,25 @@
       "main": [
         [
           {
+            "node": "Gmail Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Ready?": {
+      "main": [
+        [
+          {
             "node": "Notify Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assemble Evidence Pack",
             "type": "main",
             "index": 0
           }

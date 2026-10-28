@@ -105,7 +105,7 @@ const run = async () => {
     "phishing-triage": 20,
     "vulnerability-sla": 20,
     "compliance-evidence": 20,
-    "live-attack-monitor": 17,
+    "live-attack-monitor": 18,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
@@ -114,9 +114,9 @@ const run = async () => {
     ok: suiteResponse.ok && suite.length === 5 && suiteSummary.active === 5,
   });
   results.push({
-    name: "automation suite totals 97 nodes",
+    name: "automation suite totals 98 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 97,
+    ok: suiteResponse.ok && suiteSummary.nodes === 98,
   });
   results.push({
     name: "automation node counts match the compact design",
