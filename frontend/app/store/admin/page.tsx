@@ -29,8 +29,8 @@ export default function StoreAdminPage() {
   const { success, error: toastError } = useToast();
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const stats = useApi<{ data: Stats }>("/store/admin/stats", { refreshInterval: 15000 });
-  const orders = useApi<{ data: Order[] }>("/store/admin/orders?limit=25", { refreshInterval: 15000 });
+  const stats = useApi<{ data: Stats }>("/store/admin/stats", { refreshInterval: 15000, enabled: ready });
+  const orders = useApi<{ data: Order[] }>("/store/admin/orders?limit=25", { refreshInterval: 15000, enabled: ready });
 
   useEffect(() => {
     if (!getToken()) router.replace("/login");
