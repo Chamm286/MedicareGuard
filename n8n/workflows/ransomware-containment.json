@@ -1,10 +1,10 @@
 {
   "id": "ransomware-containment",
-  "name": "Ransomware Containment & Recovery",
+  "name": "Cô lập & Phục hồi Ransomware",
   "active": false,
   "nodes": [
     {
-      "name": "Webhook — Ransomware Alert",
+      "name": "📥 Cảnh báo Ransomware",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "parameters": {
@@ -21,30 +21,30 @@
       "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
     },
     {
-      "name": "Validate Webhook Payload",
+      "name": "🔍 Kiểm tra dữ liệu",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'ransomware-containment', workflowName: 'Ransomware Containment & Recovery', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'ransomware-containment', workflowName: 'Cô lập & Phục hồi Ransomware', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
-        0,
-        160
+        220,
+        0
       ],
       "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
     },
     {
-      "name": "Load Alert Record",
+      "name": "🗄️ Tải cảnh báo",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT al.id, al.title, al.severity, al.status, al.source, al.source_ip, al.risk_score, al.asset_id, al.metadata, al.detected_at,\n  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,\n  u.full_name AS asset_owner_name, u.email AS asset_owner_email\nFROM alerts al LEFT JOIN assets a ON a.id = al.asset_id LEFT JOIN users u ON u.id = a.owner_id\nWHERE al.id = '{{ $('Validate Webhook Payload').first().json.entityId }}' LIMIT 1;",
+        "query": "SELECT al.id, al.title, al.severity, al.status, al.source, al.source_ip, al.risk_score, al.asset_id, al.metadata, al.detected_at,\n  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,\n  u.full_name AS asset_owner_name, u.email AS asset_owner_email\nFROM alerts al LEFT JOIN assets a ON a.id = al.asset_id LEFT JOIN users u ON u.id = a.owner_id\nWHERE al.id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' LIMIT 1;",
         "options": {}
       },
       "position": [
-        0,
-        320
+        440,
+        0
       ],
       "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
       "credentials": {
@@ -56,7 +56,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Enrich — EDR Telemetry",
+      "name": "🧪 Làm giàu – Telemetry EDR",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -81,65 +81,30 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, alertId: $('🔍 Kiểm tra dữ liệu').first().json.entityId }) }}"
       },
       "position": [
-        300,
+        660,
         0
       ],
       "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Enrich — Threat Reputation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-reputation' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicator: $('Load Alert Record').first().json.source_ip || $('Validate Webhook Payload').first().json.entityId }) }}"
-      },
-      "position": [
-        300,
-        160
-      ],
-      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Score Risk & Build Alert",
+      "name": "🧮 Chấm điểm rủi ro",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Alert Record');\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('Enrich — EDR Telemetry');\nconst reputation = read('Enrich — Threat Reputation');\nconst severity = String(record.severity || record.status || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: 'Ransomware Containment & Recovery', entityId: base.entityId, entityType: 'alert', correlationId: base.executionId.slice(0, 8) } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('🔍 Kiểm tra dữ liệu');\nconst record = read('🗄️ Tải cảnh báo');\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('🧪 Làm giàu – Telemetry EDR');\nconst severity = String(record.severity || (record.status === 'compliant' ? 'low' : record.status) || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH', low: '🟢 THẤP' }[severity] || severity;\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#16a34a' }[severity] || '#64748b';\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst detailPath = 'alert' === 'vulnerability' ? '/vulnerabilities/' : 'alert' === 'compliance_control' ? '/reports' : '/alerts/';\nconst consoleLink = 'alert' === 'compliance_control' ? consoleUrl + '/reports' : consoleUrl + detailPath + base.entityId;\nconst recordTitle = record.title || record.control_name || record.name || 'Cô lập & Phục hồi Ransomware';\nconst recordDescription = record.description || record.summary || 'Hệ thống tự động phát hiện sự kiện an ninh cần được xử lý.';\nconst sourceIp = record.source_ip || record.source || record.ip_address || 'Không xác định';\nconst telegramText = [\n  '🚨 <b>CẢNH BÁO AN NINH MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Luồng</b>  ' + esc('Cô lập & Phục hồi Ransomware'),\n  '<b>Mức độ</b>  ' + sevLabel,\n  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',\n  '<b>Đối tượng</b>  <code>' + esc(base.entityId) + '</code>',\n  '<b>Nguồn</b>  ' + esc(sourceIp),\n  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(consoleLink) + '\">Mở bảng điều khiển SOC</a>',\n].join('\\n');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Cảnh báo an ninh mới</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<div style=\"display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700\">' + esc(sevLabel) + '</div>'\n  + '<h2 style=\"font-size:18px;margin:16px 0 8px\">' + esc(recordTitle) + '</h2>'\n  + '<p style=\"color:#475569;line-height:1.6;margin:0 0 18px\">' + esc(recordDescription) + '</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:14px\">'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Luồng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc('Cô lập & Phục hồi Ransomware') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Điểm rủi ro</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + riskScore + '/100</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Đối tượng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(base.entityId) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Tài sản</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(asset.name || 'Không xác định') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Nguồn</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(sourceIp) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Thời gian</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(new Date().toLocaleString('vi-VN')) + '</td></tr>'\n  + '</table>'\n  + '<a href=\"' + esc(consoleLink) + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở bảng điều khiển SOC</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nreturn [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: 'Cô lập & Phục hồi Ransomware', entityId: base.entityId, entityType: 'alert', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];"
       },
       "position": [
-        300,
-        480
+        880,
+        0
       ],
-      "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897"
+      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e"
     },
     {
-      "name": "Impact Gate",
+      "name": "⚠️ Rủi ro cao?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -152,7 +117,7 @@
           },
           "conditions": [
             {
-              "id": "3781867b-9ba7-530c-ba92-305f00776b3e",
+              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
               "leftValue": "={{ $json.riskScore }}",
               "rightValue": 70,
               "operator": {
@@ -166,23 +131,45 @@
         "options": {}
       },
       "position": [
-        600,
-        480
+        1100,
+        0
       ],
-      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9"
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
     },
     {
-      "name": "Open P1 Incident",
+      "name": "🚨 Mở sự cố P1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Ransomware containment — automated P1', 'n8n isolated the endpoint, blocked command-and-control and preserved forensic evidence.',\n'critical', 'open', 'P1', 'ransomware', now(), now() + interval '4 hours',\n'AUTO-' || upper(substr(md5('{{ $('Validate Webhook Payload').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'entityId', '{{ $('Validate Webhook Payload').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
+        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Ransomware containment — automated P1', 'n8n isolated the endpoint, blocked command-and-control and preserved forensic evidence.',\n'critical', 'open', 'P1', 'ransomware', now(), now() + interval '4 hours',\n'AUTO-' || upper(substr(md5('{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}', 'entityId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
         "options": {}
       },
       "position": [
-        600,
-        0
+        1320,
+        -150
+      ],
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🎫 Mở ticket chuẩn",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated ransomware review', 'open', 'high', 'Below-threshold ransomware signal routed for analyst review.',\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nRETURNING id;",
+        "options": {}
+      },
+      "position": [
+        1320,
+        150
       ],
       "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
       "credentials": {
@@ -194,44 +181,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Open Standard Ticket",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated ransomware review', 'open', 'high', 'Below-threshold ransomware signal routed for analyst review.',\njsonb_build_object('automation', 'ransomware-containment', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('Validate Webhook Payload').first().json.executionId }}')\nRETURNING id;",
-        "options": {}
-      },
-      "position": [
-        600,
-        160
-      ],
-      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Merge Case Handling",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        600,
-        320
-      ],
-      "id": "36b91229-3aaa-5950-98b2-27822433b566"
-    },
-    {
-      "name": "Telegram Ready?",
+      "name": "📱 Telegram sẵn sàng?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -244,7 +194,7 @@
           },
           "conditions": [
             {
-              "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
+              "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
               "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
               "rightValue": true,
               "operator": {
@@ -258,13 +208,41 @@
         "options": {}
       },
       "position": [
-        780,
-        320
+        1540,
+        0
       ],
-      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
+      "id": "36b91229-3aaa-5950-98b2-27822433b566"
     },
     {
-      "name": "Gmail Ready?",
+      "name": "📱 Gửi Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "={{ $('🧮 Chấm điểm rủi ro').first().json.telegramText }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true,
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        1760,
+        -150
+      ],
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
+      "credentials": {
+        "telegramApi": {
+          "id": "mg-telegram-credential",
+          "name": "MedicareGuard Telegram"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "📧 Gmail sẵn sàng?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -277,7 +255,7 @@
           },
           "conditions": [
             {
-              "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+              "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
               "leftValue": "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}",
               "rightValue": true,
               "operator": {
@@ -291,59 +269,29 @@
         "options": {}
       },
       "position": [
-        780,
-        480
-      ],
-      "id": "986c2f2d-8863-5f11-a17f-8764545f9631"
-    },
-    {
-      "name": "Notify Telegram",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: ($env.TELEGRAM_CHAT_ID || ''), parse_mode: 'Markdown', disable_web_page_preview: true, text: '🚨 *MedicareGuard SOC alert*\\n*Workflow:* ' + $('Score Risk & Build Alert').first().json.workflowName + '\\n*Severity:* ' + $('Score Risk & Build Alert').first().json.severity + '\\n*Risk:* ' + $('Score Risk & Build Alert').first().json.riskScore + '/100\\n*Entity:* ' + $('Score Risk & Build Alert').first().json.entityId + '\\n*Console:* ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('Score Risk & Build Alert').first().json.entityId }) }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "position": [
-        900,
+        1980,
         0
       ],
-      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
-      "onError": "continueRegularOutput"
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b"
     },
     {
-      "name": "Notify Gmail",
+      "name": "📧 Gửi Gmail (SMTP)",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "parameters": {
         "fromEmail": "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
         "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
-        "subject": "=🚨 [{{ $('Score Risk & Build Alert').first().json.severity }}] {{ $('Score Risk & Build Alert').first().json.workflowName }}",
-        "emailFormat": "text",
-        "text": "='🚨 *MedicareGuard SOC alert*\\n*Workflow:* ' + $('Score Risk & Build Alert').first().json.workflowName + '\\n*Severity:* ' + $('Score Risk & Build Alert').first().json.severity + '\\n*Risk:* ' + $('Score Risk & Build Alert').first().json.riskScore + '/100\\n*Entity:* ' + $('Score Risk & Build Alert').first().json.entityId + '\\n*Console:* ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('Score Risk & Build Alert').first().json.entityId",
+        "subject": "=🚨 [{{ $('🧮 Chấm điểm rủi ro').first().json.severity }}] {{ $('🧮 Chấm điểm rủi ro').first().json.workflowName }}",
+        "emailFormat": "html",
+        "html": "={{ $('🧮 Chấm điểm rủi ro').first().json.emailHtml }}",
+        "text": "={{ $('🧮 Chấm điểm rủi ro').first().json.emailText }}",
         "options": {}
       },
       "position": [
-        900,
-        160
+        2200,
+        -150
       ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
       "credentials": {
         "smtp": {
           "id": "mg-smtp-credential",
@@ -353,7 +301,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Isolate Endpoint via EDR",
+      "name": "🔒 Cô lập máy trạm (EDR)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -378,17 +326,17 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, assetId: $('Load Alert Record').first().json.asset_id }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, alertId: $('🔍 Kiểm tra dữ liệu').first().json.entityId, assetId: $('🗄️ Tải cảnh báo').first().json.asset_id }) }}"
       },
       "position": [
-        900,
-        320
+        2420,
+        0
       ],
-      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Block Command & Control",
+      "name": "🚫 Chặn máy chủ C2",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -413,17 +361,17 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, sourceIp: $('Load Alert Record').first().json.source_ip }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, alertId: $('🔍 Kiểm tra dữ liệu').first().json.entityId, sourceIp: $('🗄️ Tải cảnh báo').first().json.source_ip }) }}"
       },
       "position": [
-        900,
-        480
+        2640,
+        0
       ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Verify Containment State",
+      "name": "✅ Xác minh cô lập",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -448,29 +396,29 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId, assetId: $('Load Alert Record').first().json.asset_id }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, alertId: $('🔍 Kiểm tra dữ liệu').first().json.entityId, assetId: $('🗄️ Tải cảnh báo').first().json.asset_id }) }}"
       },
       "position": [
-        1200,
-        320
+        2860,
+        0
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Mark Record Responded",
+      "name": "📝 Cập nhật bản ghi",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('containedBy', 'n8n', 'containedAt', now()::text), updated_at = now()\nWHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' RETURNING id, status;",
+        "query": "UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('containedBy', 'n8n', 'containedAt', now()::text), updated_at = now()\nWHERE id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' RETURNING id, status;",
         "options": {}
       },
       "position": [
-        1200,
-        480
+        3080,
+        0
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -480,12 +428,12 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Write Audit Evidence",
+      "name": "🏁 Kết thúc phiên chạy",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-write' }}",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('🔍 Kiểm tra dữ liệu').first().json.executionId + '/complete' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -505,388 +453,256 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'ransomware-containment', riskScore: $('Score Risk & Build Alert').first().json.riskScore, report: 'Ransomware Containment Report' }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'ransomware-containment', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 17, metrics: { risk_score: $('🧮 Chấm điểm rủi ro').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất Cô lập & Phục hồi Ransomware cho execution ' + $('🔍 Kiểm tra dữ liệu').first().json.executionId }) }}"
       },
       "position": [
-        1200,
-        640
-      ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Finalize Execution",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('Validate Webhook Payload').first().json.executionId + '/complete' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'ransomware-containment', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n completed Ransomware Containment & Recovery for execution ' + $('Validate Webhook Payload').first().json.executionId }) }}"
-      },
-      "position": [
-        1500,
+        3300,
         0
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Sticky Note — ① Detect",
+      "name": "Ghi chú — Tổng quan",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ① Detect\nReceive the webhook, validate the payload and load the affected record.",
-        "height": 160,
-        "width": 260,
+        "content": "# Cô lập & Phục hồi Ransomware\nCô lập EDR · Chặn C2 · Leo thang P1 · Bằng chứng pháp y\n\n**Kích hoạt:** webhook `mg-ransomware` · **Node thực thi:** 17 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation",
+        "height": 180,
+        "width": 2100,
+        "color": 4
+      },
+      "position": [
+        0,
+        -440
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+    },
+    {
+      "name": "Ghi chú — Tiếp nhận & Đánh giá",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Tiếp nhận & Đánh giá\nKiểm tra dữ liệu, tải bản ghi, làm giàu ngữ cảnh và chấm điểm rủi ro theo mức độ nghiêm trọng và tầm quan trọng của tài sản.",
+        "height": 150,
+        "width": 1050,
         "color": 1
       },
       "position": [
         0,
-        -260
+        -240
       ],
-      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
     },
     {
-      "name": "Sticky Note — ② Enrich",
+      "name": "Ghi chú — Phản hồi & Thông báo",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ② Enrich\nCollect EDR, identity, sandbox, CVE or evidence context and asset ownership.",
-        "height": 160,
-        "width": 260,
-        "color": 2
-      },
-      "position": [
-        300,
-        -260
-      ],
-      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
-    },
-    {
-      "name": "Sticky Note — ③ Decide",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ③ Decide\nScore business risk, route the case and open the right incident.",
-        "height": 160,
-        "width": 260,
+        "content": "## ② Phản hồi & Thông báo\nMở sự cố hoặc ticket, gửi 📱 node Telegram và 📧 Gmail (SMTP) độc lập, thực thi phản ứng, xác minh rồi ghi nhận kết quả.",
+        "height": 150,
+        "width": 1050,
         "color": 3
       },
       "position": [
-        600,
-        -260
+        1320,
+        -240
       ],
-      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c"
-    },
-    {
-      "name": "Sticky Note — ④ Notify",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ④ Notify\nTelegram pushes to the on-call phone and Gmail sends the audit copy. Each channel is gated independently.",
-        "height": 160,
-        "width": 260,
-        "color": 4
-      },
-      "position": [
-        900,
-        -260
-      ],
-      "id": "9619fd28-6e68-531d-b47e-189e21536dd8"
-    },
-    {
-      "name": "Sticky Note — ⑤ Respond",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑤ Respond\nRun containment or remediation and verify that the action held.",
-        "height": 160,
-        "width": 260,
-        "color": 5
-      },
-      "position": [
-        1200,
-        -260
-      ],
-      "id": "339234ac-71d5-511e-83c2-88fad6ee218a"
-    },
-    {
-      "name": "Sticky Note — ⑥ Close",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑥ Close\nMark the record, write evidence and finalize the n8n execution.",
-        "height": 160,
-        "width": 260,
-        "color": 6
-      },
-      "position": [
-        1500,
-        -260
-      ],
-      "id": "6c533bf0-10da-58fb-86f9-d94477a54e71"
-    },
-    {
-      "name": "Sticky Note — Workflow Overview",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "# Ransomware Containment & Recovery\nEDR isolation · C2 block · P1 escalation · forensic evidence\n\n**Trigger:** webhook `mg-ransomware` · **Nodes:** 20 · **Alerts:** 🟢 Telegram + 🔵 Gmail · **Owner:** SOC Automation",
-        "height": 200,
-        "width": 1300,
-        "color": 4
-      },
-      "position": [
-        0,
-        -520
-      ],
-      "id": "18c51e09-99e6-5650-9b5f-ee096c36b192"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     }
   ],
   "connections": {
-    "Webhook — Ransomware Alert": {
+    "📥 Cảnh báo Ransomware": {
       "main": [
         [
           {
-            "node": "Validate Webhook Payload",
+            "node": "🔍 Kiểm tra dữ liệu",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Webhook Payload": {
+    "🔍 Kiểm tra dữ liệu": {
       "main": [
         [
           {
-            "node": "Load Alert Record",
+            "node": "🗄️ Tải cảnh báo",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Alert Record": {
+    "🗄️ Tải cảnh báo": {
       "main": [
         [
           {
-            "node": "Enrich — EDR Telemetry",
+            "node": "🧪 Làm giàu – Telemetry EDR",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enrich — EDR Telemetry": {
+    "🧪 Làm giàu – Telemetry EDR": {
       "main": [
         [
           {
-            "node": "Enrich — Threat Reputation",
+            "node": "🧮 Chấm điểm rủi ro",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enrich — Threat Reputation": {
+    "🧮 Chấm điểm rủi ro": {
       "main": [
         [
           {
-            "node": "Score Risk & Build Alert",
+            "node": "⚠️ Rủi ro cao?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Score Risk & Build Alert": {
+    "⚠️ Rủi ro cao?": {
       "main": [
         [
           {
-            "node": "Impact Gate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Impact Gate": {
-      "main": [
-        [
-          {
-            "node": "Open P1 Incident",
+            "node": "🚨 Mở sự cố P1",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Open Standard Ticket",
+            "node": "🎫 Mở ticket chuẩn",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Open P1 Incident": {
+    "🚨 Mở sự cố P1": {
       "main": [
         [
           {
-            "node": "Merge Case Handling",
+            "node": "📱 Telegram sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Open Standard Ticket": {
+    "🎫 Mở ticket chuẩn": {
       "main": [
         [
           {
-            "node": "Merge Case Handling",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Case Handling": {
-      "main": [
-        [
-          {
-            "node": "Telegram Ready?",
+            "node": "📱 Telegram sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Telegram Ready?": {
+    "📱 Telegram sẵn sàng?": {
       "main": [
         [
           {
-            "node": "Notify Telegram",
+            "node": "📱 Gửi Telegram",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Gmail Ready?",
+            "node": "📧 Gmail sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notify Telegram": {
+    "📱 Gửi Telegram": {
       "main": [
         [
           {
-            "node": "Gmail Ready?",
+            "node": "📧 Gmail sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gmail Ready?": {
+    "📧 Gmail sẵn sàng?": {
       "main": [
         [
           {
-            "node": "Notify Gmail",
+            "node": "📧 Gửi Gmail (SMTP)",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Isolate Endpoint via EDR",
+            "node": "🔒 Cô lập máy trạm (EDR)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notify Gmail": {
+    "📧 Gửi Gmail (SMTP)": {
       "main": [
         [
           {
-            "node": "Isolate Endpoint via EDR",
+            "node": "🔒 Cô lập máy trạm (EDR)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Isolate Endpoint via EDR": {
+    "🔒 Cô lập máy trạm (EDR)": {
       "main": [
         [
           {
-            "node": "Block Command & Control",
+            "node": "🚫 Chặn máy chủ C2",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Block Command & Control": {
+    "🚫 Chặn máy chủ C2": {
       "main": [
         [
           {
-            "node": "Verify Containment State",
+            "node": "✅ Xác minh cô lập",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Verify Containment State": {
+    "✅ Xác minh cô lập": {
       "main": [
         [
           {
-            "node": "Mark Record Responded",
+            "node": "📝 Cập nhật bản ghi",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mark Record Responded": {
+    "📝 Cập nhật bản ghi": {
       "main": [
         [
           {
-            "node": "Write Audit Evidence",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Write Audit Evidence": {
-      "main": [
-        [
-          {
-            "node": "Finalize Execution",
+            "node": "🏁 Kết thúc phiên chạy",
             "type": "main",
             "index": 0
           }
@@ -904,7 +720,7 @@
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
-    "workflowDescription": "EDR isolation · C2 block · P1 escalation · forensic evidence"
+    "workflowDescription": "Cô lập EDR · Chặn C2 · Leo thang P1 · Bằng chứng pháp y"
   },
   "tags": [
     {
