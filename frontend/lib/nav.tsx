@@ -17,7 +17,9 @@ import {
   Radar,
   Shield,
   ShieldAlert,
+  ShoppingBag,
   Siren,
+  Store,
   Users,
   Workflow,
 } from "lucide-react";
@@ -66,6 +68,13 @@ export const navGroups: NavGroup[] = [
       { label: "Chuyên viên AI", href: "/ai", icon: Bot, badge: "AI" },
       { label: "Báo cáo", href: "/reports", icon: FileText },
       { label: "Nhật ký hoạt động", href: "/logs", icon: Activity },
+    ],
+  },
+  {
+    title: "Thương mại điện tử",
+    items: [
+      { label: "Medicare Store", href: "/store", icon: ShoppingBag },
+      { label: "Quản trị cửa hàng", href: "/store/admin", icon: Store },
     ],
   },
   {

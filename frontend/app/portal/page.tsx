@@ -194,6 +194,7 @@ export default function MedicarePortalPage() {
             <a className="hover:text-blue-700" href="#don-thuoc">Đơn thuốc</a>
             <a className="hover:text-blue-700" href="#lich-hen">Lịch hẹn</a>
             <a className="hover:text-blue-700" href="#mo-phong">An ninh</a>
+            <Link href="/store" className="hover:text-blue-700">Cửa hàng</Link>
           </nav>
           <Link href="/login" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">
             <Shield className="h-3.5 w-3.5" /> Đăng nhập SOC
