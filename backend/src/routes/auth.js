@@ -16,7 +16,7 @@ const loginLimiter = rateLimit({
   limit: 30,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Try again in a few minutes." },
+  message: { error: "Quá nhiều lần đăng nhập. Vui lòng thử lại sau vài phút." },
 });
 
 const USER_SELECT = `
@@ -61,15 +61,15 @@ router.post(
   loginLimiter,
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) throw new HttpError(400, "Email and password are required");
+    if (!email || !password) throw new HttpError(400, "Email và mật khẩu là bắt buộc");
 
     const result = await query(`SELECT u.*, r.name AS role_name, r.permissions FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE lower(u.email) = lower($1)`, [email]);
     const user = result.rows[0];
-    if (!user) throw new HttpError(401, "Invalid credentials");
-    if (user.status !== "active") throw new HttpError(403, "Account is not active");
+    if (!user) throw new HttpError(401, "Thông tin đăng nhập không hợp lệ");
+    if (user.status !== "active") throw new HttpError(403, "Tài khoản không hoạt động");
 
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) throw new HttpError(401, "Invalid credentials");
+    if (!valid) throw new HttpError(401, "Thông tin đăng nhập không hợp lệ");
 
     const token = signAccessToken(user);
     await query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
@@ -80,7 +80,7 @@ router.post(
       resource: "users",
       resourceId: user.id,
       action: "login",
-      message: `${user.email} signed in`,
+      message: `${user.email} đã đăng nhập`,
     });
 
     res.json({ token, tokenType: "Bearer", expiresIn: config.jwt.expiresIn, user: publicUser(user) });
@@ -91,18 +91,18 @@ router.post(
   "/register",
   asyncHandler(async (req, res) => {
     const { email, password, fullName, department } = req.body;
-    if (!email || !password || !fullName) throw new HttpError(400, "email, password and fullName are required");
-    if (String(password).length < 8) throw new HttpError(400, "Password must be at least 8 characters");
+    if (!email || !password || !fullName) throw new HttpError(400, "Email, mật khẩu và họ tên là bắt buộc");
+    if (String(password).length < 8) throw new HttpError(400, "Mật khẩu phải có ít nhất 8 ký tự");
 
     const existing = await query("SELECT id FROM users WHERE lower(email) = lower($1)", [email]);
-    if (existing.rows.length) throw new HttpError(409, "An account with this email already exists");
+    if (existing.rows.length) throw new HttpError(409, "Tài khoản với email này đã tồn tại");
 
     const role = await query("SELECT id FROM roles WHERE name = 'viewer' LIMIT 1");
     const passwordHash = await bcrypt.hash(password, config.bcryptRounds);
     const result = await query(
       `INSERT INTO users (email, password_hash, full_name, role_id, department)
        VALUES (lower($1), $2, $3, $4, $5) RETURNING id`,
-      [email, passwordHash, fullName, role.rows[0]?.id || null, department || "Security Operations"],
+      [email, passwordHash, fullName, role.rows[0]?.id || null, department || "Vận hành an ninh"],
     );
     await recordAudit({ req, action: "register", resource: "users", resourceId: result.rows[0].id });
     res.status(201).json({ data: { id: result.rows[0].id, email, fullName, role: "viewer" } });
@@ -115,7 +115,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await query(`${USER_SELECT} WHERE u.id = $1`, [req.user.id]);
     const row = result.rows[0];
-    if (!row) throw new HttpError(404, "User not found");
+    if (!row) throw new HttpError(404, "Không tìm thấy người dùng");
     const token = signAccessToken(row);
     await createSession(row, token, req);
     res.json({ token, tokenType: "Bearer", expiresIn: config.jwt.expiresIn, user: publicUser(row) });
@@ -136,9 +136,9 @@ router.post(
       resource: "users",
       resourceId: req.user.id,
       action: "logout",
-      message: `${req.user.email} signed out`,
+      message: `${req.user.email} đã đăng xuất`,
     });
-    res.json({ message: "Signed out" });
+    res.json({ message: "Đã đăng xuất" });
   }),
 );
 
@@ -147,7 +147,7 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const result = await query(`${USER_SELECT} WHERE u.id = $1`, [req.user.id]);
-    if (!result.rows.length) throw new HttpError(404, "User not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy người dùng");
     res.json({ data: publicUser(result.rows[0]) });
   }),
 );
@@ -158,7 +158,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const allowed = ["full_name", "department", "phone", "avatar_url"];
     const fields = allowed.filter((field) => req.body[field] !== undefined);
-    if (!fields.length) throw new HttpError(400, "No editable fields supplied");
+    if (!fields.length) throw new HttpError(400, "Không có trường nào có thể chỉnh sửa");
     const values = fields.map((field) => req.body[field]);
     values.push(req.user.id);
     const result = await query(
@@ -174,18 +174,18 @@ router.post(
   authenticate,
   asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) throw new HttpError(400, "currentPassword and newPassword are required");
-    if (String(newPassword).length < 8) throw new HttpError(400, "New password must be at least 8 characters");
+    if (!currentPassword || !newPassword) throw new HttpError(400, "Mật khẩu hiện tại và mật khẩu mới là bắt buộc");
+    if (String(newPassword).length < 8) throw new HttpError(400, "Mật khẩu mới phải có ít nhất 8 ký tự");
 
     const result = await query("SELECT password_hash FROM users WHERE id = $1", [req.user.id]);
     const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
-    if (!valid) throw new HttpError(400, "Current password is incorrect");
+    if (!valid) throw new HttpError(400, "Mật khẩu hiện tại không đúng");
 
     const hash = await bcrypt.hash(newPassword, config.bcryptRounds);
     await query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, req.user.id]);
     await query("UPDATE sessions SET revoked = true WHERE user_id = $1", [req.user.id]);
     await recordAudit({ req, action: "change_password", resource: "users", resourceId: req.user.id });
-    res.json({ message: "Password updated. Existing sessions were revoked." });
+    res.json({ message: "Đã cập nhật mật khẩu. Các phiên hiện có đã bị thu hồi." });
   }),
 );
 
@@ -193,9 +193,9 @@ router.post(
   "/forgot-password",
   asyncHandler(async (req, res) => {
     const { email } = req.body;
-    if (!email) throw new HttpError(400, "Email is required");
+    if (!email) throw new HttpError(400, "Email là bắt buộc");
     const result = await query("SELECT id, email FROM users WHERE lower(email) = lower($1)", [email]);
-    const payload = { message: "If the account exists, a reset link has been sent." };
+    const payload = { message: "Nếu tài khoản tồn tại, liên kết đặt lại đã được gửi." };
     if (result.rows.length) {
       payload.resetToken = signResetToken(result.rows[0]);
       if (config.isProduction) delete payload.resetToken;
@@ -208,19 +208,19 @@ router.post(
   "/reset-password",
   asyncHandler(async (req, res) => {
     const { token, newPassword } = req.body;
-    if (!token || !newPassword) throw new HttpError(400, "token and newPassword are required");
-    if (String(newPassword).length < 8) throw new HttpError(400, "Password must be at least 8 characters");
+    if (!token || !newPassword) throw new HttpError(400, "Token và mật khẩu mới là bắt buộc");
+    if (String(newPassword).length < 8) throw new HttpError(400, "Mật khẩu phải có ít nhất 8 ký tự");
     let payload;
     try {
       payload = jwt.verify(token, config.jwt.secret);
     } catch (_error) {
-      throw new HttpError(400, "Reset token is invalid or expired");
+      throw new HttpError(400, "Token đặt lại không hợp lệ hoặc đã hết hạn");
     }
-    if (payload.purpose !== "password_reset") throw new HttpError(400, "Invalid reset token");
+    if (payload.purpose !== "password_reset") throw new HttpError(400, "Token đặt lại không hợp lệ");
     const hash = await bcrypt.hash(newPassword, config.bcryptRounds);
     await query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, payload.sub]);
     await query("UPDATE sessions SET revoked = true WHERE user_id = $1", [payload.sub]);
-    res.json({ message: "Password has been reset" });
+    res.json({ message: "Mật khẩu đã được đặt lại" });
   }),
 );
 

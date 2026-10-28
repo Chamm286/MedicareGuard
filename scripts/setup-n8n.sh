@@ -56,15 +56,22 @@ echo "Importing MedicareGuard PostgreSQL credential for n8n user $N8N_USER_ID...
 (cd /tmp && n8n import:credentials --input="$TMP_DIR/credential.json" --userId="$N8N_USER_ID")
 
 if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD:-}" ]]; then
-  python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" <<'PYCRED'
+  python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "${MG_SMTP_DISABLE_STARTTLS:-false}" <<'PYCRED'
 import json
 import sys
-path, user, password, host, port, secure = sys.argv[1:]
+path, user, password, host, port, secure, disable_starttls = sys.argv[1:]
 credential = {
     "id": "mg-smtp-credential",
     "name": "MedicareGuard SMTP",
     "type": "smtp",
-    "data": {"user": user, "password": password, "host": host, "port": int(port), "secure": secure.lower() == "true"},
+    "data": {
+        "user": user,
+        "password": password,
+        "host": host,
+        "port": int(port),
+        "secure": secure.lower() == "true",
+        "disableStartTls": disable_starttls.lower() == "true",
+    },
 }
 json.dump([credential], open(path, "w"), indent=2)
 PYCRED
@@ -72,6 +79,25 @@ PYCRED
   (cd /tmp && n8n import:credentials --input="$TMP_DIR/smtp.json" --userId="$N8N_USER_ID")
 else
   echo "Skipping SMTP credential: set MG_SMTP_HOST, MG_SMTP_USER and MG_SMTP_PASSWORD to enable Gmail alerts."
+fi
+
+if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+  python3 - "$TMP_DIR/telegram.json" "${TELEGRAM_BOT_TOKEN}" <<'PYCRED'
+import json
+import sys
+path, token = sys.argv[1:]
+credential = {
+    "id": "mg-telegram-credential",
+    "name": "MedicareGuard Telegram",
+    "type": "telegramApi",
+    "data": {"accessToken": token},
+}
+json.dump([credential], open(path, "w"), indent=2)
+PYCRED
+  echo "Importing MedicareGuard Telegram credential..."
+  (cd /tmp && n8n import:credentials --input="$TMP_DIR/telegram.json" --userId="$N8N_USER_ID")
+else
+  echo "Skipping Telegram credential: set TELEGRAM_BOT_TOKEN to enable the Telegram node."
 fi
 
 for workflow_id in "${WORKFLOW_IDS[@]}"; do

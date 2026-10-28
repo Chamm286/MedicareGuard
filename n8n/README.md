@@ -1,14 +1,14 @@
 # n8n response workflows
 
-MedicareGuard ships five focused n8n playbooks. Every workflow stays between **16 and 20 executable nodes** so it is easy to explain, review and demonstrate. Each scenario flow has six stage notes plus an overview note; the monitor has four stage notes plus an overview note.
+MedicareGuard ships five focused n8n playbooks. Every workflow stays at **17 executable nodes** (the monitor has **16**) so it is easy to explain, review and demonstrate. All node labels, sticky notes and alert copy are in **Vietnamese**, and every canvas uses three colour-coded notes (overview + two stage notes) with a straight left-to-right layout.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
-| Ransomware Containment & Recovery | 20 | `POST /webhook/mg-ransomware` | EDR isolation, C2 block, P1 case, Telegram + Gmail alert |
-| Phishing Triage & Credential Reset | 20 | `POST /webhook/mg-phishing` | Sandbox detonation, mailbox purge, session revocation, phone alert |
-| Vulnerability SLA Escalation | 20 | `POST /webhook/mg-vulnerability` | EPSS/KEV scoring, owner assignment, change request, phone alert |
-| Continuous Compliance Evidence | 20 | `POST /webhook/mg-compliance` | HIPAA/NIST/ISO evidence pack, immutable audit trail |
-| Live Attack Monitor & Phone Alerts | 18 | `POST /webhook/mg-attack-monitor` + every 5 minutes | Telegram + Gmail digest of new critical/high attacks |
+| Cô lập & Phục hồi Ransomware | 17 | `POST /webhook/mg-ransomware` | Cô lập EDR, chặn C2, mở sự cố P1, cảnh báo Telegram + Gmail |
+| Phân tích & Xử lý Phishing | 17 | `POST /webhook/mg-phishing` | Detonate sandbox, dọn hộp thư, thu hồi phiên, cảnh báo điện thoại |
+| Leo thang SLA Lỗ hổng | 17 | `POST /webhook/mg-vulnerability` | Chấm EPSS/KEV, giao chủ sở hữu, tạo yêu cầu thay đổi, cảnh báo |
+| Bằng chứng Tuân thủ Liên tục | 17 | `POST /webhook/mg-compliance` | Gói bằng chứng HIPAA/NIST/ISO, nhật ký kiểm toán bất biến |
+| Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 16 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
 
 ## Integration flow
 
@@ -125,6 +125,7 @@ The check never prints the token or app password. A successful run reports the T
 | `TELEGRAM_CHAT_ID` | Personal chat or SOC group that receives the phone push |
 | `MG_SMTP_HOST` / `MG_SMTP_PORT` / `MG_SMTP_SECURE` | SMTP server, default Gmail `smtp.gmail.com:465` with SSL |
 | `MG_SMTP_USER` / `MG_SMTP_PASSWORD` | Gmail address and App Password |
+| `MG_SMTP_DISABLE_STARTTLS` | Skip STARTTLS on plain SMTP relays such as a local Mailpit sink |
 | `MG_SMTP_FROM` | Sender address on the alert email |
 | `MG_ALERT_EMAIL` | Recipient inbox for the alert email |
 | `N8N_BLOCK_ENV_ACCESS_IN_NODE` | Must be `false` so workflows can read `$env` values |
@@ -152,7 +153,7 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:4000/api/automation/executions?limit=10"
 ```
 
-A healthy run returns `202 dispatched`, then transitions to `success` with `nodeCount: 20` for a scenario flow or `nodeCount: 18` for the monitor. When both notification channels are configured, the same run also sends a Telegram message and a Gmail email.
+A healthy run returns `202 dispatched`, then transitions to `success` with `nodeCount: 17` for a scenario flow or `nodeCount: 16` for the monitor. When both notification channels are configured, the same run also sends a Telegram message and a Gmail email.
 
 ## Credentials
 
