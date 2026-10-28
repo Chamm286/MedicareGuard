@@ -158,7 +158,7 @@ export default function CheckoutPage() {
               <div><label className="label">Quốc gia giao hàng</label><select value={form.countryCode} onChange={(event) => set("countryCode", event.target.value)} className="select">{countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></div>
               <div><label className="label">Ghi chú</label><input value={form.notes} onChange={(event) => set("notes", event.target.value)} className="input" placeholder="Không bắt buộc" /></div>
             </div>
-            <p className="mt-3 text-[10px] text-slate-600">Mẹo demo gian lận: đặt giao tới Singapore trong khi IP của bạn ở Việt Nam, hoặc thanh toán thẻ cho đơn từ 3.000.000 ₫.</p>
+            <p className="mt-3 text-[10px] text-slate-600">Mẹo demo gian lận tại Việt Nam: chọn thanh toán thẻ, đặt từ 20 món và đơn từ 3.000.000 ₫. Hệ thống vẫn tạm giữ đơn nếu tổng hợp các dấu hiệu vượt ngưỡng, không cần IP nước ngoài.</p>
           </div>
 
           <div className="panel p-5">

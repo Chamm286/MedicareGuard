@@ -221,7 +221,7 @@ const evaluateRisk = ({ total, paymentMethod, context, shippingCountryCode, item
   }
   const quantity = items.reduce((sum, item) => sum + Number(item.quantity), 0);
   if (quantity >= 20) {
-    score += 15;
+    score += 30;
     flags.push("bulk_quantity");
   }
   if (!customer) {

@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { API_URL } from "@/lib/api";
 
+const MAILPIT_URL = process.env.NEXT_PUBLIC_MAILPIT_URL || "https://buttons-milwaukee-certification-tail.trycloudflare.com";
+
 type Patient = {
   id: string;
   name: string;
@@ -193,14 +195,33 @@ export default function MedicarePortalPage() {
             <a className="hover:text-blue-700" href="#benh-nhan">Bệnh nhân</a>
             <a className="hover:text-blue-700" href="#don-thuoc">Đơn thuốc</a>
             <a className="hover:text-blue-700" href="#lich-hen">Lịch hẹn</a>
-            <a className="hover:text-blue-700" href="#mo-phong">An ninh</a>
+            <a className="hover:text-blue-700" href="#mo-phong">Mô phỏng</a>
             <Link href="/store" className="hover:text-blue-700">Cửa hàng</Link>
           </nav>
-          <Link href="/login" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">
-            <Shield className="h-3.5 w-3.5" /> Đăng nhập SOC
+          <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">
+            <Shield className="h-3.5 w-3.5" /> Mở SOC Console
           </Link>
         </div>
       </header>
+
+      <section className="border-b border-blue-100 bg-blue-50/70">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-blue-700">Demo mode</span>
+            <div>
+              <p className="text-xs font-semibold text-blue-950">Đây là cổng bệnh nhân mô phỏng, không phải bệnh viện thật.</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-blue-800/80">Chạy kịch bản tấn công ở mục “Trung tâm mô phỏng an ninh”, rồi mở SOC Console để xem cảnh báo, Telegram và hộp thư Mailpit.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="rounded-full bg-white px-2.5 py-1 font-medium text-blue-700">1. Chạy mô phỏng</span>
+            <span className="rounded-full bg-white px-2.5 py-1 font-medium text-blue-700">2. Xem SOC</span>
+            <span className="rounded-full bg-white px-2.5 py-1 font-medium text-blue-700">3. Xem Telegram/Mailpit</span>
+            <Link href="/dashboard" className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white transition hover:bg-blue-800">Mở SOC <ArrowRight className="h-3 w-3" /></Link>
+            <Link href="/store" className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-1.5 font-semibold text-blue-700 transition hover:border-blue-300">Medicare Store <ExternalLink className="h-3 w-3" /></Link>
+          </div>
+        </div>
+      </section>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <section id="ho-so" className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-600 via-blue-600 to-cyan-500 p-6 text-white shadow-xl shadow-blue-500/20 sm:p-8">
@@ -319,7 +340,7 @@ export default function MedicarePortalPage() {
               </span>
               <h2 className="mt-3 font-display text-xl font-semibold tracking-tight">Tạo bản demo tấn công</h2>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
-                Mỗi nút sẽ tạo một cảnh báo thực sự trong PostgreSQL và kích hoạt luồng n8n tương ứng. Kết quả sẽ hiển thị trong SOC, Telegram và hộp thư Mailpit.
+                Mỗi nút tạo một cảnh báo thật trong PostgreSQL và kích hoạt luồng n8n tương ứng. Đây là cách mô phỏng một cuộc tấn công vào cổng bệnh nhân; kết quả hiển thị trong SOC, Telegram và hộp thư Mailpit.
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[10px] text-slate-300">
@@ -366,10 +387,10 @@ export default function MedicarePortalPage() {
                 <div className="rounded-lg bg-black/20 px-2.5 py-2"><span className="block text-emerald-300/60">Điểm rủi ro</span><span>{result.alert.risk_score ?? "—"}/100</span></div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/login" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-900 transition hover:bg-blue-50">
+                <Link href="/dashboard" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-900 transition hover:bg-blue-50">
                   Mở bảng điều khiển SOC <ExternalLink className="h-3 w-3" />
                 </Link>
-                <a href="http://localhost:8025" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-400/10">
+                <a href={MAILPIT_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/30 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-400/10">
                   Xem email Mailpit <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
@@ -419,7 +440,7 @@ export default function MedicarePortalPage() {
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-blue-900"><Stethoscope className="h-4 w-4" /> Đường dây hỗ trợ</h2>
               <p className="mt-2 text-xs leading-relaxed text-blue-800/80">Nếu bạn nghi ngờ hồ sơ được truy cập trái phép, hãy gọi ngay <strong>1900 1234</strong> hoặc gửi email tới <strong>soc@medicareguard.io</strong>.</p>
-              <Link href="/login" className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900">Xem trạng thái an ninh <ArrowRight className="h-3 w-3" /></Link>
+              <Link href="/dashboard" className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900">Xem trạng thái an ninh <ArrowRight className="h-3 w-3" /></Link>
             </div>
           </div>
         </section>

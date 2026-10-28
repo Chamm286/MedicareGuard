@@ -1003,10 +1003,10 @@ const seed = async () => {
   const storeOrderSeed = [
     { customer: 0, status: "delivered", payment_status: "paid", payment_method: "card", city: "TP. Hồ Chí Minh", ip: "113.161.72.18", country: "Việt Nam", cc: "VN", risk: 12, flags: [], items: [[0, 1], [1, 2]], days: 8 },
     { customer: 1, status: "processing", payment_status: "paid", payment_method: "bank_transfer", city: "Đà Nẵng", ip: "14.161.22.9", country: "Việt Nam", cc: "VN", risk: 18, flags: [], items: [[2, 1], [5, 3]], days: 5 },
-    { customer: 2, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Hà Nội", ip: "77.35.40.181", country: "Hà Lan", cc: "NL", risk: 82, flags: ["ip_country_mismatch", "high_value_order", "card_high_value"], items: [[10, 2], [0, 1]], days: 2 },
+    { customer: 2, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Hà Nội", ip: "113.161.72.18", country: "Việt Nam", cc: "VN", risk: 70, flags: ["high_value_order", "card_high_value", "bulk_quantity"], items: [[0, 20]], days: 2 },
     { customer: 3, status: "pending", payment_status: "unpaid", payment_method: "cod", city: "Hà Nội", ip: "10.20.4.88", country: "Việt Nam", cc: "VN", risk: 8, flags: [], items: [[4, 2], [7, 4]], days: 1 },
     { customer: 0, status: "cancelled", payment_status: "unpaid", payment_method: "cod", city: "TP. Hồ Chí Minh", ip: "113.161.72.18", country: "Việt Nam", cc: "VN", risk: 10, flags: [], items: [[6, 1]], days: 3 },
-    { customer: null, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Singapore", ip: "203.83.3.123", country: "Singapore", cc: "SG", risk: 76, flags: ["ip_country_mismatch", "guest_checkout", "card_high_value"], items: [[9, 3], [3, 1]], days: 1 },
+    { customer: null, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Hà Nội", ip: "14.161.22.9", country: "Việt Nam", cc: "VN", risk: 68, flags: ["elevated_value_order", "card_high_value", "bulk_quantity", "guest_checkout"], items: [[5, 20]], days: 1 },
   ];
 
   const storeOrders = [];
@@ -1082,8 +1082,8 @@ const seed = async () => {
     "store_security_events",
     ["event_type", "severity", "ip_address", "country", "country_code", "order_id", "risk_score", "metadata", "created_at"],
     [
-      ["checkout_fraud_review", "high", "77.35.40.181", "Hà Lan", "NL", storeOrders[2].id, 82, JSON.stringify({ flags: ["ip_country_mismatch", "high_value_order"] }), daysAgo(2)],
-      ["checkout_fraud_review", "high", "203.83.3.123", "Singapore", "SG", storeOrders[5].id, 76, JSON.stringify({ flags: ["ip_country_mismatch", "guest_checkout"] }), daysAgo(1)],
+      ["checkout_fraud_review", "high", "113.161.72.18", "Việt Nam", "VN", storeOrders[2].id, 70, JSON.stringify({ flags: ["high_value_order", "card_high_value", "bulk_quantity"] }), daysAgo(2)],
+      ["checkout_fraud_review", "high", "14.161.22.9", "Việt Nam", "VN", storeOrders[5].id, 68, JSON.stringify({ flags: ["elevated_value_order", "card_high_value", "bulk_quantity", "guest_checkout"] }), daysAgo(1)],
       ["payment_velocity", "medium", "113.161.72.18", "Việt Nam", "VN", storeOrders[0].id, 45, JSON.stringify({ attempts: 3 }), daysAgo(8)],
     ].map(([event_type, severity, ip_address, country, country_code, order_id, risk_score, metadata, created_at]) => ({ event_type, severity, ip_address, country, country_code, order_id, risk_score, metadata, created_at })),
   );

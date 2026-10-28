@@ -23,12 +23,36 @@ Demo login:
 - pgAdmin: `admin@riceguard.vn` / `admin123`
 - PostgreSQL inside pgAdmin: host `medicareguard-postgres`, port `5432`, database `medicareguard`, user `medicare`, password `medicare`
 
+## Ba bề mặt demo
+
+| Bề mặt | Đường dẫn | Vai trò |
+| --- | --- | --- |
+| SOC Console | `/dashboard` | Nơi giám sát cảnh báo, sự cố, tài sản, log, automation. Đây là “sản phẩm an ninh mạng”. |
+| Cổng bệnh nhân | `/portal` | Mục tiêu mô phỏng: hồ sơ bệnh nhân giả lập và 5 nút tạo tấn công. Không phải bệnh viện thật. |
+| Medicare Store | `/store` | Mục tiêu thương mại điện tử: mua hàng, checkout, gian lận đơn hàng. |
+
+Luồng demo chuẩn: `/portal` → bấm một kịch bản tấn công → mở `/dashboard` xem alert → xem Telegram/Mailpit.
+
 ## Medicare Store demo flow
 
 1. Open `/store`, add a product to the cart and apply a coupon at checkout.
 2. Complete a normal checkout to see the order confirmation and order tracking page.
-3. For the fraud scenario, use a high-value card order with a mismatched country/IP; the backend holds the order, creates a SOC alert and dispatches `mg-ecommerce-fraud` to n8n.
+3. For the fraud scenario, use a high-value card order with a large quantity (>=20 items) from a Vietnamese IP; the backend holds the order, creates a SOC alert and dispatches `mg-ecommerce-fraud` to n8n.
 4. Show the Telegram alert, the n8n execution, and the store admin page at `/store/admin` using the SOC admin account.
+
+## Kiểm thử tự động toàn bộ kịch bản Việt Nam
+
+Chạy một lần để kiểm tra catalog, SQL injection, admin 401, đăng nhập khách, coupon, price tampering, checkout thường, checkout rủi ro cao, 5 kịch bản portal, Telegram/n8n và Mailpit:
+
+```bash
+npm run test:vn
+```
+
+Test này tạo thêm đơn hàng và cảnh báo. Trước buổi demo muốn số liệu sạch theo seed:
+
+```bash
+cd backend && npm run seed:reset
+```
 
 ## Vì sao dashboard có số?
 
@@ -39,7 +63,7 @@ Demo login:
 - `Sự kiện gian lận`: lấy từ `store_security_events`, do checkout rủi ro cao tạo ra.
 - `Bán chạy`: tổng hợp từ `store_order_items`.
 
-Dữ liệu seed có 6 đơn, trong đó 2 đơn rủi ro cao từ IP nước ngoài (Hà Lan, Singapore) để minh họa gian lận xuyên biên giới. Checkout thật từ trình duyệt của bạn sẽ lấy IP/quốc gia hiện tại, thường là Việt Nam.
+Dữ liệu seed có 6 đơn, tất cả IP đều ở Việt Nam. Hai đơn rủi ro cao dùng kịch bản đơn giá trị lớn + thẻ + số lượng lớn, nên vẫn bị tạm giữ mà không cần IP nước ngoài. Checkout thật từ trình duyệt của bạn cũng lấy IP/quốc gia Việt Nam.
 
 ## Khách hàng "tấn công" gì?
 
@@ -48,15 +72,15 @@ Khách bình thường chỉ mua hàng. Kịch bản tấn công là một khác
 1. SQL injection ở tìm kiếm sản phẩm: thử `' OR 1=1 --`; backend dùng parameterized query nên không lộ dữ liệu.
 2. Gọi API admin khi chưa đăng nhập: trả `401`.
 3. Sửa giá trong giỏ/checkout: backend bỏ qua giá client gửi lên và tính lại từ DB.
-4. Checkout gian lận: đơn giá trị cao, thẻ tín dụng, IP khác quốc gia giao hàng; đơn bị `on_hold`, tạo alert và gọi n8n.
+4. Checkout gian lận: đơn giá trị cao, thẻ tín dụng, số lượng lớn (>=20 món) từ IP Việt Nam; đơn bị `on_hold`, tạo alert và gọi n8n.
 
-## Khi nào gửi Telegram/Gmail?
+## Khi nào gửi Telegram/Mailpit?
 
 - Chỉ khi checkout tạo đơn có `risk_score >= 60`: backend gọi webhook n8n `mg-ecommerce-fraud`.
 - n8n gửi Telegram thật nếu `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID` có trong môi trường.
-- "Gmail" trong demo hiện dùng SMTP local Mailpit (`127.0.0.1:1025`), không phải Gmail thật. Xem thư tại link Mailpit ở trên.
+- "Gmail" trong demo được mô phỏng bằng SMTP local Mailpit (`127.0.0.1:1025`), không phải Gmail thật. Xem thư tại link Mailpit ở trên.
 - Các workflow SOC khác (giám sát tấn công, ransomware, phishing, SLA) cũng gửi Telegram/Mailpit khi có sự kiện.
-- Thêm vào giỏ, xem sản phẩm, đăng nhập bình thường không gửi Telegram/Gmail.
+- Thêm vào giỏ, xem sản phẩm, đăng nhập bình thường không gửi Telegram/Mailpit.
 
 ## Đổi tên miền Quick Tunnel?
 
