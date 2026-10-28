@@ -318,6 +318,14 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     metricNote: "Bằng chứng danh tính, thiết bị và audit với checksum bất biến",
   },
   {
+    id: "ecommerce-fraud-response",
+    name: "Phản hồi Gian lận Thương mại điện tử",
+    triggerLabel: "Cảnh báo gian lận đơn hàng",
+    webhookPath: "mg-ecommerce-fraud",
+    entityType: "store_order",
+    stageSummary: "Xác minh IP/quốc gia · Chấm điểm rủi ro · Tạm giữ đơn · Cảnh báo SOC · Telegram + Gmail",
+  },
+  {
     id: "live-attack-monitor",
     name: "Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại",
     triggerLabel: "Nhịp giám sát",
@@ -365,6 +373,7 @@ const gmailNode = (spec, position) => node(
 const buildWorkflow = (spec) => {
   resetIds();
   if (spec.id === "live-attack-monitor") return buildMonitorWorkflow(spec);
+  if (spec.id === "ecommerce-fraud-response") return buildEcommerceWorkflow(spec);
 
   const validateCode = `const body = $json.body ?? $json;
 const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;
@@ -490,6 +499,169 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     [spec.actionB[0]]: { main: [[{ node: spec.verifyAction[0], type: "main", index: 0 }]] },
     [spec.verifyAction[0]]: { main: [[{ node: L.mark, type: "main", index: 0 }]] },
     [L.mark]: { main: [[{ node: L.finalize, type: "main", index: 0 }]] },
+  };
+
+  return {
+    id: spec.id,
+    name: spec.name,
+    active: false,
+    nodes,
+    connections,
+    settings: { executionOrder: "v1", saveExecutionProgress: true, saveManualExecutions: true, timezone: "Asia/Ho_Chi_Minh" },
+    staticData: null,
+    pinData: {},
+    meta: { templateCredsSetupCompleted: true, workflowDescription: spec.stageSummary },
+    tags: [{ name: "MedicareGuard" }, { name: spec.id }],
+  };
+};
+
+
+const buildEcommerceWorkflow = (spec) => {
+  resetIds();
+
+  const validateCode = `const body = $json.body ?? $json;
+const orderId = String(body.orderId || body.entityId || '').trim();
+if (!orderId) { throw new Error('orderId is required'); }
+const executionId = String(body.executionId || ('ecom-' + Date.now()));
+return [{ json: { ...body, orderId, executionId, workflowId: 'ecommerce-fraud-response', workflowName: 'Phản hồi Gian lận Thương mại điện tử', mode: body.mode || 'realtime', receivedAt: new Date().toISOString() } }];`;
+
+  const scoreCode = `const base = $('🔍 Kiểm tra dữ liệu').first().json;
+const order = $('🗄️ Tải đơn hàng').first().json || {};
+if (!order.id) { throw new Error('Store order not found: ' + base.orderId); }
+const esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const parseFlags = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (error) { return [String(value)]; }
+};
+const flags = parseFlags(base.flags && base.flags.length ? base.flags : order.fraud_flags);
+const velocity = Number(order.ip_order_count || 1);
+const riskScore = Math.max(Number(base.riskScore || 0), Number(order.risk_score || 0), Math.min(100, velocity * 5));
+const severity = riskScore >= 80 ? 'critical' : riskScore >= 60 ? 'high' : 'medium';
+const sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH' }[severity];
+const sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04' }[severity];
+const consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';
+const orderLink = consoleUrl + '/store/order/' + order.id;
+const adminLink = consoleUrl + '/store/admin';
+const total = Number(order.total || 0).toLocaleString('vi-VN') + ' ₫';
+const flagText = flags.length ? flags.join(', ') : 'không có dấu hiệu bổ sung';
+const telegramText = [
+  '🚨 <b>GIAN LẬN THƯƠNG MẠI ĐIỆN TỬ — MEDICAREGUARD</b>',
+  '━━━━━━━━━━━━━━━━━━━━',
+  '<b>Đơn hàng</b>  <code>' + esc(order.order_number) + '</code>',
+  '<b>Mức độ</b>  ' + sevLabel,
+  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',
+  '<b>Giá trị</b>  ' + esc(total),
+  '<b>Khách</b>  ' + esc(order.shipping_name || order.customer_name || 'Khách vãng lai'),
+  '<b>IP</b>  <code>' + esc(order.ip_address || base.ip || 'không rõ') + '</code> (' + esc(order.ip_country || base.country || 'không rõ') + ')',
+  '<b>Giao tới</b>  ' + esc(order.shipping_city) + ', ' + esc(order.shipping_country),
+  '<b>Dấu hiệu</b>  ' + esc(flagText),
+  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),
+  '━━━━━━━━━━━━━━━━━━━━',
+  '🔗 <a href="' + esc(adminLink) + '">Mở quản trị cửa hàng</a>',
+].join('\\n');
+const emailHtml = '<div style="background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a">'
+  + '<div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden">'
+  + '<div style="background:#0b1220;padding:22px 24px;color:#ffffff">'
+  + '<div style="font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700">MEDICAREGUARD · SOC / STORE</div>'
+  + '<div style="font-size:22px;font-weight:700;margin-top:6px">Cảnh báo gian lận đơn hàng</div>'
+  + '</div>'
+  + '<div style="padding:24px">'
+  + '<div style="display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700">' + esc(sevLabel) + '</div>'
+  + '<h2 style="font-size:18px;margin:16px 0 8px">Đơn ' + esc(order.order_number) + ' · ' + riskScore + '/100</h2>'
+  + '<p style="color:#475569;line-height:1.6;margin:0 0 18px">Đơn hàng trị giá <b>' + esc(total) + '</b> có dấu hiệu gian lận: ' + esc(flagText) + '.</p>'
+  + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
+  + '<tr><td style="padding:8px 0;color:#64748b">Khách hàng</td><td style="padding:8px 0;text-align:right;font-weight:600">' + esc(order.shipping_name || order.customer_name || 'Khách vãng lai') + '</td></tr>'
+  + '<tr><td style="padding:8px 0;color:#64748b">IP / quốc gia</td><td style="padding:8px 0;text-align:right;font-weight:600">' + esc(order.ip_address || 'không rõ') + ' · ' + esc(order.ip_country || 'không rõ') + '</td></tr>'
+  + '<tr><td style="padding:8px 0;color:#64748b">Giao tới</td><td style="padding:8px 0;text-align:right;font-weight:600">' + esc(order.shipping_city) + ', ' + esc(order.shipping_country) + '</td></tr>'
+  + '<tr><td style="padding:8px 0;color:#64748b">Số đơn cùng IP 24h</td><td style="padding:8px 0;text-align:right;font-weight:600">' + velocity + '</td></tr>'
+  + '<tr><td style="padding:8px 0;color:#64748b">Thanh toán</td><td style="padding:8px 0;text-align:right;font-weight:600">' + esc(order.payment_method) + ' · ' + esc(order.payment_status) + '</td></tr>'
+  + '</table>'
+  + '<a href="' + esc(adminLink) + '" style="display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700">Mở quản trị cửa hàng</a>'
+  + '</div>'
+  + '<div style="padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'
+  + '</div></div>';
+const emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+return [{ json: { ...base, order, riskScore, severity, flags, flagText, velocity, total, telegramText, emailHtml, emailText, orderLink, adminLink } }];`;
+
+  const recordQuery = `WITH alert AS (
+  UPDATE alerts SET status = 'investigating',
+    metadata = metadata || jsonb_build_object('ecommerceFraudWorkflow', 'completed', 'ecommerceRiskScore', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}', 'ecommerceWorkflowAt', now()::text),
+    updated_at = now()
+  WHERE id = NULLIF('${sqlRef("🔍 Kiểm tra dữ liệu", "alertId")}', '')::uuid
+  RETURNING id
+), event AS (
+  UPDATE store_security_events SET metadata = metadata || jsonb_build_object('n8nWorkflowAt', now()::text, 'n8nExecutionId', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}', 'n8nRiskScore', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}')
+  WHERE order_id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}'::uuid
+  RETURNING id
+)
+SELECT (SELECT count(*) FROM alert)::int AS alerts_updated, (SELECT count(*) FROM event)::int AS events_updated;`;
+
+  const nodes = [
+    node("📥 " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, [0, 0], { webhookId: id() }),
+    code("🔍 Kiểm tra dữ liệu", validateCode, [220, 0]),
+    postgres("🗄️ Tải đơn hàng", `SELECT o.id, o.order_number, o.status, o.payment_status, o.payment_method, o.total, o.risk_score, o.fraud_flags,
+  o.ip_address, o.ip_country, o.ip_country_code, o.ip_source, o.shipping_name, o.shipping_email,
+  o.shipping_city, o.shipping_country, o.shipping_country_code, o.created_at,
+  c.full_name AS customer_name, c.email AS customer_email,
+  (SELECT count(*)::int FROM store_orders x WHERE x.ip_address = o.ip_address AND x.created_at > now() - interval '24 hours') AS ip_order_count
+FROM store_orders o LEFT JOIN store_customers c ON c.id = o.customer_id
+WHERE o.id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' LIMIT 1;`, [440, 0]),
+    code("🧮 Chấm điểm & Soạn cảnh báo", scoreCode, [660, 0]),
+    ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 70, [880, 0]),
+    postgres("🔒 Tạm giữ đơn hàng", `UPDATE store_orders SET status = 'on_hold',
+  metadata = metadata || jsonb_build_object('fraudWorkflowAt', now()::text, 'fraudWorkflowExecution', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}', 'fraudWorkflowRisk', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}'),
+  updated_at = now()
+WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' RETURNING id, order_number, status;`, [1100, -140]),
+    node("✅ Đơn trong ngưỡng", "n8n-nodes-base.noOp", 1, {}, [1100, 140]),
+    ifNode("📱 Telegram sẵn sàng?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, [1320, 0]),
+    node("📱 Gửi Telegram", "n8n-nodes-base.telegram", 1.2, {
+      resource: "message",
+      operation: "sendMessage",
+      chatId: "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+      text: "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.telegramText }}",
+      additionalFields: { parse_mode: "HTML", disable_web_page_preview: true, appendAttribution: false },
+    }, [1540, -120], { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "continueRegularOutput" }),
+    ifNode("📧 Gmail sẵn sàng?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, [1760, 0]),
+    node("📧 Gửi Gmail (SMTP)", "n8n-nodes-base.emailSend", 2.1, {
+      fromEmail: "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
+      toEmail: "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+      subject: "=🚨 Gian lận đơn {{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number }} — {{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore }}/100",
+      emailFormat: "html",
+      html: "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.emailHtml }}",
+      text: "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.emailText }}",
+      options: {},
+    }, [1980, -120], { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
+    postgres("📝 Ghi nhận phản hồi", recordQuery, [2200, 0]),
+    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 70, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
+  ];
+
+  nodes.push(sticky("Ghi chú — Tổng quan", "# Phản hồi Gian lận Thương mại điện tử\nXác minh IP/quốc gia · chấm điểm rủi ro · tạm giữ đơn · cảnh báo SOC\n\n**Kích hoạt:** webhook `mg-ecommerce-fraud` · **Node thực thi:** 13 · **Kênh:** 📱 Telegram + 📧 Gmail · **Phụ trách:** SOC Automation", [0, -420], 1800, 170, 4));
+  nodes.push(sticky("Ghi chú — Đánh giá", "## ① Đánh giá\nTải đơn hàng, đối chiếu IP/quốc gia, số đơn cùng IP trong 24 giờ và điểm rủi ro do backend chấm.", [0, -210], 1000, 130, 1));
+  nodes.push(sticky("Ghi chú — Phản hồi", "## ② Phản hồi\nĐơn rủi ro ≥70 bị tạm giữ. Gửi Telegram/Gmail độc lập, cập nhật cảnh báo SOC và sự kiện bảo mật.", [1100, -210], 1200, 130, 3));
+
+  const connections = {
+    ["📥 " + spec.triggerLabel]: { main: [[{ node: "🔍 Kiểm tra dữ liệu", type: "main", index: 0 }]] },
+    "🔍 Kiểm tra dữ liệu": { main: [[{ node: "🗄️ Tải đơn hàng", type: "main", index: 0 }]] },
+    "🗄️ Tải đơn hàng": { main: [[{ node: "🧮 Chấm điểm & Soạn cảnh báo", type: "main", index: 0 }]] },
+    "🧮 Chấm điểm & Soạn cảnh báo": { main: [[{ node: "⚠️ Rủi ro cao?", type: "main", index: 0 }]] },
+    "⚠️ Rủi ro cao?": { main: [
+      [{ node: "🔒 Tạm giữ đơn hàng", type: "main", index: 0 }],
+      [{ node: "✅ Đơn trong ngưỡng", type: "main", index: 0 }],
+    ] },
+    "🔒 Tạm giữ đơn hàng": { main: [[{ node: "📱 Telegram sẵn sàng?", type: "main", index: 0 }]] },
+    "✅ Đơn trong ngưỡng": { main: [[{ node: "📱 Telegram sẵn sàng?", type: "main", index: 0 }]] },
+    "📱 Telegram sẵn sàng?": { main: [
+      [{ node: "📱 Gửi Telegram", type: "main", index: 0 }],
+      [{ node: "📧 Gmail sẵn sàng?", type: "main", index: 0 }],
+    ] },
+    "📱 Gửi Telegram": { main: [[{ node: "📧 Gmail sẵn sàng?", type: "main", index: 0 }]] },
+    "📧 Gmail sẵn sàng?": { main: [
+      [{ node: "📧 Gửi Gmail (SMTP)", type: "main", index: 0 }],
+      [{ node: "📝 Ghi nhận phản hồi", type: "main", index: 0 }],
+    ] },
+    "📧 Gửi Gmail (SMTP)": { main: [[{ node: "📝 Ghi nhận phản hồi", type: "main", index: 0 }]] },
+    "📝 Ghi nhận phản hồi": { main: [[{ node: "🏁 Kết thúc phiên chạy", type: "main", index: 0 }]] },
   };
 
   return {

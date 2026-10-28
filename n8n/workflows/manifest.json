@@ -1,5 +1,5 @@
 {
-  "nodeCount": 84,
+  "nodeCount": 97,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -32,6 +32,14 @@
       "stickyNotes": 3,
       "connections": 16,
       "file": "n8n/workflows/compliance-evidence.json"
+    },
+    {
+      "id": "ecommerce-fraud-response",
+      "name": "Phản hồi Gian lận Thương mại điện tử",
+      "executable": 13,
+      "stickyNotes": 3,
+      "connections": 12,
+      "file": "n8n/workflows/ecommerce-fraud-response.json"
     },
     {
       "id": "live-attack-monitor",
