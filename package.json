@@ -4,7 +4,9 @@
   "private": true,
   "description": "MedicareGuard SOC — full-stack security operations platform for healthcare",
   "scripts": {
-    "screenshots": "node scripts/capture-screenshots.mjs"
+    "screenshots": "node scripts/capture-screenshots.mjs",
+    "db:backup": "bash scripts/backup-db.sh",
+    "db:restore": "bash scripts/restore-db.sh"
   },
   "devDependencies": {
     "playwright": "^1.64.1"
