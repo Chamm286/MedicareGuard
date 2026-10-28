@@ -117,7 +117,7 @@ const workflows = [
     version: "1.0.0",
     owner: "SOC Automation",
     targetSla: "5 minutes",
-    nodeCount: 17,
+    nodeCount: 18,
     tags: ["monitoring", "telegram", "gmail", "on-call"],
     integrations: ["Telegram Bot API", "Gmail SMTP", "PostgreSQL"],
     stages: [

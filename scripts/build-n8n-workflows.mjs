@@ -14,7 +14,7 @@ const stageNotes = [
   { x: 0, title: "① Detect", color: 1, detail: "Receive the webhook, validate the payload and load the affected record." },
   { x: 300, title: "② Enrich", color: 2, detail: "Collect EDR, identity, sandbox, CVE or evidence context and asset ownership." },
   { x: 600, title: "③ Decide", color: 3, detail: "Score business risk, route the case and open the right incident." },
-  { x: 900, title: "④ Notify", color: 4, detail: "Send Telegram and Gmail alerts with a direct link back to the console." },
+  { x: 900, title: "④ Notify", color: 4, detail: "Telegram pushes to the on-call phone and Gmail sends the audit copy. Each channel is gated independently." },
   { x: 1200, title: "⑤ Respond", color: 5, detail: "Run containment or remediation and verify that the action held." },
   { x: 1500, title: "⑥ Close", color: 6, detail: "Mark the record, write evidence and finalize the n8n execution." },
 ];
@@ -32,6 +32,7 @@ const positions = {
   mergeCase: [600, 320],
   gate: [600, 480],
   notifyGate: [780, 320],
+  gmailGate: [780, 480],
   telegram: [900, 0],
   gmail: [900, 160],
   actionA: [900, 320],
@@ -49,6 +50,7 @@ const positions = {
   monitorGate: [300, 320],
   monitorRecipients: [600, 0],
   monitorNotifyGate: [780, 160],
+  monitorGmailGate: [780, 320],
   monitorTelegram: [600, 160],
   monitorGmail: [600, 320],
   monitorInApp: [900, 0],
@@ -165,11 +167,11 @@ const workflowSpecs = [
     entityType: "alert",
     recordName: "ransomware alert",
     stageSummary: "EDR isolation · C2 block · P1 escalation · forensic evidence",
-    loadQuery: `SELECT id, title, severity, status, source, source_ip, risk_score, asset_id, metadata, detected_at
-FROM alerts WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
-    assetQuery: `SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email
-FROM assets a LEFT JOIN users u ON u.id = a.owner_id
-WHERE a.id = (SELECT asset_id FROM alerts WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}') LIMIT 1;`,
+    loadQuery: `SELECT al.id, al.title, al.severity, al.status, al.source, al.source_ip, al.risk_score, al.asset_id, al.metadata, al.detected_at,
+  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,
+  u.full_name AS asset_owner_name, u.email AS asset_owner_email
+FROM alerts al LEFT JOIN assets a ON a.id = al.asset_id LEFT JOIN users u ON u.id = a.owner_id
+WHERE al.id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
     criticalCaseName: "Open P1 Incident",
     criticalCaseQuery: `INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)
 VALUES ('Ransomware containment — automated P1', 'n8n isolated the endpoint, blocked command-and-control and preserved forensic evidence.',
@@ -206,11 +208,11 @@ WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' RETURNING id, sta
     entityType: "alert",
     recordName: "phishing alert",
     stageSummary: "Sandbox detonation · mailbox purge · credential reset · reporter closure",
-    loadQuery: `SELECT id, title, severity, status, source, source_ip, risk_score, asset_id, metadata, detected_at
-FROM alerts WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
-    assetQuery: `SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email
-FROM assets a LEFT JOIN users u ON u.id = a.owner_id
-WHERE a.id = (SELECT asset_id FROM alerts WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}') LIMIT 1;`,
+    loadQuery: `SELECT al.id, al.title, al.severity, al.status, al.source, al.source_ip, al.risk_score, al.asset_id, al.metadata, al.detected_at,
+  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,
+  u.full_name AS asset_owner_name, u.email AS asset_owner_email
+FROM alerts al LEFT JOIN assets a ON a.id = al.asset_id LEFT JOIN users u ON u.id = a.owner_id
+WHERE al.id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
     criticalCaseName: "Open P1 Incident",
     criticalCaseQuery: `INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)
 VALUES ('Phishing credential compromise — automated P1', 'n8n detonated the payload, purged matching mail and forced credential rotation.',
@@ -247,11 +249,11 @@ WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' RETURNING id, sta
     entityType: "vulnerability",
     recordName: "vulnerability",
     stageSummary: "EPSS/KEV scoring · owner routing · patch orchestration · SLA evidence",
-    loadQuery: `SELECT id, title, severity, status, cvss_score, cve_id, asset_id, description, metadata
-FROM vulnerabilities WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
-    assetQuery: `SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email
-FROM assets a LEFT JOIN users u ON u.id = a.owner_id
-WHERE a.id = (SELECT asset_id FROM vulnerabilities WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}') LIMIT 1;`,
+    loadQuery: `SELECT v.id, v.title, v.severity, v.status, v.cvss_score, v.cve_id, v.asset_id, v.description, v.metadata,
+  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,
+  u.full_name AS asset_owner_name, u.email AS asset_owner_email
+FROM vulnerabilities v LEFT JOIN assets a ON a.id = v.asset_id LEFT JOIN users u ON u.id = a.owner_id
+WHERE v.id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
     criticalCaseName: "Open Remediation Incident",
     criticalCaseQuery: `INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)
 VALUES ('Critical vulnerability SLA breach — automated escalation', 'n8n correlated EPSS, KEV and asset criticality and opened a remediation incident.',
@@ -288,10 +290,10 @@ WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' RETURNING id, sta
     entityType: "compliance_control",
     recordName: "compliance control",
     stageSummary: "Identity/endpoint/audit evidence · immutable pack · auditor report",
-    loadQuery: `SELECT id, framework, control_id, title, status, score, owner_id, description, metadata
-FROM compliance_controls WHERE id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
-    assetQuery: `SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email
-FROM assets a LEFT JOIN users u ON u.id = a.owner_id ORDER BY a.risk_score DESC LIMIT 1;`,
+    loadQuery: `SELECT c.id, c.framework, c.control_id, c.title, c.status, c.score, c.owner_id, c.description, c.metadata,
+  u.full_name AS asset_owner_name, u.email AS asset_owner_email
+FROM compliance_controls c LEFT JOIN users u ON u.id = c.owner_id
+WHERE c.id = '${sqlRef("Validate Webhook Payload", "entityId")}' LIMIT 1;`,
     criticalCaseName: "Open Control Gap",
     criticalCaseQuery: `INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)
 VALUES ('Compliance control gap — automated escalation', 'n8n detected a control gap while assembling immutable evidence.',
@@ -392,7 +394,7 @@ return [{ json: { ...body, entityId, executionId, workflowId: '${spec.id}', work
   const scoreCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
 const base = read('Validate Webhook Payload');
 const record = read('${spec.loadName}');
-const asset = read('Load Asset Ownership');
+const asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };
 const primary = read('${spec.enrichA[0]}');
 const reputation = read('${spec.enrichB[0]}');
 const severity = String(record.severity || record.status || 'medium').toLowerCase();
@@ -405,7 +407,7 @@ if (record.score !== undefined && record.cvss_score === undefined) riskScore = 1
 riskScore = Math.max(1, Math.min(100, riskScore || 50));
 return [{ json: { ...base, record, asset, primary, reputation, riskScore, severity: severity || 'medium', workflowName: '${spec.name}', entityId: base.entityId, entityType: '${spec.entityType}', correlationId: base.executionId.slice(0, 8) } }];`;
 
-  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: true, telegram_alert: true }, message: 'n8n completed ${spec.name} for execution ' + $('Validate Webhook Payload').first().json.executionId`;
+  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('Validate Webhook Payload').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('Score Risk & Build Alert').first().json.riskScore, verified: true, stages_completed: 5, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n completed ${spec.name} for execution ' + $('Validate Webhook Payload').first().json.executionId`;
 
   const nodes = [
     node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.webhook, { webhookId: id() }),
@@ -413,13 +415,13 @@ return [{ json: { ...base, record, asset, primary, reputation, riskScore, severi
     postgres(spec.loadName, spec.loadQuery, positions.load),
     simulate(spec.enrichA[0], spec.enrichA[1], positions.enrichA, spec.enrichA[2]),
     simulate(spec.enrichB[0], spec.enrichB[1], positions.enrichB, spec.enrichB[2]),
-    postgres("Load Asset Ownership", spec.assetQuery, positions.loadAsset),
     code("Score Risk & Build Alert", scoreCode, positions.score),
     ifNode("Impact Gate", `={{ $json.riskScore }}`, 70, positions.gate),
     postgres(spec.criticalCaseName, spec.criticalCaseQuery, positions.criticalCase),
     postgres(spec.standardCaseName, spec.standardCaseQuery, positions.standardCase),
     node("Merge Case Handling", "n8n-nodes-base.merge", 3, { mode: "append", numberInputs: 2, options: {} }, positions.mergeCase),
-    ifNode("Notifications Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}", true, positions.notifyGate),
+    ifNode("Telegram Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.notifyGate),
+    ifNode("Gmail Ready?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.gmailGate),
     telegramNode(spec, positions.telegram),
     gmailNode(spec, positions.gmail),
     simulate(spec.actionA[0], spec.actionA[1], positions.actionA, spec.actionA[2]),
@@ -433,15 +435,14 @@ return [{ json: { ...base, record, asset, primary, reputation, riskScore, severi
   stageNotes.forEach((stage) => {
     nodes.push(sticky(`Sticky Note — ${stage.title}`, `## ${stage.title}\n${stage.detail}`, [stage.x, -260], 260, 160, stage.color));
   });
-  nodes.push(sticky("Sticky Note — Workflow Overview", `# ${spec.name}\n${spec.stageSummary}\n\n**Trigger:** webhook \`${spec.webhookPath}\` · **Nodes:** 20 · **Alerts:** Telegram + Gmail · **Owner:** SOC Automation`, [0, -520], 1300, 200, 4));
+  nodes.push(sticky("Sticky Note — Workflow Overview", `# ${spec.name}\n${spec.stageSummary}\n\n**Trigger:** webhook \`${spec.webhookPath}\` · **Nodes:** 20 · **Alerts:** 🟢 Telegram + 🔵 Gmail · **Owner:** SOC Automation`, [0, -520], 1300, 200, 4));
 
   const connections = {
     ["Webhook — " + spec.triggerLabel]: { main: [[{ node: "Validate Webhook Payload", type: "main", index: 0 }]] },
     "Validate Webhook Payload": { main: [[{ node: spec.loadName, type: "main", index: 0 }]] },
     [spec.loadName]: { main: [[{ node: spec.enrichA[0], type: "main", index: 0 }]] },
     [spec.enrichA[0]]: { main: [[{ node: spec.enrichB[0], type: "main", index: 0 }]] },
-    [spec.enrichB[0]]: { main: [[{ node: "Load Asset Ownership", type: "main", index: 0 }]] },
-    "Load Asset Ownership": { main: [[{ node: "Score Risk & Build Alert", type: "main", index: 0 }]] },
+    [spec.enrichB[0]]: { main: [[{ node: "Score Risk & Build Alert", type: "main", index: 0 }]] },
     "Score Risk & Build Alert": { main: [[{ node: "Impact Gate", type: "main", index: 0 }]] },
     "Impact Gate": {
       main: [
@@ -451,14 +452,20 @@ return [{ json: { ...base, record, asset, primary, reputation, riskScore, severi
     },
     [spec.criticalCaseName]: { main: [[{ node: "Merge Case Handling", type: "main", index: 0 }]] },
     [spec.standardCaseName]: { main: [[{ node: "Merge Case Handling", type: "main", index: 1 }]] },
-    "Merge Case Handling": { main: [[{ node: "Notifications Ready?", type: "main", index: 0 }]] },
-    "Notifications Ready?": {
+    "Merge Case Handling": { main: [[{ node: "Telegram Ready?", type: "main", index: 0 }]] },
+    "Telegram Ready?": {
       main: [
         [{ node: "Notify Telegram", type: "main", index: 0 }],
+        [{ node: "Gmail Ready?", type: "main", index: 0 }],
+      ],
+    },
+    "Notify Telegram": { main: [[{ node: "Gmail Ready?", type: "main", index: 0 }]] },
+    "Gmail Ready?": {
+      main: [
+        [{ node: "Notify Gmail", type: "main", index: 0 }],
         [{ node: spec.actionA[0], type: "main", index: 0 }],
       ],
     },
-    "Notify Telegram": { main: [[{ node: "Notify Gmail", type: "main", index: 0 }]] },
     "Notify Gmail": { main: [[{ node: spec.actionA[0], type: "main", index: 0 }]] },
     [spec.actionA[0]]: { main: [[{ node: spec.actionB[0], type: "main", index: 0 }]] },
     [spec.actionB[0]]: { main: [[{ node: spec.verifyAction[0], type: "main", index: 0 }]] },
@@ -497,7 +504,7 @@ return [{ json: { ...base, count: attacks.length, attacks, summary: lines.join('
   const metricsCode = `const base = $('Normalize Monitor Trigger').first().json;
 const built = $('Build Phone Message').first().json;
 const count = Number(built.count || 0);
-return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 17, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'n8n live attack monitor found ' + count + ' new attack(s)' } }];`;
+return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 18, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'n8n live attack monitor found ' + count + ' new attack(s)' } }];`;
 
   const alertText = `$('Build Phone Message').first().json.text`;
   const nodes = [
@@ -516,7 +523,8 @@ FROM (
     code("Build Phone Message", buildMessageCode, positions.monitorBuild),
     ifNode("New Attacks?", `={{ $json.count }}`, 1, positions.monitorGate),
     postgres("Load Alert Recipients", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients),
-    ifNode("Notifications Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.MG_SMTP_USER) }}", true, positions.monitorNotifyGate),
+    ifNode("Telegram Ready?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.monitorNotifyGate),
+    ifNode("Gmail Ready?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.monitorGmailGate),
     node("Notify Telegram", "n8n-nodes-base.httpRequest", 4.2, {
       method: "POST",
       url: "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN || '' }}/sendMessage",
@@ -544,16 +552,16 @@ WHERE severity IN ('critical','high')
 RETURNING id;`, positions.monitorUpdate),
     simulate("Write Audit Evidence", "evidence-write", positions.monitorAudit, `executionId: ${ref("Normalize Monitor Trigger", "executionId")}, workflowId: 'live-attack-monitor', report: 'Live Attack Monitor'`),
     code("Emit Monitor Metrics", metricsCode, positions.monitorMetrics),
-    http("Finalize Execution", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("Normalize Monitor Trigger", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 17, metrics: $json.metrics, message: $json.message`)),
+    http("Finalize Execution", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("Normalize Monitor Trigger", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message`)),
     node("Close Run", "n8n-nodes-base.noOp", 1, {}, positions.monitorClose),
     node("No New Attacks", "n8n-nodes-base.noOp", 1, {}, positions.monitorNoAttacks),
   ];
 
   nodes.push(sticky("Sticky Note — Monitor", "## ① Monitor\nEvery 5 minutes, scan alerts from the last 24 hours that have not been sent to the on-call phone.", [0, -260], 280, 160, 1));
   nodes.push(sticky("Sticky Note — Build Digest", "## ② Build digest\nAggregate up to five high-risk attacks into a readable Telegram and Gmail message.", [300, -260], 280, 160, 2));
-  nodes.push(sticky("Sticky Note — Phone alerts", "## ③ Phone alerts\nTelegram for instant mobile push; Gmail for the audit-friendly inbox copy.", [600, -260], 280, 160, 3));
+  nodes.push(sticky("Sticky Note — Phone alerts", "## ③ Phone alerts\n🟢 Telegram: instant mobile push.\n🔵 Gmail: audit-friendly inbox copy.\nEach channel is gated independently.", [600, -260], 280, 160, 3));
   nodes.push(sticky("Sticky Note — Close", "## ④ Close\nMark alerts as notified, write evidence and finalize the SOC execution log.", [900, -260], 280, 160, 5));
-  nodes.push(sticky("Sticky Note — Overview", "# Live Attack Monitor & Phone Alerts\n5-minute sweep · 17 nodes · Telegram + Gmail · no laptop required\n\n**Trigger:** webhook `mg-attack-monitor` + schedule `*/5 * * * *` · **Owner:** SOC Automation", [0, -520], 1300, 200, 4));
+  nodes.push(sticky("Sticky Note — Overview", "# Live Attack Monitor & Phone Alerts\n5-minute sweep · 18 nodes · Telegram + Gmail · no laptop required\n\n**Trigger:** webhook `mg-attack-monitor` + schedule `*/5 * * * *` · **Owner:** SOC Automation", [0, -520], 1300, 200, 4));
 
   const connections = {
     ["Webhook — " + spec.triggerLabel]: { main: [[{ node: "Normalize Monitor Trigger", type: "main", index: 0 }]] },
@@ -567,14 +575,20 @@ RETURNING id;`, positions.monitorUpdate),
         [{ node: "No New Attacks", type: "main", index: 0 }],
       ],
     },
-    "Load Alert Recipients": { main: [[{ node: "Notifications Ready?", type: "main", index: 0 }]] },
-    "Notifications Ready?": {
+    "Load Alert Recipients": { main: [[{ node: "Telegram Ready?", type: "main", index: 0 }]] },
+    "Telegram Ready?": {
       main: [
         [{ node: "Notify Telegram", type: "main", index: 0 }],
+        [{ node: "Gmail Ready?", type: "main", index: 0 }],
+      ],
+    },
+    "Notify Telegram": { main: [[{ node: "Gmail Ready?", type: "main", index: 0 }]] },
+    "Gmail Ready?": {
+      main: [
+        [{ node: "Notify Gmail", type: "main", index: 0 }],
         [{ node: "Notify In-App", type: "main", index: 0 }],
       ],
     },
-    "Notify Telegram": { main: [[{ node: "Notify Gmail", type: "main", index: 0 }]] },
     "Notify Gmail": { main: [[{ node: "Notify In-App", type: "main", index: 0 }]] },
     "Notify In-App": { main: [[{ node: "Mark Attacks Notified", type: "main", index: 0 }]] },
     "Mark Attacks Notified": { main: [[{ node: "Write Audit Evidence", type: "main", index: 0 }]] },
