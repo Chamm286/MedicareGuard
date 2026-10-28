@@ -1,0 +1,13 @@
+tunnel: <TUNNEL_ID>
+credentials-file: /home/<USER>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: app.example.com
+    service: http://localhost:3000
+  - hostname: api.example.com
+    service: http://localhost:4000
+  - hostname: n8n.example.com
+    service: http://localhost:5678
+  - hostname: db.example.com
+    service: http://localhost:5050
+  - service: http_status:404
