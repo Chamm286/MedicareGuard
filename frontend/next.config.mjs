@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    const backend = process.env.BACKEND_INTERNAL_URL || "http://localhost:4000";
+    return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
+  },
   eslint: { ignoreDuringBuilds: true },
   poweredByHeader: false,
   images: {
