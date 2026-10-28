@@ -51,4 +51,7 @@ n8n-token: ## Mint a 30-day JWT for n8n service calls
 n8n-setup: n8n-build ## Import, publish and activate MedicareGuard workflows in local n8n
 	bash scripts/setup-n8n.sh
 
+alerts-check: ## Verify Telegram + Gmail credentials
+	bash scripts/check-alerts.sh
+
 lint: typecheck ## Alias for typecheck

@@ -97,6 +97,33 @@ const run = async () => {
   });
   results.push({ name: "POST /ai/chat", status: chat.status, ok: chat.ok });
 
+  const suiteResponse = await request("/automation/workflows", { headers });
+  const suite = suiteResponse.body?.data || [];
+  const suiteSummary = suiteResponse.body?.summary || {};
+  const expectedNodes = {
+    "ransomware-containment": 20,
+    "phishing-triage": 20,
+    "vulnerability-sla": 20,
+    "compliance-evidence": 20,
+    "live-attack-monitor": 17,
+  };
+  const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
+  results.push({
+    name: "automation suite exposes 5 workflows",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && suite.length === 5 && suiteSummary.active === 5,
+  });
+  results.push({
+    name: "automation suite totals 97 nodes",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && suiteSummary.nodes === 97,
+  });
+  results.push({
+    name: "automation node counts match the compact design",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && Object.entries(expectedNodes).every(([id, count]) => actualNodes[id] === count),
+  });
+
   const meta = await request("/_meta/endpoints", { headers });
   const total = meta.body.total;
 
