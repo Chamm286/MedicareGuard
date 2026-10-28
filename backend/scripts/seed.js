@@ -38,6 +38,8 @@ const insert = async (table, columns, rows) => {
 };
 
 const TABLES = [
+  "store_security_events", "store_payments", "store_reviews", "store_order_items", "store_orders", "store_cart_items",
+  "store_carts", "store_coupons", "store_products", "store_customers",
   "ai_messages", "ai_conversations", "integrations", "reports", "knowledge_base", "tickets", "settings", "tags",
   "comments", "vendors", "policies", "risk_assessments", "compliance_controls", "phishing_campaigns", "email_events",
   "data_sources", "network_flows", "devices", "agents", "monitors", "metrics", "notifications", "audit_logs",
@@ -953,6 +955,137 @@ const seed = async () => {
         created_at: daysAgo(int(0, 5), 23),
       };
     }),
+  );
+
+
+  // ── Medicare Store (e-commerce) ─────────────────────────────────────────────
+  const storePasswordHash = await bcrypt.hash("Customer@123", config.bcryptRounds);
+  const storeCustomers = await insert(
+    "store_customers",
+    ["email", "password_hash", "full_name", "phone", "address", "city", "country", "country_code"],
+    [
+      ["an.nguyen@example.com", storePasswordHash, "Nguyễn Văn An", "0901 234 567", "12 Nguyễn Huệ, Quận 1", "TP. Hồ Chí Minh", "Việt Nam", "VN"],
+      ["bich.tran@example.com", storePasswordHash, "Trần Thị Bích", "0912 345 678", "45 Lê Lợi, Hải Châu", "Đà Nẵng", "Việt Nam", "VN"],
+      ["cuong.pham@example.com", storePasswordHash, "Phạm Quốc Cường", "0933 456 789", "88 Trần Phú, Ba Đình", "Hà Nội", "Việt Nam", "VN"],
+      ["dung.le@example.com", storePasswordHash, "Lê Thị Dung", "0944 567 890", "21 Nguyễn Trãi, Thanh Xuân", "Hà Nội", "Việt Nam", "VN"],
+    ].map(([email, password_hash, full_name, phone, address, city, country, country_code]) => ({ email, password_hash, full_name, phone, address, city, country, country_code })),
+  );
+
+  const storeProducts = await insert(
+    "store_products",
+    ["sku", "slug", "name", "category", "brand", "description", "price", "sale_price", "stock", "image_url", "rating", "tags", "status"],
+    [
+      ["MG-BP-001", "may-do-huyet-ap-omron-m7", "Máy đo huyết áp Omron M7", "Thiết bị đo", "Omron", "Máy đo huyết áp bắp tay tự động, bộ nhớ 100 lần đo, phát hiện nhịp tim không đều. Phù hợp theo dõi huyết áp tại nhà.", 1890000, 1590000, 48, "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80", 4.8, ["bán chạy", "chính hãng"], "active"],
+      ["MG-BG-002", "may-do-duong-huyet-accu-chek", "Máy đo đường huyết Accu-Chek", "Thiết bị đo", "Roche", "Bộ máy đo đường huyết kèm 50 que thử, kết quả sau 5 giây, kết nối ứng dụng theo dõi sức khỏe.", 1250000, 1090000, 65, "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80", 4.7, ["bán chạy"], "active"],
+      ["MG-WC-003", "xe-lan-y-te-gap-gon", "Xe lăn y tế gấp gọn", "Thiết bị hỗ trợ", "MediCare", "Khung hợp kim nhôm nhẹ, gấp gọn, tải trọng 120 kg, phanh an toàn và đệm ngồi thoáng khí.", 2750000, 2490000, 22, "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=800&q=80", 4.6, ["hỗ trợ vận động"], "active"],
+      ["MG-NB-004", "may-xong-mui-omron-ne-c801", "Máy xông mũi Omron NE-C801", "Sức khỏe hô hấp", "Omron", "Máy khí dung nén cho người lớn và trẻ em, hạt sương mịn, phụ kiện đầy đủ, vận hành êm.", 1450000, 1290000, 37, "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=800&q=80", 4.5, ["hô hấp"], "active"],
+      ["MG-TM-005", "nhiet-ke-hong-ngoai-omron", "Nhiệt kế hồng ngoại Omron", "Thiết bị đo", "Omron", "Đo nhiệt độ trán không tiếp xúc trong 1 giây, cảnh báo sốt bằng màu, phù hợp gia đình.", 690000, 590000, 90, "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80", 4.4, ["gia đình"], "active"],
+      ["MG-MK-006", "khau-trang-y-te-n95-hop-20", "Khẩu trang y tế N95 hộp 20", "Vật tư y tế", "3M", "Khẩu trang N95 lọc bụi mịn, van thở, dây đeo co giãn, hộp 20 chiếc.", 350000, 299000, 180, "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=800&q=80", 4.3, ["vật tư"], "active"],
+      ["MG-SU-007", "vien-uong-bo-sung-vitamin-d3", "Viên uống bổ sung Vitamin D3", "Thực phẩm bổ sung", "NatureCare", "Hỗ trợ hấp thu canxi, tốt cho xương khớp, hộp 60 viên, sản xuất tại Việt Nam.", 280000, 249000, 120, "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=800&q=80", 4.2, ["vitamin"], "active"],
+      ["MG-WD-008", "bo-bang-gac-y-te-vo-trung", "Bộ băng gạc y tế vô trùng", "Chăm sóc vết thương", "MediCare", "Bộ 10 gói băng gạc vô trùng nhiều kích thước, thấm hút tốt, dùng cho chăm sóc vết thương tại nhà.", 120000, 99000, 240, "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=800&q=80", 4.1, ["vật tư"], "active"],
+      ["MG-OT-009", "may-do-nong-do-oxy", "Máy đo nồng độ oxy SpO2", "Thiết bị đo", "Contec", "Máy đo SpO2 đầu ngón tay, màn hình OLED, cảnh báo âm thanh, pin AAA.", 750000, 650000, 55, "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80", 4.6, ["bán chạy"], "active"],
+      ["MG-MS-010", "may-massage-cam-tay", "Máy massage cầm tay trị liệu", "Thiết bị hỗ trợ", "HealthPro", "Máy massage 6 chế độ, 20 cường độ, sạc USB, hỗ trợ thư giãn cơ và giảm đau nhức.", 890000, 790000, 42, "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=800&q=80", 4.3, ["thư giãn"], "active"],
+      ["MG-SC-011", "ghe-y-te-co-lung-tua", "Ghế y tế có lưng tựa", "Thiết bị hỗ trợ", "MediCare", "Ghế chăm sóc bệnh nhân, khung thép chắc chắn, đệm chống thấm, tay vịn có thể tháo.", 3200000, 2890000, 15, "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=800&q=80", 4.0, ["hỗ trợ"], "active"],
+      ["MG-SP-012", "dung-dich-rua-tay-khuan", "Dung dịch rửa tay khô 500ml", "Vật tư y tế", "Sạch", "Dung dịch rửa tay khô 70% ethanol, diệt khuẩn 99.9%, có dưỡng ẩm, chai 500ml.", 85000, 69000, 300, "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=800&q=80", 4.0, ["vệ sinh"], "active"],
+    ].map(([sku, slug, name, category, brand, description, price, sale_price, stock, image_url, rating, tags, status]) => ({ sku, slug, name, category, brand, description, price, sale_price, stock, image_url, rating, tags, status })),
+  );
+
+  await insert(
+    "store_coupons",
+    ["code", "type", "value", "min_subtotal", "max_uses", "used_count", "active", "expires_at"],
+    [
+      ["MEDICARE10", "percent", 10, 500000, 500, 42, true, daysAgo(-90)],
+      ["VIP20", "percent", 20, 2000000, 100, 7, true, daysAgo(-60)],
+      ["FREESHIP", "fixed", 30000, 300000, 1000, 128, true, daysAgo(-120)],
+    ].map(([code, type, value, min_subtotal, max_uses, used_count, active, expires_at]) => ({ code, type, value, min_subtotal, max_uses, used_count, active, expires_at })),
+  );
+
+  const storeOrderSeed = [
+    { customer: 0, status: "delivered", payment_status: "paid", payment_method: "card", city: "TP. Hồ Chí Minh", ip: "113.161.72.18", country: "Việt Nam", cc: "VN", risk: 12, flags: [], items: [[0, 1], [1, 2]], days: 8 },
+    { customer: 1, status: "processing", payment_status: "paid", payment_method: "bank_transfer", city: "Đà Nẵng", ip: "14.161.22.9", country: "Việt Nam", cc: "VN", risk: 18, flags: [], items: [[2, 1], [5, 3]], days: 5 },
+    { customer: 2, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Hà Nội", ip: "77.35.40.181", country: "Hà Lan", cc: "NL", risk: 82, flags: ["ip_country_mismatch", "high_value_order", "card_high_value"], items: [[10, 2], [0, 1]], days: 2 },
+    { customer: 3, status: "pending", payment_status: "unpaid", payment_method: "cod", city: "Hà Nội", ip: "10.20.4.88", country: "Việt Nam", cc: "VN", risk: 8, flags: [], items: [[4, 2], [7, 4]], days: 1 },
+    { customer: 0, status: "cancelled", payment_status: "unpaid", payment_method: "cod", city: "TP. Hồ Chí Minh", ip: "113.161.72.18", country: "Việt Nam", cc: "VN", risk: 10, flags: [], items: [[6, 1]], days: 3 },
+    { customer: null, status: "on_hold", payment_status: "unpaid", payment_method: "card", city: "Singapore", ip: "203.83.3.123", country: "Singapore", cc: "SG", risk: 76, flags: ["ip_country_mismatch", "guest_checkout", "card_high_value"], items: [[9, 3], [3, 1]], days: 1 },
+  ];
+
+  const storeOrders = [];
+  const storeOrderItems = [];
+  for (const [index, entry] of storeOrderSeed.entries()) {
+    const customer = entry.customer === null ? null : storeCustomers[entry.customer];
+    const lineItems = entry.items.map(([productIndex, quantity]) => {
+      const product = storeProducts[productIndex];
+      const unit = Number(product.sale_price ?? product.price);
+      return { product, quantity, unit, lineTotal: unit * quantity };
+    });
+    const subtotal = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const shippingFee = subtotal >= 500000 ? 0 : 30000;
+    const tax = Math.round(subtotal * 0.08);
+    const total = subtotal + shippingFee + tax;
+    const createdAt = daysAgo(entry.days, 6);
+    const order = {
+      order_number: `MG-${new Date(createdAt).toISOString().slice(0, 10).replace(/-/g, "")}-${1001 + index}`,
+      customer_id: customer?.id || null,
+      status: entry.status,
+      payment_status: entry.payment_status,
+      payment_method: entry.payment_method,
+      subtotal, discount: 0, shipping_fee: shippingFee, tax, total,
+      shipping_name: customer?.full_name || "Khách vãng lai",
+      shipping_email: customer?.email || "guest@example.com",
+      shipping_phone: customer?.phone || "0900 000 000",
+      shipping_address: customer?.address || "1 Marina Boulevard",
+      shipping_city: entry.city,
+      shipping_country: entry.country,
+      shipping_country_code: entry.cc,
+      risk_score: entry.risk,
+      fraud_flags: entry.flags,
+      ip_address: entry.ip,
+      ip_country: entry.country,
+      ip_country_code: entry.cc,
+      ip_source: entry.ip.startsWith("10.") ? "socket" : "x-forwarded-for",
+      user_agent: "MedicareStore-Demo/1.0",
+      metadata: JSON.stringify({ seeded: true, scenario: entry.risk >= 70 ? "fraud-review" : "normal" }),
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const created = await insert("store_orders", Object.keys(order), [order]);
+    storeOrders.push(created[0]);
+    for (const item of lineItems) {
+      storeOrderItems.push({
+        order_id: created[0].id,
+        product_id: item.product.id,
+        sku: item.product.sku,
+        name: item.product.name,
+        quantity: item.quantity,
+        unit_price: item.unit,
+        line_total: item.lineTotal,
+        image_url: item.product.image_url,
+        created_at: createdAt,
+      });
+    }
+  }
+  await insert("store_order_items", ["order_id", "product_id", "sku", "name", "quantity", "unit_price", "line_total", "image_url", "created_at"], storeOrderItems);
+
+  await insert(
+    "store_reviews",
+    ["product_id", "customer_id", "rating", "title", "body", "status", "created_at"],
+    [
+      [storeProducts[0].id, storeCustomers[0].id, 5, "Rất chính xác", "Máy đo ổn định, so với kết quả ở bệnh viện không chênh lệch. Giao hàng nhanh.", "published", daysAgo(6)],
+      [storeProducts[1].id, storeCustomers[1].id, 5, "Dễ sử dụng", "Que thử lấy kết quả nhanh, ứng dụng theo dõi đường huyết rất tiện.", "published", daysAgo(4)],
+      [storeProducts[3].id, storeCustomers[2].id, 4, "Máy êm", "Máy xông hoạt động êm, phụ kiện đầy đủ. Đóng gói cẩn thận.", "published", daysAgo(3)],
+      [storeProducts[5].id, storeCustomers[3].id, 4, "Hàng chuẩn", "Khẩu trang dày, đeo kín. Giá hợp lý so với cửa hàng.", "published", daysAgo(2)],
+      [storeProducts[8].id, storeCustomers[0].id, 5, "Theo dõi sức khỏe tốt", "Máy đo oxy nhỏ gọn, màn hình rõ, pin lâu.", "published", daysAgo(1)],
+    ].map(([product_id, customer_id, rating, title, body, status, created_at]) => ({ product_id, customer_id, rating, title, body, status, created_at })),
+  );
+
+  await insert(
+    "store_security_events",
+    ["event_type", "severity", "ip_address", "country", "country_code", "order_id", "risk_score", "metadata", "created_at"],
+    [
+      ["checkout_fraud_review", "high", "77.35.40.181", "Hà Lan", "NL", storeOrders[2].id, 82, JSON.stringify({ flags: ["ip_country_mismatch", "high_value_order"] }), daysAgo(2)],
+      ["checkout_fraud_review", "high", "203.83.3.123", "Singapore", "SG", storeOrders[5].id, 76, JSON.stringify({ flags: ["ip_country_mismatch", "guest_checkout"] }), daysAgo(1)],
+      ["payment_velocity", "medium", "113.161.72.18", "Việt Nam", "VN", storeOrders[0].id, 45, JSON.stringify({ attempts: 3 }), daysAgo(8)],
+    ].map(([event_type, severity, ip_address, country, country_code, order_id, risk_score, metadata, created_at]) => ({ event_type, severity, ip_address, country, country_code, order_id, risk_score, metadata, created_at })),
   );
 
   logger.info("Seed completed", {
