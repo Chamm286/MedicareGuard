@@ -72,7 +72,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query(`${ASSET_SELECT} WHERE a.id = $1`, [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Asset not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -109,7 +109,7 @@ router.get(
   "/:id/risk",
   asyncHandler(async (req, res) => {
     const asset = await query("SELECT * FROM assets WHERE id = $1", [req.params.id]);
-    if (!asset.rows.length) throw new HttpError(404, "Asset not found");
+    if (!asset.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
     const [alerts, vulns, incidents] = await Promise.all([
       query("SELECT count(*)::int AS c, count(*) FILTER (WHERE severity IN ('critical','high'))::int AS h FROM alerts WHERE asset_id = $1 AND status NOT IN ('resolved','false_positive')", [req.params.id]),
       query("SELECT count(*)::int AS c, coalesce(max(cvss_score),0) AS max_cvss FROM vulnerabilities WHERE asset_id = $1 AND status = 'open'", [req.params.id]),
@@ -128,7 +128,7 @@ router.post(
   requirePermission("assets:write"),
   asyncHandler(async (req, res) => {
     const { name, type = "server", category, hostname, ip_address, mac_address, os, owner_id, department, location, criticality = "medium", status = "online", risk_score = 20, tags = [], metadata = {} } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const result = await query(
       `INSERT INTO assets (name, type, category, hostname, ip_address, mac_address, os, owner_id, department, location, criticality, status, risk_score, tags, last_seen, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15) RETURNING *`,
@@ -144,7 +144,7 @@ router.post(
   requirePermission("assets:write"),
   asyncHandler(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
-    if (!items.length) throw new HttpError(400, "items array is required");
+    if (!items.length) throw new HttpError(400, "Mảng items là bắt buộc");
     const rows = [];
     for (const item of items) {
       if (!item.name) continue;
@@ -162,11 +162,11 @@ router.post(
 const updateAsset = asyncHandler(async (req, res) => {
   const allowed = ["name", "type", "category", "hostname", "ip_address", "mac_address", "os", "owner_id", "department", "location", "criticality", "status", "risk_score", "tags", "metadata"];
   const fields = allowed.filter((field) => req.body[field] !== undefined);
-  if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+  if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
   const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
   values.push(req.params.id);
   const result = await query(`UPDATE assets SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-  if (!result.rows.length) throw new HttpError(404, "Asset not found");
+  if (!result.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
   await recordAudit({ req, action: "update", resource: "assets", resourceId: req.params.id });
   res.json({ data: result.rows[0] });
 });
@@ -179,13 +179,13 @@ router.post(
   requirePermission("assets:scan"),
   asyncHandler(async (req, res) => {
     const asset = await query("SELECT * FROM assets WHERE id = $1", [req.params.id]);
-    if (!asset.rows.length) throw new HttpError(404, "Asset not found");
+    if (!asset.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
     const result = await query(
       `INSERT INTO scans (name, type, status, target, started_at, findings_count, metadata)
        VALUES ($1,$2,'running',$3,now(),0,$4) RETURNING *`,
-      [`On-demand scan · ${asset.rows[0].name}`, req.body.type || "vulnerability", asset.rows[0].ip_address || asset.rows[0].hostname || asset.rows[0].name, JSON.stringify({ assetId: req.params.id, requestedBy: req.user.email })],
+      [`Quét theo yêu cầu · ${asset.rows[0].name}`, req.body.type || "vulnerability", asset.rows[0].ip_address || asset.rows[0].hostname || asset.rows[0].name, JSON.stringify({ assetId: req.params.id, requestedBy: req.user.email })],
     );
-    await recordActivity({ eventType: "asset_scan", req, resource: "assets", resourceId: req.params.id, action: "scan", message: `Scan queued for ${asset.rows[0].name}` });
+    await recordActivity({ eventType: "asset_scan", req, resource: "assets", resourceId: req.params.id, action: "scan", message: `Đã xếp hàng quét cho ${asset.rows[0].name}` });
     res.status(202).json({ data: result.rows[0] });
   }),
 );
@@ -195,7 +195,7 @@ router.post(
   requirePermission("assets:write"),
   asyncHandler(async (req, res) => {
     const result = await query("UPDATE assets SET owner_id = $1 WHERE id = $2 RETURNING *", [req.body.ownerId || null, req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Asset not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
     await recordAudit({ req, action: "assign_owner", resource: "assets", resourceId: req.params.id, details: { ownerId: req.body.ownerId } });
     res.json({ data: result.rows[0] });
   }),
@@ -206,7 +206,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM assets WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Asset not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy tài sản");
     await recordAudit({ req, action: "delete", resource: "assets", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

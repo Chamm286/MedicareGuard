@@ -8,12 +8,12 @@ const { recordActivity } = require("../services/audit");
 const router = express.Router();
 
 const SUGGESTIONS = [
-  "Summarise the current security posture",
-  "Who are the top 5 attackers right now?",
-  "Which assets have the highest risk score?",
-  "Are any incidents close to breaching SLA?",
-  "Show attack distribution by country",
-  "What should we remediate first?",
+  "Tóm tắt tình hình an ninh hiện tại",
+  "Ai là 5 kẻ tấn công hàng đầu hiện nay?",
+  "Tài sản nào có điểm rủi ro cao nhất?",
+  "Có sự cố nào sắp vi phạm SLA không?",
+  "Hiển thị phân bố tấn công theo quốc gia",
+  "Chúng ta nên khắc phục gì trước?",
   "Tóm tắt tình hình an ninh mạng hôm nay",
   "Tạo kế hoạch khắc phục cho sự cố nghiêm trọng nhất",
 ];
@@ -30,8 +30,8 @@ router.get(
   asyncHandler(async (_req, res) => {
     res.json({
       data: [
-        { id: "medicareguard-analyst", name: "MedicareGuard Analyst", description: "Deterministic SOC copilot grounded on live PostgreSQL data", contextWindow: 128000, default: true },
-        { id: "gpt-4o-mini", name: "OpenAI GPT-4o mini", description: "Optional external reasoning model", requiresKey: true, default: false },
+        { id: "medicareguard-analyst", name: "MedicareGuard Analyst", description: "Trợ lý SOC xác định dựa trên dữ liệu PostgreSQL trực tiếp", contextWindow: 128000, default: true },
+        { id: "gpt-4o-mini", name: "OpenAI GPT-4o mini", description: "Mô hình lập luận bên ngoài tùy chọn", requiresKey: true, default: false },
       ],
     });
   }),
@@ -46,30 +46,30 @@ router.get(
       {
         id: "critical-alerts",
         severity: o.critical_alerts > 0 ? "critical" : "low",
-        title: "Critical alerts require triage",
-        detail: `${o.critical_alerts} critical alerts are unresolved out of ${o.open_alerts} open alerts.`,
-        action: "Open the Alerts queue and prioritise critical severity first.",
+        title: "Cảnh báo nghiêm trọng cần phân loại",
+        detail: `${o.critical_alerts} cảnh báo nghiêm trọng chưa được xử lý trong tổng số ${o.open_alerts} cảnh báo đang mở.`,
+        action: "Mở hàng đợi Cảnh báo và ưu tiên mức nghiêm trọng trước.",
       },
       {
         id: "attack-origin",
         severity: "high",
-        title: `Attack concentration: ${context.countries[0]?.country || "unknown"}`,
-        detail: `${context.countries[0]?.attacks || 0} events observed from ${context.countries[0]?.country || "an unknown origin"}.`,
-        action: "Review geo-blocking policy and notify the threat intelligence team.",
+        title: `Tập trung tấn công: ${context.countries[0]?.country || "không rõ"}`,
+        detail: `${context.countries[0]?.attacks || 0} sự kiện được quan sát từ ${context.countries[0]?.country || "nguồn không rõ"}.`,
+        action: "Rà soát chính sách chặn theo địa lý và thông báo nhóm tình báo mối đe dọa.",
       },
       {
         id: "asset-risk",
         severity: o.high_risk_assets > 3 ? "high" : "medium",
-        title: "High-risk asset exposure",
-        detail: `${o.high_risk_assets} assets have a risk score of 70 or higher. Average estate risk is ${o.avg_asset_risk}.`,
-        action: "Schedule remediation for the top-risk assets and verify backups.",
+        title: "Phơi nhiễm tài sản rủi ro cao",
+        detail: `${o.high_risk_assets} tài sản có điểm rủi ro từ 70 trở lên. Rủi ro trung bình toàn hệ thống là ${o.avg_asset_risk}.`,
+        action: "Lên lịch khắc phục cho các tài sản rủi ro nhất và xác minh bản sao lưu.",
       },
       {
         id: "compliance",
         severity: o.compliance_score < 80 ? "medium" : "low",
-        title: "Compliance posture",
-        detail: `Controls average ${o.compliance_score}% across frameworks.`,
-        action: "Assign owners to failing controls and export the compliance report.",
+        title: "Tình trạng tuân thủ",
+        detail: `Điểm trung bình các kiểm soát là ${o.compliance_score}% trên các khung.`,
+        action: "Giao người phụ trách cho các kiểm soát không đạt và xuất báo cáo tuân thủ.",
       },
     ];
     res.json({ data: insights });
@@ -96,7 +96,7 @@ router.get(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
     const conversation = await query("SELECT * FROM ai_conversations WHERE id = $1", [req.params.id]);
-    if (!conversation.rows.length) throw new HttpError(404, "Conversation not found");
+    if (!conversation.rows.length) throw new HttpError(404, "Không tìm thấy cuộc trò chuyện");
     const messages = await query("SELECT * FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at ASC", [req.params.id]);
     res.json({ data: { ...conversation.rows[0], messages: messages.rows } });
   }),
@@ -106,7 +106,7 @@ router.delete(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM ai_conversations WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Conversation not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cuộc trò chuyện");
     res.json({ deleted: true, id: req.params.id });
   }),
 );
@@ -116,12 +116,12 @@ router.post(
   requirePermission("ai:use"),
   asyncHandler(async (req, res) => {
     const { message, conversationId } = req.body;
-    if (!message || !String(message).trim()) throw new HttpError(400, "message is required");
+    if (!message || !String(message).trim()) throw new HttpError(400, "Nội dung tin nhắn là bắt buộc");
 
     let conversation;
     if (conversationId) {
       const existing = await query("SELECT * FROM ai_conversations WHERE id = $1", [conversationId]);
-      if (!existing.rows.length) throw new HttpError(404, "Conversation not found");
+      if (!existing.rows.length) throw new HttpError(404, "Không tìm thấy cuộc trò chuyện");
       conversation = existing.rows[0];
     } else {
       const created = await query(
@@ -166,11 +166,11 @@ router.post(
         `SELECT a.*, t.category, t.mitre_tactic, t.mitre_technique FROM alerts a LEFT JOIN threats t ON t.id = a.threat_id WHERE a.id = $1`,
         [alertId],
       );
-      if (!result.rows.length) throw new HttpError(404, "Alert not found");
+      if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
       const analysis = await analyzeAlert(result.rows[0]);
       return res.json({ data: { alert: result.rows[0], analysis } });
     }
-    if (!text) throw new HttpError(400, "alertId or text is required");
+    if (!text) throw new HttpError(400, "alertId hoặc text là bắt buộc");
     const intent = intentOf(text);
     const context = await getContext();
     const composed = require("../services/ai").compose(intent, context, text);
@@ -185,13 +185,13 @@ router.post(
     const { alertId, incidentId } = req.body;
     if (alertId) {
       const result = await query("SELECT * FROM alerts WHERE id = $1", [alertId]);
-      if (!result.rows.length) throw new HttpError(404, "Alert not found");
-      return res.json({ data: { summary: `${result.rows[0].title}: ${result.rows[0].severity} severity ${result.rows[0].status} alert from ${result.rows[0].source_ip || "unknown source"}.` } });
+      if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
+      return res.json({ data: { summary: `${result.rows[0].title}: cảnh báo mức ${result.rows[0].severity}, trạng thái ${result.rows[0].status}, nguồn ${result.rows[0].source_ip || "không rõ"}.` } });
     }
     if (incidentId) {
       const result = await query("SELECT * FROM incidents WHERE id = $1", [incidentId]);
-      if (!result.rows.length) throw new HttpError(404, "Incident not found");
-      return res.json({ data: { summary: `${result.rows[0].incident_key}: ${result.rows[0].title} is ${result.rows[0].status} with ${result.rows[0].severity} severity and ${result.rows[0].priority} priority.` } });
+      if (!result.rows.length) throw new HttpError(404, "Không tìm thấy sự cố");
+      return res.json({ data: { summary: `${result.rows[0].incident_key}: ${result.rows[0].title} đang ở trạng thái ${result.rows[0].status}, mức ${result.rows[0].severity}, ưu tiên ${result.rows[0].priority}.` } });
     }
     const context = await getContext();
     const composed = require("../services/ai").compose("overview", context, "summary");
@@ -207,21 +207,21 @@ router.post(
     let target = null;
     if (alertId) {
       const result = await query("SELECT * FROM alerts WHERE id = $1", [alertId]);
-      if (!result.rows.length) throw new HttpError(404, "Alert not found");
+      if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
       target = { type: "alert", data: result.rows[0] };
     } else if (threatId) {
       const result = await query("SELECT * FROM threats WHERE id = $1", [threatId]);
-      if (!result.rows.length) throw new HttpError(404, "Threat not found");
+      if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
       target = { type: "threat", data: result.rows[0] };
     }
     const severity = target?.data.severity || "high";
     const actions = [
-      { step: 1, action: "Contain", detail: severity === "critical" ? "Isolate the host immediately and block the source IP at the edge." : "Block the indicator and increase monitoring for 24 hours." },
-      { step: 2, action: "Eradicate", detail: "Remove persistence mechanisms and rotate exposed credentials." },
-      { step: 3, action: "Recover", detail: "Restore from a validated backup and verify service health." },
-      { step: 4, action: "Learn", detail: "Update detection rules, playbooks and awareness content." },
+      { step: 1, action: "Cô lập", detail: severity === "critical" ? "Cô lập máy chủ ngay lập tức và chặn IP nguồn tại biên." : "Chặn chỉ báo và tăng cường giám sát trong 24 giờ." },
+      { step: 2, action: "Loại bỏ", detail: "Loại bỏ cơ chế duy trì và xoay vòng thông tin xác thực bị lộ." },
+      { step: 3, action: "Phục hồi", detail: "Khôi phục từ bản sao lưu đã xác thực và kiểm tra sức khỏe dịch vụ." },
+      { step: 4, action: "Rút kinh nghiệm", detail: "Cập nhật quy tắc phát hiện, cẩm nang và nội dung nâng cao nhận thức." },
     ];
-    await recordActivity({ eventType: "ai_remediate", req, resource: target?.type || "threats", resourceId: target?.data?.id, action: "remediate", message: "AI remediation plan generated" });
+    await recordActivity({ eventType: "ai_remediate", req, resource: target?.type || "threats", resourceId: target?.data?.id, action: "remediate", message: "Đã tạo kế hoạch khắc phục AI" });
     res.json({ data: { target: target ? { type: target.type, id: target.data.id } : null, severity, eta_hours: severity === "critical" ? 4 : 24, actions } });
   }),
 );
@@ -231,7 +231,7 @@ router.post(
   requirePermission("ai:use"),
   asyncHandler(async (req, res) => {
     const { text } = req.body;
-    if (!text) throw new HttpError(400, "text is required");
+    if (!text) throw new HttpError(400, "Nội dung văn bản là bắt buộc");
     const lower = String(text).toLowerCase();
     const categories = [
       { category: "ransomware", patterns: /(ransom|encrypt|locked|bitcoin)/ },
@@ -253,13 +253,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const { category = "generic", severity = "high" } = req.body;
     const steps = [
-      { order: 1, title: "Validate detection", owner: "L1 Analyst", sla_minutes: 15 },
-      { order: 2, title: "Enrich indicators", owner: "L2 Analyst", sla_minutes: 30 },
-      { order: 3, title: "Contain affected assets", owner: "IR Lead", sla_minutes: severity === "critical" ? 15 : 60 },
-      { order: 4, title: "Eradicate and recover", owner: "Platform Team", sla_minutes: 240 },
-      { order: 5, title: "Post-incident review", owner: "SOC Manager", sla_minutes: 1440 },
+      { order: 1, title: "Xác thực phát hiện", owner: "Chuyên viên L1", sla_minutes: 15 },
+      { order: 2, title: "Làm giàu chỉ báo", owner: "Chuyên viên L2", sla_minutes: 30 },
+      { order: 3, title: "Cô lập tài sản bị ảnh hưởng", owner: "Trưởng nhóm IR", sla_minutes: severity === "critical" ? 15 : 60 },
+      { order: 4, title: "Loại bỏ và phục hồi", owner: "Nhóm nền tảng", sla_minutes: 240 },
+      { order: 5, title: "Rà soát sau sự cố", owner: "Quản lý SOC", sla_minutes: 1440 },
     ];
-    res.json({ data: { name: `${category} response playbook`, category, severity, steps } });
+    res.json({ data: { name: `Cẩm nang ứng phó ${category}`, category, severity, steps } });
   }),
 );
 

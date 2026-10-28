@@ -89,7 +89,7 @@ export function SeverityDonut({ data, height = 190 }: { data: { severity: string
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-display text-2xl font-semibold text-white">{formatNumber(total)}</span>
-        <span className="text-[9px] uppercase tracking-[0.18em] text-slate-500">Total alerts</span>
+        <span className="text-[9px] uppercase tracking-[0.18em] text-slate-500">Tổng số cảnh báo</span>
       </div>
     </div>
   );

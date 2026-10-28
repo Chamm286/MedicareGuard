@@ -89,7 +89,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query(`${ALERT_SELECT} WHERE a.id = $1`, [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Alert not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -111,7 +111,7 @@ router.post(
   "/:id/comments",
   requirePermission("write"),
   asyncHandler(async (req, res) => {
-    if (!req.body.body) throw new HttpError(400, "Comment body is required");
+    if (!req.body.body) throw new HttpError(400, "Nội dung bình luận là bắt buộc");
     const result = await query(
       `INSERT INTO comments (resource, resource_id, author_id, body, metadata)
        VALUES ('alerts',$1,$2,$3,$4) RETURNING *`,
@@ -142,7 +142,7 @@ router.post(
   requirePermission("alerts:write"),
   asyncHandler(async (req, res) => {
     const { title, description, severity = "medium", status = "open", source, source_ip, country, country_code, mitre_tactic, mitre_technique, threat_id, asset_id, assignee_id, risk_score = 50, confidence = 70, tags = [] } = req.body;
-    if (!title) throw new HttpError(400, "title is required");
+    if (!title) throw new HttpError(400, "Tiêu đề là bắt buộc");
     const result = await query(
       `INSERT INTO alerts (title, description, severity, status, source, source_ip, country, country_code, mitre_tactic, mitre_technique, threat_id, asset_id, assignee_id, risk_score, confidence, tags)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
@@ -158,7 +158,7 @@ router.post(
   requirePermission("alerts:write"),
   asyncHandler(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
-    if (!items.length) throw new HttpError(400, "items array is required");
+    if (!items.length) throw new HttpError(400, "Mảng items là bắt buộc");
     const rows = [];
     for (const item of items) {
       if (!item.title) continue;
@@ -179,7 +179,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
-    if (!ids.length) throw new HttpError(400, "ids array is required");
+    if (!ids.length) throw new HttpError(400, "Mảng ids là bắt buộc");
     const result = await query("DELETE FROM alerts WHERE id = ANY($1::uuid[]) RETURNING id", [ids]);
     await recordAudit({ req, action: "bulk_delete", resource: "alerts", details: { ids } });
     res.json({ deleted: result.rowCount, ids: result.rows.map((row) => row.id) });
@@ -189,7 +189,7 @@ router.delete(
 const updateAlert = asyncHandler(async (req, res) => {
   const allowed = ["title", "description", "severity", "status", "source", "source_ip", "country", "country_code", "mitre_tactic", "mitre_technique", "threat_id", "asset_id", "assignee_id", "risk_score", "confidence", "tags", "metadata"];
   const fields = allowed.filter((field) => req.body[field] !== undefined);
-  if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+  if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
   const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
   const extra = [];
   if (req.body.status === "resolved" || req.body.status === "false_positive") extra.push("resolved_at = now()");
@@ -197,7 +197,7 @@ const updateAlert = asyncHandler(async (req, res) => {
   values.push(req.params.id);
   const sets = [...fields.map((field, index) => `${field} = $${index + 1}`), ...extra];
   const result = await query(`UPDATE alerts SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-  if (!result.rows.length) throw new HttpError(404, "Alert not found");
+  if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
   await recordAudit({ req, action: "update", resource: "alerts", resourceId: req.params.id, details: { fields } });
   res.json({ data: result.rows[0] });
 });
@@ -216,14 +216,14 @@ router.patch(
       `UPDATE alerts SET status = $1, resolved_at = CASE WHEN $1 IN ('resolved','false_positive') THEN now() ELSE NULL END WHERE id = $2 RETURNING *`,
       [status, req.params.id],
     );
-    if (!result.rows.length) throw new HttpError(404, "Alert not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
     await recordActivity({
       eventType: "alert_status",
       req,
       resource: "alerts",
       resourceId: req.params.id,
       action: "status_change",
-      message: `Alert moved to ${status}${note ? `: ${note}` : ""}`,
+      message: `Cảnh báo đã chuyển sang trạng thái ${status}${note ? `: ${note}` : ""}`,
       metadata: { status, note },
     });
     res.json({ data: result.rows[0] });
@@ -236,7 +236,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { assigneeId } = req.body;
     const result = await query("UPDATE alerts SET assignee_id = $1 WHERE id = $2 RETURNING *", [assigneeId || null, req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Alert not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
     await recordActivity({ eventType: "alert_assign", req, resource: "alerts", resourceId: req.params.id, action: "assign", message: `Alert assigned to ${assigneeId || "unassigned"}` });
     res.json({ data: result.rows[0] });
   }),
@@ -252,8 +252,8 @@ router.post(
       "UPDATE alerts SET status = $1, resolved_at = now(), metadata = metadata || $2 WHERE id = $3 RETURNING *",
       [status, JSON.stringify({ rootCause: rootCause || null, resolvedBy: req.user.email }), req.params.id],
     );
-    if (!result.rows.length) throw new HttpError(404, "Alert not found");
-    await recordActivity({ eventType: "alert_resolve", req, resource: "alerts", resourceId: req.params.id, action: "resolve", message: `Alert ${status}`, metadata: { rootCause } });
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
+    await recordActivity({ eventType: "alert_resolve", req, resource: "alerts", resourceId: req.params.id, action: "resolve", message: `Cảnh báo ${status}`, metadata: { rootCause } });
     res.json({ data: result.rows[0] });
   }),
 );
@@ -263,7 +263,7 @@ router.post(
   requirePermission("alerts:write"),
   asyncHandler(async (req, res) => {
     const alert = await query("SELECT * FROM alerts WHERE id = $1", [req.params.id]);
-    if (!alert.rows.length) throw new HttpError(404, "Alert not found");
+    if (!alert.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
     const source = alert.rows[0];
     const incidentKey = `INC-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
     const incident = await withTransaction(async (client) => {
@@ -271,7 +271,7 @@ router.post(
         `INSERT INTO incidents (title, description, severity, status, priority, category, assignee_id, reporter_id, incident_key, detected_at, impact)
          VALUES ($1,$2,$3,'open',$4,'security',$5,$6,$7,$8,$9) RETURNING *`,
         [
-          `Escalated: ${source.title}`,
+          `Đã leo thang: ${source.title}`,
           source.description,
           source.severity,
           source.severity === "critical" ? "P1" : "P2",
@@ -279,13 +279,13 @@ router.post(
           req.user.id,
           incidentKey,
           source.detected_at,
-          `Derived from alert ${source.id}`,
+          `Bắt nguồn từ cảnh báo ${source.id}`,
         ],
       );
       await client.query("UPDATE alerts SET status = 'investigating', metadata = metadata || $1 WHERE id = $2", [JSON.stringify({ incidentId: created.rows[0].id }), source.id]);
       return created.rows[0];
     });
-    await recordActivity({ eventType: "alert_escalate", req, resource: "alerts", resourceId: req.params.id, action: "escalate", message: `Escalated to incident ${incidentKey}` });
+    await recordActivity({ eventType: "alert_escalate", req, resource: "alerts", resourceId: req.params.id, action: "escalate", message: `Đã leo thang thành sự cố ${incidentKey}` });
     res.status(201).json({ data: incident });
   }),
 );
@@ -295,7 +295,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM alerts WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Alert not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
     await recordAudit({ req, action: "delete", resource: "alerts", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

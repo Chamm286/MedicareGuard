@@ -11,6 +11,8 @@ const logger = require("./utils/logger");
 const { notFound, errorHandler } = require("./middleware/error");
 const { authenticate } = require("./middleware/auth");
 const { enumerateRoutes } = require("./utils/routes");
+const swaggerUiDist = require("swagger-ui-dist");
+const { buildOpenApi } = require("./openapi");
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
@@ -25,6 +27,8 @@ const statsRoutes = require("./routes/stats");
 const reportRoutes = require("./routes/reports");
 const aiRoutes = require("./routes/ai");
 const automationRoutes = require("./routes/automation");
+const demoRoutes = require("./routes/demo");
+const storeRoutes = require("./routes/store");
 const systemRoutes = require("./routes/system");
 const { buildGenericRouter } = require("./routes/generic");
 const { recordActivity } = require("./services/audit");
@@ -39,7 +43,8 @@ app.use(
       if (!origin) return callback(null, true);
       if (config.corsOrigins.includes("*") || config.corsOrigins.includes(origin)) return callback(null, true);
       if (!config.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
-      return callback(new Error("Origin not allowed by CORS"));
+      if (!config.isProduction && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) return callback(null, true);
+      return callback(new Error("Nguồn gốc không được CORS cho phép"));
     },
     credentials: true,
   }),
@@ -74,15 +79,59 @@ app.use(`${api}/stats`, authenticate, statsRoutes);
 app.use(`${api}/reports`, authenticate, reportRoutes);
 app.use(`${api}/ai`, authenticate, aiRoutes);
 app.use(`${api}/automation`, authenticate, automationRoutes);
+app.use(`${api}/demo`, demoRoutes);
+app.use(`${api}/store`, storeRoutes);
 app.use(`${api}`, buildGenericRouter());
 
-app.get("/", (_req, res) => res.json({ service: "MedicareGuard SOC API", docs: `${api}/_meta/endpoints`, health: `${api}/health` }));
-
-app.use(notFound);
-app.use(errorHandler);
+app.get("/", (_req, res) => res.json({ service: "MedicareGuard SOC API", docs: `${api}/docs`, openapi: `${api}/openapi.json`, endpoints: `${api}/_meta/endpoints`, health: `${api}/health` }));
 
 const routes = enumerateRoutes(app);
 const apiRoutes = routes.filter((route) => route.path.startsWith(api));
+const openapi = buildOpenApi(apiRoutes, config);
+
+app.get(`${api}/openapi.json`, (_req, res) => res.json(openapi));
+app.use(`${api}/swagger-ui`, express.static(swaggerUiDist.absolutePath(), { maxAge: "1h" }));
+const docsHtml = `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MedicareGuard SOC API</title>
+  <link rel="stylesheet" href="${api}/swagger-ui/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #f8fafc; }
+    .swagger-ui .topbar { display: none; }
+    .swagger-ui .info .title { color: #0b1220; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="${api}/swagger-ui/swagger-ui-bundle.js"></script>
+  <script src="${api}/swagger-ui/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function () {
+      window.ui = SwaggerUIBundle({
+        url: "${api}/openapi.json",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        filter: true,
+        tagsSorter: "alpha",
+        operationsSorter: "method"
+      });
+    };
+  </script>
+</body>
+</html>`;
+app.get([`${api}/docs`, `${api}/docs/`], (_req, res) => {
+  res.removeHeader("Content-Security-Policy");
+  res.type("html").send(docsHtml);
+});
+
+app.use(notFound);
+app.use(errorHandler);
 
 const start = async () => {
   try {

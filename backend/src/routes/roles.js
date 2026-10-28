@@ -39,7 +39,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM roles WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Role not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy vai trò");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -59,7 +59,7 @@ router.get(
   "/:id/permissions",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT permissions FROM roles WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Role not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy vai trò");
     res.json({ data: result.rows[0].permissions });
   }),
 );
@@ -69,7 +69,7 @@ router.post(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const { name, description, permissions = [], level = 1 } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const result = await query(
       "INSERT INTO roles (name, description, permissions, level) VALUES ($1,$2,$3,$4) RETURNING *",
       [name, description || null, permissions, level],
@@ -84,14 +84,14 @@ router.put(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const fields = ["name", "description", "permissions", "level"].filter((field) => req.body[field] !== undefined);
-    if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+    if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
     const values = fields.map((field) => req.body[field]);
     values.push(req.params.id);
     const result = await query(
       `UPDATE roles SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`,
       values,
     );
-    if (!result.rows.length) throw new HttpError(404, "Role not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy vai trò");
     await recordAudit({ req, action: "update", resource: "roles", resourceId: req.params.id });
     res.json({ data: result.rows[0] });
   }),
@@ -102,9 +102,9 @@ router.patch(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const { permissions } = req.body;
-    if (!Array.isArray(permissions)) throw new HttpError(400, "permissions must be an array");
+    if (!Array.isArray(permissions)) throw new HttpError(400, "Quyền phải là một mảng");
     const result = await query("UPDATE roles SET permissions = $1 WHERE id = $2 RETURNING *", [permissions, req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Role not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy vai trò");
     await recordAudit({ req, action: "update_permissions", resource: "roles", resourceId: req.params.id, details: { permissions } });
     res.json({ data: result.rows[0] });
   }),
@@ -115,9 +115,9 @@ router.delete(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const usage = await query("SELECT count(*)::int AS count FROM users WHERE role_id = $1", [req.params.id]);
-    if (usage.rows[0].count > 0) throw new HttpError(409, "Role is assigned to users and cannot be deleted");
+    if (usage.rows[0].count > 0) throw new HttpError(409, "Vai trò đang được gán cho người dùng và không thể xóa");
     const result = await query("DELETE FROM roles WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Role not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy vai trò");
     await recordAudit({ req, action: "delete", resource: "roles", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

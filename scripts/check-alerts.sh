@@ -55,21 +55,23 @@ if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD
   configured=$((configured + 1))
   to="${MG_ALERT_EMAIL:-${MG_SMTP_USER}}"
   from="${MG_SMTP_FROM:-${MG_SMTP_USER}}"
-  if python3 - "$MG_SMTP_HOST" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "$MG_SMTP_USER" "$MG_SMTP_PASSWORD" "$SEND" "$to" "$from" <<'PY'
+  if python3 - "$MG_SMTP_HOST" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "${MG_SMTP_DISABLE_STARTTLS:-false}" "$MG_SMTP_USER" "$MG_SMTP_PASSWORD" "$SEND" "$to" "$from" <<'PY'
 import smtplib
 import ssl
 import sys
 
-host, port, secure, user, password, send, to, sender = sys.argv[1:]
+host, port, secure, disable_starttls, user, password, send, to, sender = sys.argv[1:]
 port = int(port)
 secure = secure.lower() == "true"
+disable_starttls = disable_starttls.lower() == "true"
 
 try:
     if secure:
         server = smtplib.SMTP_SSL(host, port, timeout=20, context=ssl.create_default_context())
     else:
         server = smtplib.SMTP(host, port, timeout=20)
-        server.starttls(context=ssl.create_default_context())
+        if not disable_starttls and server.has_extn("starttls"):
+            server.starttls(context=ssl.create_default_context())
     server.login(user, password)
     if send == "1":
         message = (

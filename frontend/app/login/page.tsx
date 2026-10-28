@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -11,6 +12,7 @@ import {
   EyeOff,
   Fingerprint,
   Globe2,
+  HeartPulse,
   Loader2,
   Lock,
   Mail,
@@ -20,6 +22,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { API_URL, api } from "@/lib/api";
+import { titleCase } from "@/lib/utils";
 import { setSession, isAuthenticated } from "@/lib/auth";
 
 const DEMO_ACCOUNTS = [
@@ -29,9 +32,9 @@ const DEMO_ACCOUNTS = [
 ];
 
 const FEATURES = [
-  { icon: Radar, title: "Real-time detection", text: "SIEM, EDR and firewall telemetry correlated in seconds." },
-  { icon: BrainCircuit, title: "AI-assisted triage", text: "Grounded investigations over live SOC data." },
-  { icon: Workflow, title: "Autonomous SOAR", text: "n8n workflows contain threats without human delay." },
+  { icon: Radar, title: "Phát hiện thời gian thực", text: "Tương quan dữ liệu SIEM, EDR và tường lửa trong vài giây." },
+  { icon: BrainCircuit, title: "Phân loại được hỗ trợ bởi AI", text: "Điều tra dựa trên dữ liệu SOC trực tiếp." },
+  { icon: Workflow, title: "SOAR tự trị", text: "Quy trình n8n ngăn chặn mối đe dọa mà không cần chờ con người." },
 ];
 
 export default function LoginPage() {
@@ -63,7 +66,7 @@ export default function LoginPage() {
       setSession(result.token, result.user);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sign in");
+      setError(err instanceof Error ? err.message : "Không thể đăng nhập");
       setLoading(false);
     }
   };
@@ -92,7 +95,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="font-display text-lg font-semibold tracking-tight text-white">MedicareGuard</p>
-                <p className="text-[10px] uppercase tracking-[0.32em] text-brand-300/80">Security Operations Center</p>
+                <p className="text-[10px] uppercase tracking-[0.32em] text-brand-300/80">Trung tâm vận hành an ninh</p>
               </div>
             </div>
 
@@ -102,15 +105,15 @@ export default function LoginPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
                   <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
                 </span>
-                SOC online · {endpointCount} API endpoints armed
+                SOC trực tuyến · {endpointCount} Điểm cuối API được trang bị
               </div>
               <h1 className="mt-6 font-display text-5xl font-semibold leading-[1.08] tracking-tight text-white xl:text-6xl">
-                Autonomous defense
-                <span className="block text-gradient-accent">for modern healthcare.</span>
+                Phòng thủ tự chủ
+                <span className="block text-gradient-accent">cho chăm sóc sức khỏe hiện đại.</span>
               </h1>
               <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-slate-400">
-                One console for detection, investigation and response. MedicareGuard correlates telemetry across
-                patient systems, cloud workloads and the network edge — then acts through AI and n8n automation.
+                Một bảng điều khiển duy nhất cho phát hiện, điều tra và ứng phó. MedicareGuard tương quan dữ liệu từ
+                hệ thống bệnh nhân, hạ tầng đám mây và biên mạng — sau đó hành động qua AI và tự động hóa n8n.
               </p>
             </div>
           </div>
@@ -134,10 +137,10 @@ export default function LoginPage() {
 
           <div className="relative mt-10 flex items-center gap-8 border-t border-white/[0.05] pt-6">
             {[
-              { value: "42", label: "Data models" },
-              { value: "4", label: "SOAR workflows" },
-              { value: "99.98%", label: "Uptime" },
-              { value: "24/7", label: "Coverage" },
+              { value: "42", label: "Mô hình dữ liệu" },
+              { value: "4", label: "Quy trình làm việc SOAR" },
+              { value: "99.98%", label: "Thời gian hoạt động" },
+              { value: "24/7", label: "Hỗ trợ" },
             ].map((stat) => (
               <div key={stat.label}>
                 <p className="font-display text-2xl font-semibold text-white">{stat.value}</p>
@@ -177,16 +180,16 @@ export default function LoginPage() {
             <div className="panel overflow-hidden p-7 shadow-[0_40px_120px_-50px_rgba(37,99,235,0.7)] sm:p-9">
               <div className="mb-7">
                 <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                  <Lock className="h-3 w-3 text-brand-300" /> Analyst access
+                  <Lock className="h-3 w-3 text-brand-300" /> Truy cập dành cho chuyên viên
                 </div>
-                <h2 className="font-display text-2xl font-semibold tracking-tight text-white">Welcome back</h2>
-                <p className="mt-1.5 text-sm text-slate-500">Sign in to the security operations console.</p>
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-white">Chào mừng trở lại</h2>
+                <p className="mt-1.5 text-sm text-slate-500">Đăng nhập vào bảng điều khiển vận hành an ninh.</p>
               </div>
 
               <form onSubmit={submit} className="space-y-4">
                 <div>
                   <label className="label" htmlFor="email">
-                    Work email
+                    Email công việc
                   </label>
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -206,10 +209,10 @@ export default function LoginPage() {
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="label" htmlFor="password">
-                      Password
+                      Mật khẩu
                     </label>
                     <button type="button" className="mb-1.5 text-[11px] text-brand-300 transition hover:text-cyan-300">
-                      Forgot password?
+                      Quên mật khẩu?
                     </button>
                   </div>
                   <div className="relative">
@@ -228,7 +231,7 @@ export default function LoginPage() {
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-300"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -244,23 +247,23 @@ export default function LoginPage() {
                 <div className="flex items-center justify-between pt-1">
                   <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
                     <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-white/20 bg-surface-900 accent-brand-500" />
-                    Keep this device trusted
+                    Giữ cho thiết bị này luôn được tin cậy
                   </label>
                   <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <Fingerprint className="h-3.5 w-3.5 text-emerald-400" /> MFA enforced
+                    <Fingerprint className="h-3.5 w-3.5 text-emerald-400" /> Bắt buộc MFA
                   </span>
                 </div>
 
                 <button type="submit" disabled={loading} className="btn btn-primary h-11 w-full">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  {loading ? "Verifying identity…" : "Enter the SOC"}
+                  {loading ? "Đang xác minh danh tính…" : "Vào SOC"}
                   {!loading && <ArrowRight className="h-4 w-4" />}
                 </button>
               </form>
 
               <div className="my-6 flex items-center gap-3">
                 <div className="h-px flex-1 bg-white/[0.06]" />
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Demo identities</span>
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Danh tính demo</span>
                 <div className="h-px flex-1 bg-white/[0.06]" />
               </div>
 
@@ -277,28 +280,39 @@ export default function LoginPage() {
                         {account.role === "Administrator" ? <Sparkles className="h-3.5 w-3.5" /> : account.role === "SOC Analyst" ? <Activity className="h-3.5 w-3.5" /> : <Globe2 className="h-3.5 w-3.5" />}
                       </span>
                       <div>
-                        <p className="text-xs font-medium text-slate-200">{account.role}</p>
+                        <p className="text-xs font-medium text-slate-200">{titleCase(account.role)}</p>
                         <p className="text-[10px] text-slate-600">{account.email}</p>
                       </div>
                     </div>
                     <span className="flex items-center gap-1 text-[10px] text-slate-600 transition group-hover:text-brand-300">
-                      Use <ArrowRight className="h-3 w-3" />
+                      Dùng <ArrowRight className="h-3 w-3" />
                     </span>
                   </button>
                 ))}
               </div>
+
+              <Link
+                href="/portal"
+                className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] px-3.5 py-3 text-xs text-emerald-200 transition hover:border-emerald-300/40 hover:bg-emerald-500/[0.1] hover:text-emerald-100"
+              >
+                <span className="flex items-center gap-2">
+                  <HeartPulse className="h-4 w-4" />
+                  Cổng bệnh nhân Medicare (demo)
+                </span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
 
             <div className="mt-6 flex items-center justify-center gap-4 text-[10px] text-slate-600">
               <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-3 w-3 text-emerald-500/80" /> HIPAA-aligned
+                <CheckCircle2 className="h-3 w-3 text-emerald-500/80" /> phù hợp với HIPAA
               </span>
               <span className="h-3 w-px bg-white/10" />
               <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3 w-3 text-emerald-500/80" /> AES-256 at rest
+                <ShieldCheck className="h-3 w-3 text-emerald-500/80" /> AES-256 ở trạng thái nghỉ
               </span>
               <span className="h-3 w-px bg-white/10" />
-              <span>SOC 2 Type II</span>
+              <span>SOC 2 Loại II</span>
             </div>
           </div>
         </section>

@@ -60,18 +60,18 @@ export default function UsersPage() {
   const toggleStatus = (user: any) => {
     const deactivate = user.status === "active";
     setConfirm({
-      title: deactivate ? "Deactivate member?" : "Reactivate member?",
+      title: deactivate ? "Vô hiệu hóa thành viên?" : "Kích hoạt lại thành viên?",
       message: deactivate
-        ? `${user.fullName} will lose access immediately and all active sessions will be revoked.`
-        : `${user.fullName} will regain access to MedicareGuard with their existing role.`,
+        ? `${user.fullName} sẽ mất quyền truy cập ngay lập tức và mọi phiên đang hoạt động sẽ bị thu hồi.`
+        : `${user.fullName} sẽ lấy lại quyền truy cập MedicareGuard với vai trò hiện tại.`,
       action: async () => {
         try {
           await api(`/users/${user.id}/${deactivate ? "deactivate" : "activate"}`, { method: "POST" });
-          success(deactivate ? "Member deactivated" : "Member reactivated", user.email);
+          success(deactivate ? "Đã vô hiệu hóa thành viên" : "Đã kích hoạt lại thành viên", user.email);
           refetch();
           allUsers.refetch();
         } catch (err) {
-          toastError("Action failed", err instanceof Error ? err.message : "Unknown error");
+          toastError("Thao tác thất bại", err instanceof Error ? err.message : "Lỗi không xác định");
         }
       },
     });
@@ -88,43 +88,43 @@ export default function UsersPage() {
     try {
       const response = await api<any>(`/users/${resetting.id}/reset-password`, { method: "POST" });
       setTempPassword(response.temporaryPassword);
-      success("Password reset", "All existing sessions were revoked.");
+      success("Đã đặt lại mật khẩu", "Tất cả phiên hiện có đã bị thu hồi.");
     } catch (err) {
-      toastError("Reset failed", err instanceof Error ? err.message : "Unknown error");
+      toastError("Đặt lại mật khẩu thất bại", err instanceof Error ? err.message : "Lỗi không xác định");
     }
   };
 
   const columns: Column[] = [
     {
       key: "fullName",
-      header: "Member",
+      header: "Thành viên",
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <Avatar name={row.fullName} email={row.email} src={row.avatarUrl} size="sm" />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="truncate text-[11.5px] font-medium text-slate-200">{row.fullName}</p>
-              {row.id === me?.id && <Badge tone="info">you</Badge>}
+              {row.id === me?.id && <Badge tone="info">bạn</Badge>}
             </div>
             <p className="truncate text-[9.5px] text-slate-600">{row.email}</p>
           </div>
         </div>
       ),
     },
-    { key: "role", header: "Role", width: "110px", render: (row) => <Badge tone={ROLE_TONES[row.role] || "neutral"} dot>{titleCase(row.role)}</Badge> },
-    { key: "department", header: "Department", width: "170px", render: (row) => <span className="text-[10px] text-slate-500">{row.department || "—"}</span> },
-    { key: "mfa", header: "MFA", width: "70px", render: (row) => row.mfaEnabled ? <span className="flex items-center gap-1 text-[9.5px] text-low"><ShieldCheck className="h-3 w-3" /> on</span> : <span className="flex items-center gap-1 text-[9.5px] text-slate-600"><Shield className="h-3 w-3" /> off</span> },
-    { key: "status", header: "Status", width: "90px", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "lastLoginAt", header: "Last login", width: "100px", render: (row) => <span className="text-[9.5px] text-slate-600">{row.lastLoginAt ? relativeTime(row.lastLoginAt) : "Never"}</span> },
+    { key: "role", header: "Vai trò", width: "110px", render: (row) => <Badge tone={ROLE_TONES[row.role] || "neutral"} dot>{titleCase(row.role)}</Badge> },
+    { key: "department", header: "Khoa/Phòng", width: "170px", render: (row) => <span className="text-[10px] text-slate-500">{row.department || "—"}</span> },
+    { key: "mfa", header: "MFA", width: "70px", render: (row) => row.mfaEnabled ? <span className="flex items-center gap-1 text-[9.5px] text-low"><ShieldCheck className="h-3 w-3" /> bật</span> : <span className="flex items-center gap-1 text-[9.5px] text-slate-600"><Shield className="h-3 w-3" /> tắt</span> },
+    { key: "status", header: "Trạng thái", width: "90px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "lastLoginAt", header: "Lần đăng nhập cuối cùng", width: "100px", render: (row) => <span className="text-[9.5px] text-slate-600">{row.lastLoginAt ? relativeTime(row.lastLoginAt) : "Chưa bao giờ"}</span> },
     {
       key: "actions",
       header: "",
       width: "110px",
       render: (row) => (
         <div className="flex items-center justify-end gap-0.5">
-          <button onClick={(event) => { event.stopPropagation(); setEditing(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-brand-300" aria-label="Edit member"><Pencil className="h-3 w-3" /></button>
-          <button onClick={(event) => { event.stopPropagation(); resetPassword(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-high" aria-label="Reset password"><KeyRound className="h-3 w-3" /></button>
-          <button onClick={(event) => { event.stopPropagation(); toggleStatus(row); }} className={cn("rounded p-1.5 transition hover:bg-white/[0.06]", row.status === "active" ? "text-slate-600 hover:text-critical" : "text-slate-600 hover:text-low")} aria-label={row.status === "active" ? "Deactivate member" : "Activate member"}>{row.status === "active" ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}</button>
+          <button onClick={(event) => { event.stopPropagation(); setEditing(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-brand-300" aria-label="Sửa thành viên"><Pencil className="h-3 w-3" /></button>
+          <button onClick={(event) => { event.stopPropagation(); resetPassword(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-high" aria-label="Đặt lại mật khẩu"><KeyRound className="h-3 w-3" /></button>
+          <button onClick={(event) => { event.stopPropagation(); toggleStatus(row); }} className={cn("rounded p-1.5 transition hover:bg-white/[0.06]", row.status === "active" ? "text-slate-600 hover:text-critical" : "text-slate-600 hover:text-low")} aria-label={row.status === "active" ? "Vô hiệu hóa thành viên" : "Kích hoạt thành viên"}>{row.status === "active" ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}</button>
         </div>
       ),
     },
@@ -133,14 +133,14 @@ export default function UsersPage() {
   return (
     <div>
       <PageHeader
-        title="Users & Roles"
-        subtitle="Identity lifecycle, role-based access control and authentication posture"
+        title="Người dùng & Vai trò"
+        subtitle="Vòng đời nhận dạng, kiểm soát truy cập dựa trên vai trò và trạng thái xác thực"
         icon={UsersIcon}
-        badge={<Badge tone="info" dot>{everyone.length} members</Badge>}
+        badge={<Badge tone="info" dot>{everyone.length} thành viên</Badge>}
         actions={
           <>
-            <Button icon={RefreshCw} onClick={() => { refetch(); allUsers.refetch(); roles.refetch(); }} loading={refreshing}>Refresh</Button>
-            {isAdmin && <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add member</Button>}
+            <Button icon={RefreshCw} onClick={() => { refetch(); allUsers.refetch(); roles.refetch(); }} loading={refreshing}>Làm mới</Button>
+            {isAdmin && <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Thêm thành viên</Button>}
           </>
         }
       />
@@ -150,17 +150,17 @@ export default function UsersPage() {
           Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[112px] rounded-xl" />)
         ) : (
           <>
-            <StatCard label="Team members" value={everyone.length} hint={`${roleList.length} roles defined`} icon={UsersIcon} tone="brand" />
-            <StatCard label="Active accounts" value={active} hint={`${everyone.length - active} disabled`} icon={UserCheck} tone="success" />
-            <StatCard label="Administrators" value={admins} hint="Full platform access" icon={LockKeyhole} tone="critical" />
-            <StatCard label="MFA adoption" value={`${everyone.length ? Math.round((mfa / everyone.length) * 100) : 0}%`} hint={`${mfa} of ${everyone.length} enrolled`} icon={ShieldCheck} tone="cyan" />
+            <StatCard label="Thành viên nhóm" value={everyone.length} hint={`${roleList.length} vai trò được định nghĩa`} icon={UsersIcon} tone="brand" />
+            <StatCard label="Tài khoản đang hoạt động" value={active} hint={`${everyone.length - active} đã tắt`} icon={UserCheck} tone="success" />
+            <StatCard label="Quản trị viên" value={admins} hint="Truy cập nền tảng đầy đủ" icon={LockKeyhole} tone="critical" />
+            <StatCard label="Áp dụng MFA" value={`${everyone.length ? Math.round((mfa / everyone.length) * 100) : 0}%`} hint={`${mfa}/${everyone.length} đã đăng ký`} icon={ShieldCheck} tone="cyan" />
           </>
         )}
       </div>
 
       <div className="mb-3">
         <Tabs
-          tabs={[{ key: "team", label: "Team members", count: data?.pagination?.total, icon: UsersIcon }, { key: "roles", label: "Roles & permissions", count: roleList.length, icon: LockKeyhole }]}
+          tabs={[{ key: "team", label: "Thành viên nhóm", count: data?.pagination?.total, icon: UsersIcon }, { key: "roles", label: "Vai trò và quyền", count: roleList.length, icon: LockKeyhole }]}
           value={tab}
           onChange={setTab}
         />
@@ -170,20 +170,20 @@ export default function UsersPage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] p-3.5">
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-sm font-semibold text-slate-200">Directory</h2>
+              <h2 className="font-display text-sm font-semibold text-slate-200">Thư mục</h2>
               <Badge>{data?.pagination?.total || 0}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <SearchInput value={search} onChange={setSearch} placeholder="Search name, email, department…" className="w-full sm:w-64" />
+              <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm tên, email, bộ phận…" className="w-full sm:w-64" />
               <Select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className="w-32">
-                <option value="">All roles</option>
+                <option value="">Tất cả vai trò</option>
                 {roleList.map((role: any) => <option key={role.id} value={role.id}>{titleCase(role.name)}</option>)}
               </Select>
               <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-32">
-                <option value="">Any status</option>
-                <option value="active">Active</option>
-                <option value="disabled">Disabled</option>
-                <option value="pending">Pending</option>
+                <option value="">Bất kỳ trạng thái nào</option>
+                <option value="active">Đang hoạt động</option>
+                <option value="disabled">Tắt</option>
+                <option value="pending">Chờ xử lý</option>
               </Select>
             </div>
           </div>
@@ -194,8 +194,8 @@ export default function UsersPage() {
               rows={users}
               columns={columns}
               loading={loading && !data}
-              emptyTitle="No members match"
-              emptyMessage="Adjust the filters or add a new team member."
+              emptyTitle="Không có thành viên nào phù hợp"
+              emptyMessage="Điều chỉnh bộ lọc hoặc thêm thành viên nhóm mới."
               footer={data?.pagination ? <Pagination page={data.pagination.page} pages={data.pagination.pages} total={data.pagination.total} limit={data.pagination.limit} onPage={setPage} /> : null}
             />
           )}
@@ -206,17 +206,17 @@ export default function UsersPage() {
             <Card key={role.id} className="panel-hover flex flex-col p-4">
               <div className="flex items-start justify-between">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-brand-400/20 bg-brand-500/10 text-brand-300"><Shield className="h-4 w-4" /></div>
-                <Badge tone={ROLE_TONES[role.name] || "neutral"}>{role.user_count} member{role.user_count === 1 ? "" : "s"}</Badge>
+                <Badge tone={ROLE_TONES[role.name] || "neutral"}>{role.user_count} thành viên</Badge>
               </div>
               <h3 className="mt-3 font-display text-[13px] font-semibold text-slate-100">{titleCase(role.name)}</h3>
-              <p className="mt-1 line-clamp-2 min-h-[30px] text-[10.5px] leading-relaxed text-slate-600">{role.description || "No description"}</p>
+              <p className="mt-1 line-clamp-2 min-h-[30px] text-[10.5px] leading-relaxed text-slate-600">{role.description || "Không có mô tả"}</p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {(role.permissions || []).slice(0, 5).map((permission: string) => <Badge key={permission}>{permission}</Badge>)}
                 {(role.permissions?.length || 0) > 5 && <Badge>+{role.permissions.length - 5}</Badge>}
               </div>
               <div className="mt-auto flex items-center justify-between pt-3">
-                <span className="text-[9px] text-slate-700">Level {role.level}</span>
-                <Button size="sm" variant="ghost" onClick={() => setRoleDetail(role)}>View permissions</Button>
+                <span className="text-[9px] text-slate-700">Cấp độ {role.level}</span>
+                <Button size="sm" variant="ghost" onClick={() => setRoleDetail(role)}>Xem quyền</Button>
               </div>
             </Card>
           ))}
@@ -234,31 +234,31 @@ export default function UsersPage() {
       <Modal
         open={Boolean(resetting)}
         onClose={() => { setResetting(null); setTempPassword(null); }}
-        title="Reset member password"
+        title="Đặt lại mật khẩu thành viên"
         description={resetting ? `${resetting.fullName} · ${resetting.email}` : undefined}
         size="sm"
         footer={
           tempPassword ? (
-            <Button variant="primary" icon={Check} onClick={() => { setResetting(null); setTempPassword(null); }}>Done</Button>
+            <Button variant="primary" icon={Check} onClick={() => { setResetting(null); setTempPassword(null); }}>Xong</Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={() => setResetting(null)}>Cancel</Button>
-              <Button variant="primary" icon={KeyRound} onClick={doReset}>Reset password</Button>
+              <Button variant="ghost" onClick={() => setResetting(null)}>Hủy</Button>
+              <Button variant="primary" icon={KeyRound} onClick={doReset}>Đặt lại mật khẩu</Button>
             </>
           )
         }
       >
         {tempPassword ? (
           <div>
-            <p className="text-xs text-slate-400">Share this temporary password securely. All active sessions were revoked.</p>
+            <p className="text-xs text-slate-400">Chia sẻ mật khẩu tạm thời này một cách an toàn. Tất cả các phiên hoạt động đã bị thu hồi.</p>
             <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-low/25 bg-low/[0.06] p-3">
               <code className="break-all font-mono text-[12px] text-emerald-200">{tempPassword}</code>
-              <button onClick={() => { navigator.clipboard.writeText(tempPassword); success("Copied"); }} className="rounded p-1.5 text-low transition hover:bg-low/10" aria-label="Copy password"><Copy className="h-3.5 w-3.5" /></button>
+              <button onClick={() => { navigator.clipboard.writeText(tempPassword); success("Đã sao chép"); }} className="rounded p-1.5 text-low transition hover:bg-low/10" aria-label="Sao chép mật khẩu"><Copy className="h-3.5 w-3.5" /></button>
             </div>
-            <p className="mt-2 text-[9px] text-slate-700">The member must change this password after signing in.</p>
+            <p className="mt-2 text-[9px] text-slate-700">Thành viên phải thay đổi mật khẩu này sau khi đăng nhập.</p>
           </div>
         ) : (
-          <p className="text-xs leading-relaxed text-slate-400">A cryptographically random temporary password will be generated. The member will be signed out of every device immediately.</p>
+          <p className="text-xs leading-relaxed text-slate-400">Một mật khẩu tạm thời ngẫu nhiên bằng mật mã sẽ được tạo. Thành viên sẽ bị đăng xuất khỏi mọi thiết bị ngay lập tức.</p>
         )}
       </Modal>
 
@@ -274,7 +274,7 @@ export default function UsersPage() {
         onConfirm={runConfirm}
         title={confirm?.title}
         message={confirm?.message || ""}
-        confirmLabel="Confirm"
+        confirmLabel="Xác nhận"
         loading={confirmLoading}
         danger
       />
@@ -309,15 +309,15 @@ function MemberModal({ open, member, roles, onClose, onSaved }: { open: boolean;
     try {
       if (member) {
         await api(`/users/${member.id}`, { method: "PATCH", body: { fullName: form.fullName, roleId: form.roleId, department: form.department, phone: form.phone, mfaEnabled: form.mfaEnabled } });
-        success("Member updated", form.fullName);
+        success("Đã cập nhật thành viên", form.fullName);
       } else {
-        if (form.password.length < 8) throw new Error("Password must be at least 8 characters");
+        if (form.password.length < 8) throw new Error("Mật khẩu phải có ít nhất 8 ký tự");
         await api("/users", { method: "POST", body: { ...form } });
-        success("Member added", `${form.fullName} can now sign in.`);
+        success("Đã thêm thành viên", `${form.fullName} có thể đăng nhập ngay.`);
       }
       onSaved();
     } catch (err) {
-      toastError(member ? "Update failed" : "Could not add member", err instanceof Error ? err.message : "Unknown error");
+      toastError(member ? "Cập nhật thất bại" : "Không thể thêm thành viên", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setSaving(false);
     }
@@ -327,31 +327,31 @@ function MemberModal({ open, member, roles, onClose, onSaved }: { open: boolean;
     <Modal
       open={open}
       onClose={onClose}
-      title={member ? "Edit team member" : "Add team member"}
-      description={member ? "Update identity, role and security settings." : "Create an account with a temporary credential."}
+      title={member ? "Sửa thành viên nhóm" : "Thêm thành viên nhóm"}
+      description={member ? "Cập nhật danh tính, vai trò và cài đặt bảo mật." : "Tạo tài khoản với thông tin đăng nhập tạm thời."}
       size="md"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={() => submit()}>{member ? "Save changes" : "Add member"}</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
+          <Button variant="primary" loading={saving} onClick={() => submit()}>{member ? "Lưu thay đổi" : "Thêm thành viên"}</Button>
         </>
       }
     >
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        <Field label="Full name"><Input value={form.fullName} onChange={(event) => set("fullName", event.target.value)} placeholder="Dr. Alex Morgan" required /></Field>
-        <Field label="Work email"><Input type="email" value={form.email} onChange={(event) => set("email", event.target.value)} placeholder="alex@medicareguard.io" disabled={Boolean(member)} required /></Field>
-        {!member && <Field label="Temporary password" hint="Minimum 8 characters"><Input type="password" value={form.password} onChange={(event) => set("password", event.target.value)} placeholder="••••••••" required /></Field>}
-        <Field label="Role">
+        <Field label="Họ tên"><Input value={form.fullName} onChange={(event) => set("fullName", event.target.value)} placeholder="Tiến sĩ Alex Morgan" required /></Field>
+        <Field label="Email công việc"><Input type="email" value={form.email} onChange={(event) => set("email", event.target.value)} placeholder="alex@medicareguard.io" disabled={Boolean(member)} required /></Field>
+        {!member && <Field label="Mật khẩu tạm thời" hint="Tối thiểu 8 ký tự"><Input type="password" value={form.password} onChange={(event) => set("password", event.target.value)} placeholder="••••••••" required /></Field>}
+        <Field label="Vai trò">
           <Select value={form.roleId} onChange={(event) => set("roleId", event.target.value)}>
             {roles.map((role) => <option key={role.id} value={role.id}>{titleCase(role.name)}</option>)}
           </Select>
         </Field>
-        <Field label="Department"><Input value={form.department} onChange={(event) => set("department", event.target.value)} placeholder="Security Operations" /></Field>
-        <Field label="Phone"><Input value={form.phone} onChange={(event) => set("phone", event.target.value)} placeholder="+1 555 0100" /></Field>
+        <Field label="Khoa/Phòng"><Input value={form.department} onChange={(event) => set("department", event.target.value)} placeholder="Vận hành an ninh" /></Field>
+        <Field label="Số điện thoại"><Input value={form.phone} onChange={(event) => set("phone", event.target.value)} placeholder="+1 555 0100" /></Field>
         <div className={cn("flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5", member ? "md:col-span-2" : "md:col-span-2")}>
           <div>
-            <p className="text-[11px] text-slate-300">Require multi-factor authentication</p>
-            <p className="text-[9px] text-slate-600">Enforce MFA on the next sign-in.</p>
+            <p className="text-[11px] text-slate-300">Yêu cầu xác thực đa yếu tố</p>
+            <p className="text-[9px] text-slate-600">Bắt buộc MFA trong lần đăng nhập tiếp theo.</p>
           </div>
           <Toggle checked={form.mfaEnabled} onChange={(value) => set("mfaEnabled", value)} label="MFA" />
         </div>
@@ -378,10 +378,10 @@ function RolePermissionsModal({ role, onClose, onSaved }: { role: any; onClose: 
     setSaving(true);
     try {
       await api(`/roles/${role.id}/permissions`, { method: "PATCH", body: { permissions: selected } });
-      success("Permissions updated", `${titleCase(role.name)} now has ${selected.length} permissions.`);
+      success("Đã cập nhật quyền", `${titleCase(role.name)} hiện có ${selected.length} quyền.`);
       onSaved();
     } catch (err) {
-      toastError("Could not update permissions", err instanceof Error ? err.message : "Unknown error");
+      toastError("Không thể cập nhật quyền", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setSaving(false);
     }
@@ -391,17 +391,17 @@ function RolePermissionsModal({ role, onClose, onSaved }: { role: any; onClose: 
     <Modal
       open={Boolean(role)}
       onClose={onClose}
-      title={role ? `${titleCase(role.name)} permissions` : "Role permissions"}
-      description={role?.description || "Control what this role can access across the platform."}
+      title={role ? `Quyền của ${titleCase(role.name)}` : "Quyền của vai trò"}
+      description={role?.description || "Kiểm soát quyền truy cập của vai trò này trên nền tảng."}
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={save}>Save permissions</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
+          <Button variant="primary" loading={saving} onClick={save}>Lưu quyền</Button>
         </>
       }
     >
-      <p className="mb-3 text-[10px] text-slate-600">{selected.length} of {all.length} permissions selected · {role?.user_count || 0} members affected</p>
+      <p className="mb-3 text-[10px] text-slate-600">{selected.length}/{all.length} quyền đã chọn · {role?.user_count || 0} thành viên bị ảnh hưởng</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {all.map((permission: string) => {
           const enabled = selected.includes(permission);
