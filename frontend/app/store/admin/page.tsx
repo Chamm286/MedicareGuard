@@ -153,7 +153,7 @@ export default function StoreAdminPage() {
   const blockIp = async (ip: string) => {
     setBusy(ip);
     try {
-      await api("/firewall", {
+      await api("/firewall-rules", {
         method: "POST",
         body: {
           name: `Block fraud IP ${ip}`,

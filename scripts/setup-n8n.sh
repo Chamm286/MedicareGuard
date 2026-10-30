@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 N8N_DB="${N8N_DB:-$HOME/.n8n/database.sqlite}"
 WORKFLOW_DIR="$ROOT/n8n/workflows"
-WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst)
+WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst fraud-confirmed-response)
 
 if ! command -v n8n >/dev/null 2>&1; then
   echo "n8n CLI not found. Install n8n or add it to PATH." >&2
