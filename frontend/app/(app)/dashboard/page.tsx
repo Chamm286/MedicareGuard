@@ -138,6 +138,14 @@ export default function DashboardPage() {
 
       <RoleWorkspaceBanner role={role} />
 
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs">
+        <span className="font-medium text-slate-200">n8n Runtime</span>
+        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", runtime.data?.data?.online ? "border-low/25 bg-low/10 text-low" : "border-critical/25 bg-critical/10 text-critical")}>
+          {runtime.data?.data?.online ? "Online" : "Offline"}
+        </span>
+        <span className="text-slate-500">Latency: {runtime.data?.data?.latencyMs ?? "—"} ms</span>
+      </div>
+
       {loading && !summary ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
