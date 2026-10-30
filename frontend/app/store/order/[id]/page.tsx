@@ -48,7 +48,7 @@ export default function OrderDetailPage() {
   }
 
   const activeIndex = order.status === "cancelled" ? -1 : order.status === "on_hold" ? 0 : steps.findIndex((step) => step.key === order.status);
-  const risky = order.risk_score >= 60;
+  const risky = order.risk_score >= 50;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
