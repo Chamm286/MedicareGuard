@@ -213,7 +213,7 @@ router.patch(
     const valid = ["open", "investigating", "contained", "resolved", "false_positive"];
     if (!valid.includes(status)) throw new HttpError(400, `status must be one of: ${valid.join(", ")}`);
     const result = await query(
-      `UPDATE alerts SET status = $1, resolved_at = CASE WHEN $1 IN ('resolved','false_positive') THEN now() ELSE NULL END WHERE id = $2 RETURNING *`,
+      `UPDATE alerts SET status = $1::text, resolved_at = CASE WHEN $1::text IN ('resolved','false_positive') THEN now() ELSE NULL END WHERE id = $2 RETURNING *`,
       [status, req.params.id],
     );
     if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
