@@ -79,7 +79,7 @@ app.use(`${api}/stats`, authenticate, statsRoutes);
 app.use(`${api}/reports`, authenticate, reportRoutes);
 app.use(`${api}/ai`, authenticate, aiRoutes);
 app.use(`${api}/automation`, authenticate, automationRoutes);
-app.use(`${api}/demo`, demoRoutes);
+if (process.env.DEMO_MODE === "true") app.use(`${api}/demo`, demoRoutes);
 app.use(`${api}/store`, storeRoutes);
 app.use(`${api}`, buildGenericRouter());
 
