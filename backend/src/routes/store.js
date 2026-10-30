@@ -12,9 +12,47 @@ const { recordActivity, recordAudit } = require("../services/audit");
 const router = express.Router();
 const STORE_ISSUER = "medicareguard-store";
 const STORE_AUDIENCE = "store";
-const PAYMENT_METHODS = new Set(["cod", "bank_transfer", "card"]);
+const PAYMENT_METHODS = new Set(["cod", "bank_transfer", "card", "sepay"]);
 const ORDER_STATUSES = new Set(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "on_hold"]);
 const PAYMENT_STATUSES = new Set(["unpaid", "pending", "paid", "refunded", "failed"]);
+
+const sepayConfig = () => ({
+  accountNumber: process.env.SEPAY_ACCOUNT_NUMBER || process.env.SEPAY_ACCOUNT || "",
+  bankCode: process.env.SEPAY_BANK_CODE || process.env.SEPAY_BANK || "",
+  accountName: process.env.SEPAY_ACCOUNT_NAME || "Medicare Store",
+  webhookSecret: process.env.SEPAY_WEBHOOK_SECRET || process.env.SEPAY_SECRET || "",
+});
+
+const sepayQrUrl = (order) => {
+  const cfg = sepayConfig();
+  if (!cfg.accountNumber || !cfg.bankCode) return null;
+  const params = new URLSearchParams({
+    acc: cfg.accountNumber,
+    bank: cfg.bankCode,
+    amount: String(Math.round(Number(order.total || 0))),
+    des: order.order_number,
+  });
+  return `https://qr.sepay.vn/img?${params.toString()}`;
+};
+
+const sepayPaymentPayload = (order) => {
+  const cfg = sepayConfig();
+  return {
+    provider: "sepay",
+    method: "sepay",
+    status: order.payment_status,
+    accountNumber: cfg.accountNumber || null,
+    accountName: cfg.accountName,
+    bankCode: cfg.bankCode || null,
+    amount: money(order.total),
+    currency: order.currency || "VND",
+    content: order.order_number,
+    qrUrl: sepayQrUrl(order),
+    instructions: cfg.accountNumber
+      ? `Chuyển khoản ${money(order.total).toLocaleString("vi-VN")} ₫ tới tài khoản ${cfg.accountNumber} (${cfg.bankCode}) với nội dung ${order.order_number}.`
+      : "Cấu hình SEPAY_ACCOUNT_NUMBER và SEPAY_BANK_CODE để tạo mã QR thanh toán.",
+  };
+};
 
 const COUNTRY_NAMES = {
   VN: "Việt Nam", SG: "Singapore", NL: "Hà Lan", EG: "Ai Cập", US: "Hoa Kỳ", CN: "Trung Quốc",
@@ -303,7 +341,7 @@ const orderPayload = async (orderId) => {
   if (!order.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
   const items = await query("SELECT * FROM store_order_items WHERE order_id = $1 ORDER BY created_at", [orderId]);
   const payments = await query("SELECT provider, status, amount, transaction_ref, created_at FROM store_payments WHERE order_id = $1 ORDER BY created_at", [orderId]);
-  return {
+  const payload = {
     ...order.rows[0],
     subtotal: money(order.rows[0].subtotal),
     discount: money(order.rows[0].discount),
@@ -313,6 +351,8 @@ const orderPayload = async (orderId) => {
     items: items.rows.map((item) => ({ ...item, unit_price: money(item.unit_price), line_total: money(item.line_total) })),
     payments: payments.rows.map((payment) => ({ ...payment, amount: money(payment.amount) })),
   };
+  if (payload.payment_method === "sepay") payload.sepay = sepayPaymentPayload(payload);
+  return payload;
 };
 
 router.get(
@@ -703,7 +743,7 @@ router.post(
           paymentMethod,
           order.rows[0].payment_status === "paid" ? "captured" : "pending",
           total,
-          paymentMethod === "card" ? `SIM-${crypto.randomUUID().slice(0, 12).toUpperCase()}` : null,
+          paymentMethod === "card" ? `SIM-${crypto.randomUUID().slice(0, 12).toUpperCase()}` : paymentMethod === "sepay" ? orderNumber : null,
           JSON.stringify({ simulated: true, riskScore: risk.riskScore }),
         ],
       );
@@ -956,6 +996,49 @@ router.delete(
     const result = await query("UPDATE store_products SET status = 'archived', updated_at = now() WHERE id::text = $1 RETURNING id", [req.params.id]);
     if (!result.rows[0]) throw new HttpError(404, "Không tìm thấy sản phẩm");
     res.json({ deleted: true, id: result.rows[0].id });
+  }),
+);
+
+router.post(
+  "/payments/sepay/webhook",
+  asyncHandler(async (req, res) => {
+    const cfg = sepayConfig();
+    const auth = String(req.headers.authorization || "");
+    if (cfg.webhookSecret && !auth.includes(cfg.webhookSecret)) {
+      throw new HttpError(401, "Webhook SePay không hợp lệ");
+    }
+    const body = req.body || {};
+    const content = String(body.content || body.description || body.transferContent || "");
+    const amount = Number(body.transferAmount || body.amount || 0);
+    const match = content.match(/MG-\d{8}-\d{4}/);
+    if (!match) {
+      res.json({ ok: true, matched: false, reason: "order_number_not_found" });
+      return;
+    }
+    const orderNumber = match[0];
+    const orderResult = await query("SELECT * FROM store_orders WHERE order_number = $1", [orderNumber]);
+    const order = orderResult.rows[0];
+    if (!order) {
+      res.json({ ok: true, matched: false, reason: "order_not_found" });
+      return;
+    }
+    if (amount && Math.abs(amount - Number(order.total)) > 1) {
+      await query(
+        "INSERT INTO store_security_events (event_type, severity, ip_address, country, country_code, order_id, risk_score, metadata) VALUES ('payment_mismatch','high',$1,$2,$3,$4,$5,$6)",
+        [req.ip || "unknown", "Việt Nam", "VN", order.id, 70, JSON.stringify({ amount, expected: order.total, content })],
+      );
+      res.status(400).json({ ok: false, reason: "amount_mismatch" });
+      return;
+    }
+    await query(
+      "UPDATE store_orders SET payment_status = 'paid', status = CASE WHEN status = 'on_hold' THEN status ELSE 'processing' END, updated_at = now() WHERE id = $1",
+      [order.id],
+    );
+    await query(
+      "UPDATE store_payments SET status = 'captured', transaction_ref = COALESCE(transaction_ref, $2), metadata = metadata || $3::jsonb, updated_at = now() WHERE order_id = $1",
+      [order.id, String(body.referenceCode || body.id || ""), JSON.stringify({ sepay: body })],
+    );
+    res.json({ ok: true, matched: true, orderId: order.id, orderNumber });
   }),
 );
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, Circle, Clock3, MapPin, ShieldAlert, Truck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Clock3, CreditCard, MapPin, ShieldAlert, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatStoreDate, formatVnd, orderStatusLabel, paymentMethodLabel, paymentStatusLabel, storeFetch, type StoreOrder } from "@/lib/store";
 
@@ -64,6 +64,22 @@ export default function OrderDetailPage() {
           <span className="chip border-white/10 bg-white/[0.03] text-slate-400">{paymentStatusLabel[order.payment_status] || order.payment_status}</span>
         </div>
       </div>
+
+      {order.payment_method === "sepay" && order.payment_status !== "paid" && order.sepay && (
+        <div className="panel mt-5 border-brand-400/20 bg-brand-500/[0.04] p-5">
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-white"><CreditCard className="h-4 w-4 text-brand-300" /> Thanh toán SePay tự động</h2>
+          <div className="mt-4 grid gap-5 md:grid-cols-[1fr_220px]">
+            <div className="space-y-2 text-xs text-slate-300">
+              <p>{order.sepay.instructions}</p>
+              <p>Nội dung chuyển khoản: <span className="font-mono font-semibold text-brand-200">{order.sepay.content}</span></p>
+              <p>Số tiền: <span className="font-semibold text-white">{formatVnd(order.sepay.amount)}</span></p>
+              {order.sepay.accountNumber ? <p>Tài khoản: <span className="font-mono text-white">{order.sepay.accountNumber}</span> · {order.sepay.bankCode}</p> : null}
+              <p className="text-[10px] text-slate-500">Sau khi chuyển khoản, hệ thống tự động xác nhận qua webhook SePay và cập nhật đơn hàng.</p>
+            </div>
+            {order.sepay.qrUrl ? <img src={order.sepay.qrUrl} alt="Mã QR SePay" className="h-52 w-52 rounded-xl border border-white/10 bg-white p-2" /> : <div className="flex h-52 w-52 items-center justify-center rounded-xl border border-white/10 text-xs text-slate-500">Chưa cấu hình QR</div>}
+          </div>
+        </div>
+      )}
 
       {order.status === "on_hold" && (
         <div className="panel mt-5 flex items-start gap-3 border-high/20 bg-high/[0.04] p-4"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-high" /><div><p className="text-xs font-medium text-high">Đơn hàng đang được SOC kiểm tra gian lận</p><p className="mt-1 text-[11px] leading-relaxed text-slate-400">Điểm rủi ro {order.risk_score}/100 từ IP {order.ip_address} ({order.ip_country}). Đơn sẽ được xử lý sau khi đội an ninh xác minh.</p>{order.fraud_flags?.length ? <div className="mt-2 flex flex-wrap gap-1.5">{order.fraud_flags.map((flag) => <span key={flag} className="chip border-high/20 bg-high/10 text-high">{flag}</span>)}</div> : null}</div></div>

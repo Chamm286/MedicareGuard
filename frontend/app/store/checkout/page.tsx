@@ -168,6 +168,7 @@ export default function CheckoutPage() {
                 { value: "cod", label: "Khi nhận hàng", hint: "Thanh toán COD" },
                 { value: "bank_transfer", label: "Chuyển khoản", hint: "Xác nhận thủ công" },
                 { value: "card", label: "Thẻ tín dụng", hint: "Mô phỏng an toàn" },
+                { value: "sepay", label: "SePay QR", hint: "Thanh toán tự động" },
               ].map((method) => (
                 <button type="button" key={method.value} onClick={() => set("paymentMethod", method.value)} className={cn("rounded-xl border p-3 text-left transition", form.paymentMethod === method.value ? "border-brand-400/50 bg-brand-500/10" : "border-white/10 bg-white/[0.02] hover:border-white/20")}>
                   <p className="text-xs font-medium text-white">{method.label}</p>

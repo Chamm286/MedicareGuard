@@ -93,6 +93,7 @@ export type StoreOrder = {
   shipping_country: string;
   shipping_country_code: string;
   risk_score: number;
+  sepay?: { qrUrl: string | null; content: string; amount: number; accountNumber: string | null; bankCode: string | null; instructions: string };
   fraud_flags: string[];
   ip_address?: string | null;
   ip_country?: string | null;
@@ -204,6 +205,7 @@ export const paymentMethodLabel: Record<string, string> = {
   cod: "Thanh toán khi nhận hàng",
   bank_transfer: "Chuyển khoản ngân hàng",
   card: "Thẻ tín dụng (mô phỏng)",
+  sepay: "SePay QR tự động",
 };
 
 export const useStoreCart = () => {
