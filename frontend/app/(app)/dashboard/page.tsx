@@ -18,13 +18,64 @@ import {
   Workflow,
 } from "lucide-react";
 import { useApi } from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { normalizeRole, ROLE_META } from "@/lib/access";
 import { cn, countryName, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
 import { AttackAreaChart, SeverityDonut, SeverityLegend, TopAttackersBar } from "@/components/charts";
 import { ThreatMap } from "@/components/ThreatMap";
 import { Button, Card, ErrorState, PageHeader, ProgressBar, SeverityBadge, Skeleton, StatCard, StatusBadge } from "@/components/ui";
 import { useToast } from "@/components/toast";
 
+const ROLE_ACTIONS: Record<string, { label: string; href: string }[]> = {
+  admin: [
+    { label: "Quản lý người dùng", href: "/users" },
+    { label: "Cài đặt nền tảng", href: "/settings" },
+    { label: "Tự động hóa n8n", href: "/automation" },
+  ],
+  analyst: [
+    { label: "Hàng đợi cảnh báo", href: "/alerts" },
+    { label: "Ứng phó sự cố", href: "/incidents" },
+    { label: "Tự động hóa n8n", href: "/automation" },
+  ],
+  hunter: [
+    { label: "Workspace săn tìm", href: "/hunting" },
+    { label: "Tình báo mối đe dọa", href: "/threat-intel" },
+    { label: "Tài sản rủi ro cao", href: "/assets" },
+  ],
+  viewer: [
+    { label: "Báo cáo an ninh", href: "/reports" },
+    { label: "Cảnh báo đang mở", href: "/alerts" },
+    { label: "Chuyên viên AI", href: "/ai" },
+  ],
+};
+
+function RoleWorkspaceBanner({ role }: { role: string }) {
+  const meta = ROLE_META[normalizeRole(role)];
+  const actions = ROLE_ACTIONS[normalizeRole(role)] || [];
+  return (
+    <div className="mb-4 flex flex-col justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 sm:flex-row sm:items-center">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-brand-300"><ShieldAlert className="h-4 w-4" /></span>
+        <div>
+          <p className="text-xs font-medium text-slate-200">Workspace {meta.label}</p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-slate-600">{meta.description}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {actions.map((action) => (
+          <Link key={action.href} href={action.href} className="inline-flex items-center gap-1 rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 py-1.5 text-[10px] text-slate-400 transition hover:border-brand-400/25 hover:text-brand-200">
+            {action.label} <ArrowRight className="h-3 w-3" />
+          </Link>
+        ))}
+        {normalizeRole(role) === "viewer" && <span className="rounded-full border border-medium/25 bg-medium/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-medium">Chỉ đọc</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
+  const user = getUser();
+  const role = normalizeRole(user?.role);
   const { data, loading, error, refetch, refreshing } = useApi<any>("/dashboard/summary", { refreshInterval: 30000 });
   const { success } = useToast();
   const summary = data?.data;
@@ -65,6 +116,8 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      <RoleWorkspaceBanner role={role} />
 
       {loading && !summary ? (
         <div className="space-y-4">

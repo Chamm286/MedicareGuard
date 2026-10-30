@@ -10,6 +10,7 @@ import {
   CheckCheck,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Command,
   LogOut,
   Menu,
@@ -24,15 +25,16 @@ import {
 } from "lucide-react";
 import { api, useApi } from "@/lib/api";
 import { clearSession, getToken, getUser, setSession, type SessionUser } from "@/lib/auth";
+import { ROLE_META, allowedRolesForPath, canAccessPath, canAccessRoles, normalizeRole, roleHome } from "@/lib/access";
 import { navGroups, pageTitles } from "@/lib/nav";
 import { cn, firstName, relativeTime, titleCase } from "@/lib/utils";
 import { Avatar, Button } from "./ui";
 import { CommandPalette } from "./CommandPalette";
 import { ToastProvider, useToast } from "./toast";
 
-function Brand({ collapsed }: { collapsed: boolean }) {
+function Brand({ collapsed, href = "/dashboard" }: { collapsed: boolean; href?: string }) {
   return (
-    <Link href="/dashboard" className="group flex items-center gap-3 px-4 py-5">
+    <Link href={href} className="group flex items-center gap-3 px-4 py-5">
       <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-cyan-500 shadow-[0_8px_30px_-8px_rgba(59,130,246,0.8)]">
         <Shield className="h-5 w-5 text-white" strokeWidth={2.2} />
         <span className="absolute -inset-1 rounded-2xl border border-brand-400/20" />
@@ -133,6 +135,29 @@ function NotificationsMenu({ onClose }: { onClose: () => void }) {
   );
 }
 
+function AccessDenied({ role, pathname }: { role: "admin" | "analyst" | "hunter" | "viewer"; pathname: string }) {
+  const meta = ROLE_META[role];
+  const allowed = allowedRolesForPath(pathname);
+  return (
+    <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center justify-center">
+      <div className="panel w-full p-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-500/10 text-amber-300">
+          <ShieldCheck className="h-7 w-7" />
+        </div>
+        <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300">Kiểm soát truy cập theo vai trò</p>
+        <h1 className="mt-2 font-display text-2xl font-semibold text-white">Trang này không thuộc quyền của bạn</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500">
+          Vai trò <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-semibold", meta.tone)}>{meta.label}</span> không được phép mở đường dẫn này. Trang này dành cho {allowed.map((item) => ROLE_META[item].short).join(", ")}.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Link href={meta.home} className="btn btn-primary h-10 px-4 text-xs">Về workspace của tôi <ChevronRight className="h-3.5 w-3.5" /></Link>
+          <Link href="/reports" className="btn btn-secondary h-10 px-4 text-xs">Mở báo cáo</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShellInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -150,6 +175,16 @@ function ShellInner({ children }: { children: ReactNode }) {
   const health = useApi<{ status: string }>("/health", { refreshInterval: 30000 });
   const notifications = useApi<any>(user ? "/notifications?limit=20&sort=created_at&order=desc" : null, { refreshInterval: 60000 });
   const unread = (notifications.data?.data || []).filter((item: any) => !item.read).length;
+  const role = normalizeRole(user?.role);
+  const roleMeta = ROLE_META[role];
+  const denied = Boolean(user) && !canAccessPath(pathname, user?.role);
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({ ...group, items: group.items.filter((item) => canAccessRoles(user, item.roles)) }))
+        .filter((group) => group.items.length > 0),
+    [user],
+  );
 
   useEffect(() => {
     if (!getToken()) {
@@ -247,7 +282,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       )}
     >
       <div className="relative">
-        <Brand collapsed={collapsed} />
+        <Brand collapsed={collapsed} href={roleHome(user?.role)} />
         <button
           onClick={toggleSidebar}
           className="absolute -right-3 top-7 hidden h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-surface-850 text-slate-500 transition hover:text-white lg:flex"
@@ -258,7 +293,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-4 pt-1 scrollbar-thin">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.title}>
             {!collapsed && <p className="mb-1.5 px-2.5 text-[8px] font-semibold uppercase tracking-[0.22em] text-slate-700">{group.title}</p>}
             <div className="space-y-0.5">
@@ -326,7 +361,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       </div>
 
       <div className={cn("border-t border-white/[0.06] p-3", collapsed && "px-2")}>
-        <Link href="/settings" className={cn("flex items-center gap-2.5 rounded-lg p-1.5 transition hover:bg-white/[0.04]", collapsed && "justify-center")}>
+        <Link href={canAccessPath("/settings", user?.role) ? "/settings" : roleMeta.home} className={cn("flex items-center gap-2.5 rounded-lg p-1.5 transition hover:bg-white/[0.04]", collapsed && "justify-center")}>
           <Avatar name={user?.fullName} email={user?.email} src={user?.avatarUrl} size="sm" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
@@ -379,6 +414,9 @@ function ShellInner({ children }: { children: ReactNode }) {
               <Radio className="h-3 w-3 text-low" />
               <span className="font-mono">{clock || "00:00:00"} UTC</span>
             </div>
+            <span className={cn("hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-semibold lg:flex", roleMeta.tone)}>
+              <ShieldCheck className="h-3 w-3" /> {roleMeta.label}
+            </span>
 
             <div className="relative" ref={menuRef}>
               <button
@@ -427,15 +465,19 @@ function ShellInner({ children }: { children: ReactNode }) {
                       </p>
                     </div>
                     <div className="p-1.5">
-                      <Link href="/settings" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-                        <Settings className="h-3.5 w-3.5" /> Hồ sơ &amp; cài đặt
-                      </Link>
+                      {canAccessPath("/settings", user?.role) && (
+                        <Link href="/settings" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
+                          <Settings className="h-3.5 w-3.5" /> Hồ sơ &amp; cài đặt
+                        </Link>
+                      )}
                       <Link href="/ai" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
                         <Bot className="h-3.5 w-3.5" /> Chuyên viên AI
                       </Link>
-                      <Link href="/automation" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-                        <Workflow className="h-3.5 w-3.5" /> Tự động hóa
-                      </Link>
+                      {canAccessPath("/automation", user?.role) && (
+                        <Link href="/automation" className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
+                          <Workflow className="h-3.5 w-3.5" /> Tự động hóa
+                        </Link>
+                      )}
                     </div>
                     <div className="border-t border-white/[0.06] p-1.5">
                       <button onClick={signOut} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-slate-500 transition hover:bg-critical/10 hover:text-critical">
@@ -449,10 +491,10 @@ function ShellInner({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 lg:py-7">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 lg:py-7">{denied ? <AccessDenied role={role} pathname={pathname} /> : children}</main>
       </div>
 
-      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} role={user?.role} />
     </div>
   );
 }

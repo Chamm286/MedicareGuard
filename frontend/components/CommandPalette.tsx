@@ -5,21 +5,24 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Bug, FileText, HardDrive, Loader2, Search, ShieldAlert, Siren, Users, type LucideIcon } from "lucide-react";
 import { api, useDebounced } from "@/lib/api";
 import { quickCommands } from "@/lib/nav";
+import { roleAllowed } from "@/lib/access";
 import { cn, titleCase } from "@/lib/utils";
 
 type Result = { id: string; label: string; hint?: string; group: string; href: string; icon: LucideIcon };
 
-const GROUPS: { key: string; label: string; icon: LucideIcon; href: (id: string) => string; primary: (row: any) => string; secondary: (row: any) => string }[] = [
-  { key: "alerts", label: "Cảnh báo", icon: ShieldAlert, href: (id) => `/alerts/${id}`, primary: (row) => row.title, secondary: (row) => `${titleCase(row.severity)} · ${titleCase(row.status)}` },
-  { key: "threats", label: "Mối đe dọa", icon: AlertTriangle, href: (id) => `/threats/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.severity)} · ${row.country || "không rõ"}` },
-  { key: "assets", label: "Tài sản", icon: HardDrive, href: (id) => `/assets/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.type)} · ${row.ip_address || "không có IP"}` },
-  { key: "incidents", label: "Sự cố", icon: Siren, href: (id) => `/incidents/${id}`, primary: (row) => `${row.incident_key} — ${row.title}`, secondary: (row) => `${titleCase(row.severity)} · ${titleCase(row.status)}` },
-  { key: "vulnerabilities", label: "Lỗ hổng", icon: Bug, href: (id) => `/vulnerabilities/${id}`, primary: (row) => row.title, secondary: (row) => `${row.cve_id} · CVSS ${row.cvss_score}` },
-  { key: "reports", label: "Báo cáo", icon: FileText, href: (id) => `/reports/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.type)} · ${titleCase(row.status)}` },
-  { key: "users", label: "Người dùng", icon: Users, href: () => `/users`, primary: (row) => row.full_name, secondary: (row) => row.email },
+type SearchGroup = { key: string; label: string; icon: LucideIcon; roles?: ("admin" | "analyst" | "hunter" | "viewer")[]; href: (id: string) => string; primary: (row: any) => string; secondary: (row: any) => string };
+
+const GROUPS: SearchGroup[] = [
+  { key: "alerts", label: "Cảnh báo", icon: ShieldAlert, roles: ["admin", "analyst", "hunter", "viewer"], href: (id) => `/alerts/${id}`, primary: (row) => row.title, secondary: (row) => `${titleCase(row.severity)} · ${titleCase(row.status)}` },
+  { key: "threats", label: "Mối đe dọa", icon: AlertTriangle, roles: ["admin", "analyst", "hunter"], href: (id) => `/threats/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.severity)} · ${row.country || "không rõ"}` },
+  { key: "assets", label: "Tài sản", icon: HardDrive, roles: ["admin", "analyst", "hunter"], href: (id) => `/assets/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.type)} · ${row.ip_address || "không có IP"}` },
+  { key: "incidents", label: "Sự cố", icon: Siren, roles: ["admin", "analyst", "hunter", "viewer"], href: (id) => `/incidents/${id}`, primary: (row) => `${row.incident_key} — ${row.title}`, secondary: (row) => `${titleCase(row.severity)} · ${titleCase(row.status)}` },
+  { key: "vulnerabilities", label: "Lỗ hổng", icon: Bug, roles: ["admin", "analyst", "hunter"], href: (id) => `/vulnerabilities/${id}`, primary: (row) => row.title, secondary: (row) => `${row.cve_id} · CVSS ${row.cvss_score}` },
+  { key: "reports", label: "Báo cáo", icon: FileText, roles: ["admin", "analyst", "hunter", "viewer"], href: (id) => `/reports/${id}`, primary: (row) => row.name, secondary: (row) => `${titleCase(row.type)} · ${titleCase(row.status)}` },
+  { key: "users", label: "Người dùng", icon: Users, roles: ["admin", "analyst"], href: () => `/users`, primary: (row) => row.full_name, secondary: (row) => row.email },
 ];
 
-export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function CommandPalette({ open, onOpenChange, role }: { open: boolean; onOpenChange: (open: boolean) => void; role?: string }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any>(null);
@@ -62,7 +65,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const items = useMemo<Result[]>(() => {
     if (!results) return [];
-    return GROUPS.flatMap((group) =>
+    return GROUPS.filter((group) => roleAllowed(role, group.roles)).flatMap((group) =>
       (results[group.key] || []).map((row: any) => ({
         id: `${group.key}-${row.id}`,
         label: group.primary(row) || "Không có tiêu đề",
@@ -72,11 +75,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         icon: group.icon,
       })),
     );
-  }, [results]);
+  }, [results, role]);
 
   const quickItems = useMemo<Result[]>(
-    () => quickCommands.map((command) => ({ id: command.href, label: command.label, group: "Thao tác nhanh", href: command.href, icon: command.icon })),
-    [],
+    () => quickCommands.filter((command) => roleAllowed(role, command.roles)).map((command) => ({ id: command.href, label: command.label, group: "Thao tác nhanh", href: command.href, icon: command.icon })),
+    [role],
   );
 
   const list = query.trim().length >= 2 ? items : quickItems;

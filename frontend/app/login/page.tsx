@@ -23,11 +23,13 @@ import {
 } from "lucide-react";
 import { API_URL, api } from "@/lib/api";
 import { titleCase } from "@/lib/utils";
-import { setSession, isAuthenticated } from "@/lib/auth";
+import { getUser, setSession, isAuthenticated } from "@/lib/auth";
+import { roleHome } from "@/lib/access";
 
 const DEMO_ACCOUNTS = [
   { role: "Administrator", email: "admin@medicareguard.io", password: "Admin@123" },
   { role: "SOC Analyst", email: "analyst@medicareguard.io", password: "Analyst@123" },
+  { role: "Threat Hunter", email: "hunter@medicareguard.io", password: "Hunter@123" },
   { role: "Viewer", email: "viewer@medicareguard.io", password: "Viewer@123" },
 ];
 
@@ -47,7 +49,7 @@ export default function LoginPage() {
   const [endpointCount, setEndpointCount] = useState(537);
 
   useEffect(() => {
-    if (isAuthenticated()) router.replace("/dashboard");
+    if (isAuthenticated()) router.replace(roleHome(getUser()?.role));
     fetch(`${API_URL}/_meta/endpoints`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => data?.total && setEndpointCount(data.total))
@@ -64,7 +66,7 @@ export default function LoginPage() {
         body: { email, password },
       });
       setSession(result.token, result.user);
-      router.push("/dashboard");
+      router.push(roleHome(result.user?.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể đăng nhập");
       setLoading(false);

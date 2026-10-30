@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowUpRight, Boxes, CreditCard, Loader2, RefreshCw, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import { api, useApi } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, getUser } from "@/lib/auth";
+import { canAccessRoles, roleHome } from "@/lib/access";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 import { formatStoreDate, formatVnd, orderStatusLabel } from "@/lib/store";
@@ -33,8 +34,16 @@ export default function StoreAdminPage() {
   const orders = useApi<{ data: Order[] }>("/store/admin/orders?limit=25", { refreshInterval: 15000, enabled: ready });
 
   useEffect(() => {
-    if (!getToken()) router.replace("/login");
-    else setReady(true);
+    const user = getUser();
+    if (!getToken()) {
+      router.replace("/login");
+      return;
+    }
+    if (!canAccessRoles(user, ["admin", "analyst"])) {
+      router.replace(roleHome(user?.role));
+      return;
+    }
+    setReady(true);
   }, [router]);
 
   const updateStatus = async (order: Order, status: string) => {
