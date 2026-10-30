@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, Loader2, MapPin, ShieldAlert, ShieldCheck, Truck } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/utils";
-import { formatVnd, getStoreCustomer, storeFetch, useStoreCart, type StoreOrder } from "@/lib/store";
+import { formatVnd, getStoreCustomer, getStoreToken, storeFetch, useStoreCart, type StoreOrder } from "@/lib/store";
 
 type CheckoutResponse = {
   data: {
@@ -26,9 +27,13 @@ const countries = [
 ];
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const { cart, loading } = useStoreCart();
   const { error: toastError } = useToast();
   const customer = getStoreCustomer();
+  useEffect(() => {
+    if (!getStoreToken()) router.replace("/store/account");
+  }, [router]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckoutResponse["data"] | null>(null);
   const [form, setForm] = useState({
