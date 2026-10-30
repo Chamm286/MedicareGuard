@@ -17,7 +17,8 @@ import {
   Siren,
   Workflow,
 } from "lucide-react";
-import { useApi } from "@/lib/api";
+import { api, useApi } from "@/lib/api";
+import { useState } from "react";
 import { getUser } from "@/lib/auth";
 import { normalizeRole, ROLE_META } from "@/lib/access";
 import { cn, countryName, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
@@ -77,7 +78,21 @@ export default function DashboardPage() {
   const user = getUser();
   const role = normalizeRole(user?.role);
   const { data, loading, error, refetch, refreshing } = useApi<any>("/dashboard/summary", { refreshInterval: 30000 });
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
+  const [simulating, setSimulating] = useState(false);
+
+  const simulateAttack = async () => {
+    setSimulating(true);
+    try {
+      const response = await api<any>("/demo/attack", { method: "POST", body: { scenario: "ransomware", patientId: "BN-2401" } });
+      success("Đã mô phỏng tấn công", `Alert ${response.data?.alert?.id || ""} đã được tạo và gửi tới n8n.`);
+      refetch();
+    } catch (err) {
+      toastError("Mô phỏng thất bại", err instanceof Error ? err.message : "Không thể gọi API demo.");
+    } finally {
+      setSimulating(false);
+    }
+  };
   const summary = data?.data;
   const overview = summary?.overview;
 
@@ -110,6 +125,9 @@ export default function DashboardPage() {
               {summary?.generatedAt ? relativeTime(summary.generatedAt) : "đang đồng bộ"}
             </span>
             <Button icon={RefreshCw} onClick={() => refetch()} loading={refreshing}>Làm mới</Button>
+            {role !== "viewer" && (
+              <Button variant="danger" icon={Siren} onClick={simulateAttack} loading={simulating}>Mô phỏng Tấn công</Button>
+            )}
             <Link href="/reports">
               <Button variant="primary" icon={Download}>Xuất tóm tắt</Button>
             </Link>
