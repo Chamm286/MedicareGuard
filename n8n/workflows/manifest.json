@@ -1,5 +1,5 @@
 {
-  "nodeCount": 97,
+  "nodeCount": 102,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -48,6 +48,14 @@
       "stickyNotes": 3,
       "connections": 15,
       "file": "n8n/workflows/live-attack-monitor.json"
+    },
+    {
+      "id": "ai-chat-analyst",
+      "name": "Chat AI phân tích SOC",
+      "executable": 5,
+      "stickyNotes": 1,
+      "connections": 4,
+      "file": "n8n/workflows/ai-chat-analyst.json"
     }
   ]
 }

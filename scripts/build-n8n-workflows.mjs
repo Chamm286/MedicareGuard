@@ -333,6 +333,13 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     entityType: "alert",
     stageSummary: "Quét tấn công mỗi 5 phút · Telegram + Gmail · Hiển thị cho trực ban",
   },
+  {
+    id: "ai-chat-analyst",
+    name: "Chat AI phân tích SOC",
+    triggerLabel: "Câu hỏi Chat AI",
+    webhookPath: "mg-ai-chat",
+    stageSummary: "Webhook · truy vấn PostgreSQL trực tiếp · trả lời theo dữ liệu thật",
+  },
 ];
 
 const telegramNode = (spec, position) => node(
@@ -370,8 +377,126 @@ const gmailNode = (spec, position) => node(
   { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" },
 );
 
+const buildAiChatWorkflow = (spec) => {
+  resetIds();
+
+  const validateCode = `const body = $json.body ?? $json;
+const message = String(body.message || body.chatInput || '').trim();
+if (!message) { throw new Error('message is required'); }
+return [{ json: { message, conversationId: body.conversationId || null, executionId: String(body.executionId || ('ai-' + Date.now())), startedAt: new Date().toISOString() } }];`;
+
+  const contextQuery = `SELECT json_build_object(
+  'overview', (SELECT json_build_object(
+    'total_alerts', (SELECT count(*)::int FROM alerts),
+    'open_alerts', (SELECT count(*)::int FROM alerts WHERE status IN ('open','investigating')),
+    'critical_alerts', (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status NOT IN ('resolved','false_positive')),
+    'active_threats', (SELECT count(*)::int FROM threats WHERE status = 'active'),
+    'open_incidents', (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')),
+    'total_assets', (SELECT count(*)::int FROM assets),
+    'high_risk_assets', (SELECT count(*)::int FROM assets WHERE risk_score >= 70),
+    'open_vulnerabilities', (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open'),
+    'enabled_rules', (SELECT count(*)::int FROM firewall_rules WHERE enabled),
+    'avg_asset_risk', (SELECT COALESCE(round(avg(risk_score))::int, 0) FROM assets),
+    'compliance_score', (SELECT COALESCE(round(avg(score))::int, 0) FROM compliance_controls),
+    'alerts_24h', (SELECT count(*)::int FROM alerts WHERE detected_at > now() - interval '24 hours')
+  )),
+  'alerts', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, title, severity, status, source_ip, country, detected_at FROM alerts ORDER BY detected_at DESC LIMIT 6) t),
+  'incidents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, incident_key, title, severity, status, priority, detected_at FROM incidents WHERE status NOT IN ('resolved','closed') ORDER BY detected_at DESC LIMIT 6) t),
+  'attackers', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_top_attackers LIMIT 5) t),
+  'countries', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_attacks_by_country LIMIT 6) t),
+  'assets', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6) t),
+  'compliance', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC) t),
+  'firewall', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT action, count(*)::int AS total, COALESCE(sum(hit_count), 0)::bigint AS hits FROM firewall_rules GROUP BY action) t)
+) AS context;`;
+
+  const composeCode = `const base = $('🔍 Kiểm tra câu hỏi').first().json;
+const raw = $json.context ?? $json;
+const ctx = typeof raw === 'string' ? JSON.parse(raw) : raw;
+const o = ctx.overview || {};
+const message = String(base.message || '');
+const lower = message.toLowerCase();
+const vi = /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(message);
+const has = (re) => re.test(lower);
+const intent = has(/(cảnh báo|alert|detection|phát hiện)/) ? 'alerts'
+  : has(/(sự cố|incident|sla|mttr)/) ? 'incidents'
+  : has(/(attacker|kẻ tấn công|source ip|top ip|ip nào|tấn công từ)/) ? 'attackers'
+  : has(/(country|quốc gia|vùng|lãnh thổ|địa lý|geo)/) ? 'countries'
+  : has(/(asset|tài sản|thiết bị|hạ tầng|server|máy chủ)/) ? 'assets'
+  : has(/(compliance|tuân thủ|nist|iso|hipaa|pci)/) ? 'compliance'
+  : has(/(firewall|tường lửa|chặn|block|rule)/) ? 'firewall'
+  : 'overview';
+let reply = '';
+if (intent === 'alerts') {
+  const lines = (ctx.alerts || []).map((a, i) => (i + 1) + '. [' + String(a.severity || '').toUpperCase() + '] ' + a.title + ' — ' + (a.source_ip || 'không rõ') + ' (' + a.status + ')').join('\\n');
+  reply = '**Phân tích cảnh báo** — Tổng ' + o.total_alerts + ' cảnh báo, ' + o.open_alerts + ' đang mở, **' + o.critical_alerts + ' nghiêm trọng** và ' + o.alerts_24h + ' cảnh báo trong 24 giờ qua.\\n\\n' + (lines || 'Không có cảnh báo nào.');
+} else if (intent === 'incidents') {
+  const lines = (ctx.incidents || []).map((i) => '• ' + i.incident_key + ' — ' + i.title + ' · ' + i.severity + '/' + i.priority + ' · ' + i.status).join('\\n');
+  reply = '**Sự cố đang mở: ' + o.open_incidents + '**\\n\\n' + (lines || 'Không có sự cố nào đang mở.') + '\\n\\nKhuyến nghị: áp dụng containment trong 4 giờ đầu đối với P1 và xác minh root cause trước khi đóng sự cố.';
+} else if (intent === 'attackers') {
+  const lines = (ctx.attackers || []).map((a, i) => (i + 1) + '. \`' + a.source_ip + '\` — ' + (a.country || 'Unknown') + ' · ' + a.events + ' sự kiện · rủi ro ' + a.avg_risk).join('\\n');
+  reply = '**Top kẻ tấn công theo số sự kiện**\\n\\n' + (lines || 'Chưa có dữ liệu kẻ tấn công.') + '\\n\\nNên chặn các IP có rủi ro ≥ 80 tại tường lửa và theo dõi chặt các IP còn lại.';
+} else if (intent === 'countries') {
+  const lines = (ctx.countries || []).map((c) => '• ' + c.country + ' (' + c.country_code + ') — ' + c.attacks + ' sự kiện, rủi ro TB ' + c.avg_risk).join('\\n');
+  reply = '**Phân bố tấn công theo quốc gia**\\n\\n' + (lines || 'Chưa có dữ liệu địa lý.');
+} else if (intent === 'assets') {
+  const lines = (ctx.assets || []).map((a) => '• ' + a.name + ' (' + a.type + ') — ' + a.criticality + ', rủi ro ' + a.risk_score + ', IP ' + (a.ip_address || 'n/a')).join('\\n');
+  reply = '**Tài sản rủi ro cao** — ' + o.total_assets + ' tài sản, ' + o.high_risk_assets + ' có rủi ro ≥ 70, rủi ro trung bình ' + o.avg_asset_risk + '/100.\\n\\n' + (lines || 'Chưa có dữ liệu tài sản.');
+} else if (intent === 'compliance') {
+  const lines = (ctx.compliance || []).map((c) => '• ' + c.framework + ': ' + c.score + '%').join('\\n');
+  reply = '**Tư thế tuân thủ** — điểm trung bình **' + o.compliance_score + '%**.\\n\\n' + (lines || 'Chưa có dữ liệu tuân thủ.');
+} else if (intent === 'firewall') {
+  const lines = (ctx.firewall || []).map((f) => '• hành động=' + f.action + ': ' + f.total + ' quy tắc, ' + f.hits + ' lượt khớp').join('\\n');
+  reply = '**Tường lửa** — ' + o.enabled_rules + ' quy tắc đang bật.\\n\\n' + (lines || 'Chưa có dữ liệu tường lửa.');
+} else {
+  reply = '**Tổng quan SOC (dữ liệu PostgreSQL trực tiếp)** — ' + o.total_alerts + ' cảnh báo (' + o.open_alerts + ' mở, ' + o.critical_alerts + ' nghiêm trọng), ' + o.active_threats + ' mối đe dọa hoạt động, ' + o.open_incidents + ' sự cố mở, ' + o.total_assets + ' tài sản, rủi ro TB ' + o.avg_asset_risk + '/100, tuân thủ ' + o.compliance_score + '%.\\n\\nĐiểm nóng: ' + ((ctx.countries && ctx.countries[0]) ? ctx.countries[0].country + ' (' + ctx.countries[0].attacks + ' sự kiện)' : 'chưa xác định') + '. Kẻ tấn công nổi bật: ' + ((ctx.attackers && ctx.attackers[0]) ? ctx.attackers[0].source_ip : 'n/a') + '.';
+}
+const insights = [
+  { label: 'Cảnh báo mở', value: o.open_alerts, tone: 'warning' },
+  { label: 'Nghiêm trọng', value: o.critical_alerts, tone: 'critical' },
+  { label: 'Sự cố mở', value: o.open_incidents, tone: 'warning' },
+  { label: 'Tuân thủ', value: o.compliance_score + '%', tone: 'success' },
+];
+const suggestions = vi
+  ? ['Top 5 kẻ tấn công', 'Tài sản rủi ro cao nhất', 'Có sự cố nào quá SLA không?']
+  : ['Top 5 attackers', 'Highest-risk assets', 'Are any incidents past SLA?'];
+const references = [];
+(ctx.alerts || []).slice(0, 3).forEach((a) => references.push({ type: 'alert', id: a.id, label: a.title }));
+(ctx.incidents || []).slice(0, 2).forEach((i) => references.push({ type: 'incident', id: i.id, label: i.incident_key }));
+return [{ json: { reply, intent, language: vi ? 'vi' : 'en', insights, suggestions, references, model: 'n8n-medicareguard-analyst', provider: 'n8n', latencyMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()) } }];`;
+
+  const nodes = [
+    node('💬 Webhook Chat AI', 'n8n-nodes-base.webhook', 2, { httpMethod: 'POST', path: spec.webhookPath, responseMode: 'responseNode', options: {} }, [0, 0], { webhookId: id() }),
+    code('🔍 Kiểm tra câu hỏi', validateCode, [220, 0]),
+    postgres('🗄️ Tải ngữ cảnh SOC', contextQuery, [440, 0]),
+    code('🧠 Soạn câu trả lời từ Database', composeCode, [660, 0]),
+    node('📤 Trả lời Chat', 'n8n-nodes-base.respondToWebhook', 1.1, { respondWith: 'json', responseBody: '={{ JSON.stringify($json) }}', options: {} }, [880, 0]),
+    sticky('Ghi chú — Chat AI dữ liệu thật', '# Chat AI phân tích SOC\nWebhook `mg-ai-chat` · đọc trực tiếp PostgreSQL (alerts, incidents, attackers, assets, compliance, firewall) · trả lời JSON cho backend.\n\nKhông dùng câu trả lời mẫu: mọi số liệu lấy từ truy vấn SQL tại thời điểm hỏi.', [0, -240], 1000, 160, 4),
+  ];
+
+  const connections = {
+    '💬 Webhook Chat AI': { main: [[{ node: '🔍 Kiểm tra câu hỏi', type: 'main', index: 0 }]] },
+    '🔍 Kiểm tra câu hỏi': { main: [[{ node: '🗄️ Tải ngữ cảnh SOC', type: 'main', index: 0 }]] },
+    '🗄️ Tải ngữ cảnh SOC': { main: [[{ node: '🧠 Soạn câu trả lời từ Database', type: 'main', index: 0 }]] },
+    '🧠 Soạn câu trả lời từ Database': { main: [[{ node: '📤 Trả lời Chat', type: 'main', index: 0 }]] },
+  };
+
+  return {
+    id: spec.id,
+    name: spec.name,
+    active: false,
+    nodes,
+    connections,
+    settings: { executionOrder: 'v1', saveExecutionProgress: true, saveManualExecutions: true, timezone: 'Asia/Ho_Chi_Minh' },
+    staticData: null,
+    pinData: {},
+    meta: { templateCredsSetupCompleted: true, workflowDescription: spec.stageSummary },
+    tags: [{ name: 'MedicareGuard' }, { name: spec.id }],
+  };
+};
+
 const buildWorkflow = (spec) => {
   resetIds();
+  if (spec.id === "ai-chat-analyst") return buildAiChatWorkflow(spec);
   if (spec.id === "live-attack-monitor") return buildMonitorWorkflow(spec);
   if (spec.id === "ecommerce-fraud-response") return buildEcommerceWorkflow(spec);
 

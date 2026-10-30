@@ -158,49 +158,99 @@ const compose = (intent, context, message) => {
   return { reply, suggestions, insights, references, intent, language: vi ? "vi" : "en" };
 };
 
-const maybeOpenAI = async (message, context) => {
-  if (!config.openai.apiKey) return null;
+const requestJson = async (url, options, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openai.apiKey}` },
-      body: JSON.stringify({
-        model: config.openai.model,
-        messages: [
-          { role: "system", content: `You are MedicareGuard SOC analyst. Answer using this live data: ${JSON.stringify(context)}` },
-          { role: "user", content: message },
-        ],
-        temperature: 0.2,
-        max_tokens: 600,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) return null;
-    const payload = await response.json();
-    return payload.choices?.[0]?.message?.content || null;
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) {
+      logger.warn("AI provider returned an error", { url: url.split("?")[0], status: response.status });
+      return null;
+    }
+    return await response.json();
   } catch (error) {
-    logger.warn("OpenAI fallback failed", { error: error.message });
+    logger.warn("AI provider request failed", { url: url.split("?")[0], error: error.message });
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
-const chat = async (message) => {
+const maybeN8n = async (message, conversationId) => {
+  if (!config.n8n.aiChatUrl) return null;
+  const payload = await requestJson(
+    config.n8n.aiChatUrl,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, conversationId }),
+    },
+    config.n8n.timeoutMs,
+  );
+  const data = payload?.data || payload;
+  if (!data?.reply) return null;
+  return {
+    reply: data.reply,
+    model: data.model || "n8n-medicareguard-analyst",
+    provider: "n8n",
+    latencyMs: data.latencyMs,
+  };
+};
+
+const maybeOpenAI = async (message, context) => {
+  if (!config.openai.apiKey) return null;
+  const payload = await requestJson("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openai.apiKey}` },
+    body: JSON.stringify({
+      model: config.openai.model,
+      messages: [
+        { role: "system", content: `You are MedicareGuard SOC analyst. Answer only with facts from this live PostgreSQL context. Never invent alerts, incidents, assets or numbers: ${JSON.stringify(context)}` },
+        { role: "user", content: message },
+      ],
+      temperature: 0.2,
+      max_tokens: 600,
+    }),
+  });
+  const reply = payload?.choices?.[0]?.message?.content || null;
+  return reply ? { reply, model: config.openai.model, provider: "openai" } : null;
+};
+
+const maybeGemini = async (message, context) => {
+  if (!config.gemini.apiKey) return null;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent?key=${encodeURIComponent(config.gemini.apiKey)}`;
+  const payload = await requestJson(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: `You are MedicareGuard SOC analyst. Answer only with facts from this live PostgreSQL context. Never invent alerts, incidents, assets or numbers: ${JSON.stringify(context)}` }] },
+      contents: [{ role: "user", parts: [{ text: message }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+    }),
+  });
+  const reply = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || null;
+  return reply ? { reply, model: config.gemini.model, provider: "gemini" } : null;
+};
+
+const chat = async (message, conversationId = null) => {
   const startedAt = Date.now();
   const context = await getContext();
   const composed = compose(intentOf(message), context, message);
-  const external = await maybeOpenAI(message, context);
+  const external =
+    (await maybeN8n(message, conversationId)) ||
+    (await maybeOpenAI(message, context)) ||
+    (await maybeGemini(message, context));
+  const reply = external?.reply || composed.reply;
   return {
-    reply: external || composed.reply,
+    reply,
     intent: composed.intent,
     language: composed.language,
     insights: composed.insights,
     suggestions: composed.suggestions,
     references: composed.references,
-    model: external ? config.openai.model : "medicareguard-analyst",
-    latencyMs: Date.now() - startedAt,
+    model: external?.model || "medicareguard-analyst",
+    provider: external?.provider || "database",
+    latencyMs: external?.latencyMs || Date.now() - startedAt,
   };
 };
 

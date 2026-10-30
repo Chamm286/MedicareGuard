@@ -15,7 +15,7 @@
 | Demo attack | POST /demo/attack | demo.js | /webhook/mg-ransomware or /webhook/mg-phishing | alerts, activity_logs |
 | Store checkout | POST /store/checkout | store.js | /webhook/mg-ecommerce-fraud (high risk) | store_orders, store_payments, alerts |
 | SePay payment | GET /store/orders/:id | store.js | SePay webhook -> /store/payments/sepay/webhook | store_orders, store_payments |
-| AI chat | POST /ai/chat | ai.js | - | ai_conversations, ai_messages |
+| AI chat | POST /ai/chat | ai.js -> AI provider | /webhook/mg-ai-chat (DB-backed analyst) | ai_conversations, ai_messages, alerts, incidents, assets, compliance |
 | Firewall block | POST /firewall-rules or automation network-contain | firewall.js / automationRuntime | - | firewall_rules |
 | Hunting hypothesis | POST /cases | generic CRUD | - | cases |
 
@@ -26,7 +26,9 @@
 - compliance-evidence: /webhook/mg-compliance (if configured)
 - ecommerce-fraud-response: /webhook/mg-ecommerce-fraud
 - live-attack-monitor: /webhook/mg-live-attack or schedule
+- ai-chat-analyst: /webhook/mg-ai-chat (queries PostgreSQL directly and returns grounded reply)
 
 ## Notes
 - High-risk automation actions are simulated in backend for demo safety.
 - Real email delivery uses Mailpit by default; real SMTP/Telegram require credentials.
+- AI chat tries n8n `mg-ai-chat` first, then OpenAI/Gemini when `OPENAI_API_KEY`/`GEMINI_API_KEY` is set, and finally the built-in database analyst. No frontend sample answers are used.
