@@ -78,6 +78,7 @@ export default function DashboardPage() {
   const user = getUser();
   const role = normalizeRole(user?.role);
   const { data, loading, error, refetch, refreshing } = useApi<any>("/dashboard/summary", { refreshInterval: 30000 });
+  const runtime = useApi<any>("/automation/runtime", { refreshInterval: 30000 });
   const { success, error: toastError } = useToast();
   const [simulating, setSimulating] = useState(false);
 
