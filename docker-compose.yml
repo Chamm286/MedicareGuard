@@ -91,12 +91,12 @@ services:
       DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-medicareguard}
       DB_POSTGRESDB_USER: ${POSTGRES_USER:-medicare}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-medicare}
-      DB_POSTGRESDB_SCHEMA: public
+      DB_POSTGRESDB_SCHEMA: n8n
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_RUNNERS_ENABLED: "true"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      MG_API_URL: http://backend:4000/api
+      MG_API_URL: http://host.docker.internal:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
       MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -111,6 +111,8 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
