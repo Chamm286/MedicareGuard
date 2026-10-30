@@ -427,7 +427,7 @@ export default function MedicarePortalPage() {
                 {[
                   ["MedicareGuard SOC", "Đang trực", "text-emerald-700 bg-emerald-50 border-emerald-200"],
                   ["n8n Automation", "5 luồng đang hoạt động", "text-blue-700 bg-blue-50 border-blue-200"],
-                  ["Cảnh báo Telegram", "Đã kết nối", "text-emerald-700 bg-emerald-50 border-emerald-200"],
+                  ["Cảnh báo Telegram", "Qua n8n", "text-blue-700 bg-blue-50 border-blue-200"],
                   ["Gmail / SMTP", "Mailpit demo", "text-amber-700 bg-amber-50 border-amber-200"],
                 ].map(([label, value, tone]) => (
                   <div key={label} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
