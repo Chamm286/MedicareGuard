@@ -1,0 +1,538 @@
+{
+  "id": "ecommerce-fraud-response",
+  "name": "Phản hồi Gian lận Thương mại điện tử",
+  "active": false,
+  "nodes": [
+    {
+      "name": "📥 Cảnh báo gian lận đơn hàng",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mg-ecommerce-fraud",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "position": [
+        0,
+        0
+      ],
+      "id": "5ca3c280-ddaa-5b6c-9686-ededda1d1efd",
+      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
+    },
+    {
+      "name": "🔍 Kiểm tra dữ liệu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst orderId = String(body.orderId || body.entityId || '').trim();\nif (!orderId) { throw new Error('orderId is required'); }\nconst executionId = String(body.executionId || ('ecom-' + Date.now()));\nreturn [{ json: { ...body, orderId, executionId, workflowId: 'ecommerce-fraud-response', workflowName: 'Phản hồi Gian lận Thương mại điện tử', mode: body.mode || 'realtime', receivedAt: new Date().toISOString() } }];"
+      },
+      "position": [
+        220,
+        0
+      ],
+      "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
+    },
+    {
+      "name": "🗄️ Tải đơn hàng",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT o.id, o.order_number, o.status, o.payment_status, o.payment_method, o.total, o.risk_score, o.fraud_flags,\n  o.ip_address, o.ip_country, o.ip_country_code, o.ip_source, o.shipping_name, o.shipping_email,\n  o.shipping_city, o.shipping_country, o.shipping_country_code, o.created_at,\n  c.full_name AS customer_name, c.email AS customer_email,\n  (SELECT count(*)::int FROM store_orders x WHERE x.ip_address = o.ip_address AND x.created_at > now() - interval '24 hours') AS ip_order_count\nFROM store_orders o LEFT JOIN store_customers c ON c.id = o.customer_id\nWHERE o.id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}' LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        440,
+        0
+      ],
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🧮 Chấm điểm & Soạn cảnh báo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nif (!order.id) { throw new Error('Store order not found: ' + base.orderId); }\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst parseFlags = (value) => {\n  if (Array.isArray(value)) return value;\n  if (!value) return [];\n  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (error) { return [String(value)]; }\n};\nconst flags = parseFlags(base.flags && base.flags.length ? base.flags : order.fraud_flags);\nconst velocity = Number(order.ip_order_count || 1);\nconst riskScore = Math.max(Number(base.riskScore || 0), Number(order.risk_score || 0), Math.min(100, velocity * 5));\nconst severity = riskScore >= 80 ? 'critical' : riskScore >= 60 ? 'high' : 'medium';\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH' }[severity];\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04' }[severity];\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst orderLink = consoleUrl + '/store/order/' + order.id;\nconst adminLink = consoleUrl + '/store/admin';\nconst total = Number(order.total || 0).toLocaleString('vi-VN') + ' ₫';\nconst flagText = flags.length ? flags.join(', ') : 'không có dấu hiệu bổ sung';\nconst telegramText = [\n  '🚨 <b>GIAN LẬN THƯƠNG MẠI ĐIỆN TỬ — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + esc(order.order_number) + '</code>',\n  '<b>Mức độ</b>  ' + sevLabel,\n  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',\n  '<b>Giá trị</b>  ' + esc(total),\n  '<b>Khách</b>  ' + esc(order.shipping_name || order.customer_name || 'Khách vãng lai'),\n  '<b>IP</b>  <code>' + esc(order.ip_address || base.ip || 'không rõ') + '</code> (' + esc(order.ip_country || base.country || 'không rõ') + ')',\n  '<b>Giao tới</b>  ' + esc(order.shipping_city) + ', ' + esc(order.shipping_country),\n  '<b>Dấu hiệu</b>  ' + esc(flagText),\n  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(adminLink) + '\">Mở quản trị cửa hàng</a>',\n].join('\\n');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC / STORE</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Cảnh báo gian lận đơn hàng</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<div style=\"display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700\">' + esc(sevLabel) + '</div>'\n  + '<h2 style=\"font-size:18px;margin:16px 0 8px\">Đơn ' + esc(order.order_number) + ' · ' + riskScore + '/100</h2>'\n  + '<p style=\"color:#475569;line-height:1.6;margin:0 0 18px\">Đơn hàng trị giá <b>' + esc(total) + '</b> có dấu hiệu gian lận: ' + esc(flagText) + '.</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:14px\">'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Khách hàng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(order.shipping_name || order.customer_name || 'Khách vãng lai') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">IP / quốc gia</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(order.ip_address || 'không rõ') + ' · ' + esc(order.ip_country || 'không rõ') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Giao tới</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(order.shipping_city) + ', ' + esc(order.shipping_country) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Số đơn cùng IP 24h</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + velocity + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Thanh toán</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(order.payment_method) + ' · ' + esc(order.payment_status) + '</td></tr>'\n  + '</table>'\n  + '<a href=\"' + esc(adminLink) + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở quản trị cửa hàng</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nreturn [{ json: { ...base, order, riskScore, severity, flags, flagText, velocity, total, telegramText, emailHtml, emailText, orderLink, adminLink } }];"
+      },
+      "position": [
+        660,
+        0
+      ],
+      "id": "df485150-dd72-5b71-b8cd-36e8ca879f72"
+    },
+    {
+      "name": "⚠️ Rủi ro cao?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        880,
+        0
+      ],
+      "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897"
+    },
+    {
+      "name": "🔒 Tạm giữ đơn hàng",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE store_orders SET status = 'on_hold',\n  metadata = metadata || jsonb_build_object('fraudWorkflowAt', now()::text, 'fraudWorkflowExecution', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}', 'fraudWorkflowRisk', '{{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore }}'),\n  updated_at = now()\nWHERE id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}' RETURNING id, order_number, status;",
+        "options": {}
+      },
+      "position": [
+        1100,
+        -140
+      ],
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "✅ Đơn trong ngưỡng",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1100,
+        140
+      ],
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9"
+    },
+    {
+      "name": "📱 Telegram sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1320,
+        0
+      ],
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1"
+    },
+    {
+      "name": "📱 Gửi Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.telegramText }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true,
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        1540,
+        -120
+      ],
+      "id": "36b91229-3aaa-5950-98b2-27822433b566",
+      "credentials": {
+        "telegramApi": {
+          "id": "mg-telegram-credential",
+          "name": "MedicareGuard Telegram"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "📧 Gmail sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
+              "leftValue": "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1760,
+        0
+      ],
+      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
+    },
+    {
+      "name": "📧 Gửi Gmail (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "fromEmail": "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
+        "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+        "subject": "=🚨 Gian lận đơn {{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number }} — {{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore }}/100",
+        "emailFormat": "html",
+        "html": "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.emailHtml }}",
+        "text": "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.emailText }}",
+        "options": {}
+      },
+      "position": [
+        1980,
+        -120
+      ],
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+      "credentials": {
+        "smtp": {
+          "id": "mg-smtp-credential",
+          "name": "MedicareGuard SMTP"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "📝 Ghi nhận phản hồi",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH alert AS (\n  UPDATE alerts SET status = 'investigating',\n    metadata = metadata || jsonb_build_object('ecommerceFraudWorkflow', 'completed', 'ecommerceRiskScore', '{{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore }}', 'ecommerceWorkflowAt', now()::text),\n    updated_at = now()\n  WHERE id = NULLIF('{{ $('🔍 Kiểm tra dữ liệu').first().json.alertId }}', '')::uuid\n  RETURNING id\n), event AS (\n  UPDATE store_security_events SET metadata = metadata || jsonb_build_object('n8nWorkflowAt', now()::text, 'n8nExecutionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}', 'n8nRiskScore', '{{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore }}')\n  WHERE order_id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}'::uuid\n  RETURNING id\n)\nSELECT (SELECT count(*) FROM alert)::int AS alerts_updated, (SELECT count(*) FROM event)::int AS events_updated;",
+        "options": {}
+      },
+      "position": [
+        2200,
+        0
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🏁 Kết thúc phiên chạy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('🔍 Kiểm tra dữ liệu').first().json.executionId + '/complete' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 70, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number }) }}"
+      },
+      "position": [
+        2420,
+        0
+      ],
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Ghi chú — Tổng quan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "# Phản hồi Gian lận Thương mại điện tử\nXác minh IP/quốc gia · chấm điểm rủi ro · tạm giữ đơn · cảnh báo SOC\n\n**Kích hoạt:** webhook `mg-ecommerce-fraud` · **Node thực thi:** 13 · **Kênh:** 📱 Telegram + 📧 Gmail · **Phụ trách:** SOC Automation",
+        "height": 170,
+        "width": 1800,
+        "color": 4
+      },
+      "position": [
+        0,
+        -420
+      ],
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d"
+    },
+    {
+      "name": "Ghi chú — Đánh giá",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Đánh giá\nTải đơn hàng, đối chiếu IP/quốc gia, số đơn cùng IP trong 24 giờ và điểm rủi ro do backend chấm.",
+        "height": 130,
+        "width": 1000,
+        "color": 1
+      },
+      "position": [
+        0,
+        -210
+      ],
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+    },
+    {
+      "name": "Ghi chú — Phản hồi",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ② Phản hồi\nĐơn rủi ro ≥70 bị tạm giữ. Gửi Telegram/Gmail độc lập, cập nhật cảnh báo SOC và sự kiện bảo mật.",
+        "height": 130,
+        "width": 1200,
+        "color": 3
+      },
+      "position": [
+        1100,
+        -210
+      ],
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
+    }
+  ],
+  "connections": {
+    "📥 Cảnh báo gian lận đơn hàng": {
+      "main": [
+        [
+          {
+            "node": "🔍 Kiểm tra dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Kiểm tra dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "🗄️ Tải đơn hàng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗄️ Tải đơn hàng": {
+      "main": [
+        [
+          {
+            "node": "🧮 Chấm điểm & Soạn cảnh báo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧮 Chấm điểm & Soạn cảnh báo": {
+      "main": [
+        [
+          {
+            "node": "⚠️ Rủi ro cao?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ Rủi ro cao?": {
+      "main": [
+        [
+          {
+            "node": "🔒 Tạm giữ đơn hàng",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "✅ Đơn trong ngưỡng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔒 Tạm giữ đơn hàng": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Đơn trong ngưỡng": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Telegram sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "📱 Gửi Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📧 Gmail sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Gửi Telegram": {
+      "main": [
+        [
+          {
+            "node": "📧 Gmail sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 Gmail sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "📧 Gửi Gmail (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📝 Ghi nhận phản hồi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 Gửi Gmail (SMTP)": {
+      "main": [
+        [
+          {
+            "node": "📝 Ghi nhận phản hồi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Ghi nhận phản hồi": {
+      "main": [
+        [
+          {
+            "node": "🏁 Kết thúc phiên chạy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "workflowDescription": "Xác minh IP/quốc gia · Chấm điểm rủi ro · Tạm giữ đơn · Cảnh báo SOC · Telegram + Gmail"
+  },
+  "tags": [
+    {
+      "name": "MedicareGuard"
+    },
+    {
+      "name": "ecommerce-fraud-response"
+    }
+  ]
+}

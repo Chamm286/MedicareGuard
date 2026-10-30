@@ -69,7 +69,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query(`${RULE_SELECT} WHERE f.id = $1`, [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Firewall rule not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -79,7 +79,7 @@ router.post(
   requirePermission("firewall:write"),
   asyncHandler(async (req, res) => {
     const { name, description, direction = "inbound", action = "deny", protocol = "tcp", source_ip, destination_ip, source_port, destination_port, priority = 100, enabled = true, metadata = {} } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const result = await query(
       `INSERT INTO firewall_rules (name, description, direction, action, protocol, source_ip, destination_ip, source_port, destination_port, priority, enabled, created_by, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
@@ -95,7 +95,7 @@ router.post(
   requirePermission("firewall:write"),
   asyncHandler(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
-    if (!items.length) throw new HttpError(400, "items array is required");
+    if (!items.length) throw new HttpError(400, "Mảng items là bắt buộc");
     const rows = [];
     for (const item of items) {
       if (!item.name) continue;
@@ -113,11 +113,11 @@ router.post(
 const updateRule = asyncHandler(async (req, res) => {
   const allowed = ["name", "description", "direction", "action", "protocol", "source_ip", "destination_ip", "source_port", "destination_port", "priority", "enabled", "metadata"];
   const fields = allowed.filter((field) => req.body[field] !== undefined);
-  if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+  if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
   const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
   values.push(req.params.id);
   const result = await query(`UPDATE firewall_rules SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-  if (!result.rows.length) throw new HttpError(404, "Firewall rule not found");
+  if (!result.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
   await recordAudit({ req, action: "update", resource: "firewall_rules", resourceId: req.params.id });
   res.json({ data: result.rows[0] });
 });
@@ -130,7 +130,7 @@ router.patch(
   requirePermission("firewall:write"),
   asyncHandler(async (req, res) => {
     const result = await query("UPDATE firewall_rules SET enabled = NOT enabled WHERE id = $1 RETURNING *", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Firewall rule not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
     await recordActivity({ eventType: "firewall_toggle", req, resource: "firewall_rules", resourceId: req.params.id, action: "toggle", message: `Rule ${result.rows[0].enabled ? "enabled" : "disabled"}` });
     res.json({ data: result.rows[0] });
   }),
@@ -140,7 +140,7 @@ router.post(
   "/:id/test",
   asyncHandler(async (req, res) => {
     const rule = await query("SELECT * FROM firewall_rules WHERE id = $1", [req.params.id]);
-    if (!rule.rows.length) throw new HttpError(404, "Firewall rule not found");
+    if (!rule.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
     const r = rule.rows[0];
     const { source_ip, destination_ip, protocol, destination_port } = req.body;
     const matches = {
@@ -160,9 +160,9 @@ router.post(
   requirePermission("firewall:apply"),
   asyncHandler(async (req, res) => {
     const rule = await query("SELECT * FROM firewall_rules WHERE id = $1", [req.params.id]);
-    if (!rule.rows.length) throw new HttpError(404, "Firewall rule not found");
+    if (!rule.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
     await query("UPDATE firewall_rules SET metadata = metadata || $1 WHERE id = $2", [JSON.stringify({ applied_at: new Date().toISOString(), applied_by: req.user.email }), req.params.id]);
-    await recordActivity({ eventType: "firewall_apply", req, resource: "firewall_rules", resourceId: req.params.id, action: "apply", message: `Rule ${rule.rows[0].name} pushed to edge firewalls` });
+    await recordActivity({ eventType: "firewall_apply", req, resource: "firewall_rules", resourceId: req.params.id, action: "apply", message: `Quy tắc ${rule.rows[0].name} đã được đẩy tới tường lửa biên` });
     res.json({ data: { applied: true, rule_id: req.params.id, applied_at: new Date().toISOString(), targets: ["edge-us-east", "edge-eu-west", "cloud-waf"] } });
   }),
 );
@@ -172,7 +172,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM firewall_rules WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Firewall rule not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy quy tắc tường lửa");
     await recordAudit({ req, action: "delete", resource: "firewall_rules", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

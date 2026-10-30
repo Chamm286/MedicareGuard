@@ -1,44 +1,52 @@
 {
-  "nodeCount": 98,
+  "nodeCount": 97,
   "workflows": [
     {
       "id": "ransomware-containment",
-      "name": "Ransomware Containment & Recovery",
-      "executable": 20,
-      "stickyNotes": 7,
-      "connections": 19,
+      "name": "Cô lập & Phục hồi Ransomware",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/ransomware-containment.json"
     },
     {
       "id": "phishing-triage",
-      "name": "Phishing Triage & Credential Reset",
-      "executable": 20,
-      "stickyNotes": 7,
-      "connections": 19,
+      "name": "Phân tích & Xử lý Phishing",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/phishing-triage.json"
     },
     {
       "id": "vulnerability-sla",
-      "name": "Vulnerability SLA Escalation",
-      "executable": 20,
-      "stickyNotes": 7,
-      "connections": 19,
+      "name": "Leo thang SLA Lỗ hổng",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/vulnerability-sla.json"
     },
     {
       "id": "compliance-evidence",
-      "name": "Continuous Compliance Evidence",
-      "executable": 20,
-      "stickyNotes": 7,
-      "connections": 19,
+      "name": "Bằng chứng Tuân thủ Liên tục",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/compliance-evidence.json"
     },
     {
+      "id": "ecommerce-fraud-response",
+      "name": "Phản hồi Gian lận Thương mại điện tử",
+      "executable": 13,
+      "stickyNotes": 3,
+      "connections": 12,
+      "file": "n8n/workflows/ecommerce-fraud-response.json"
+    },
+    {
       "id": "live-attack-monitor",
-      "name": "Live Attack Monitor & Phone Alerts",
-      "executable": 18,
-      "stickyNotes": 5,
-      "connections": 17,
+      "name": "Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại",
+      "executable": 16,
+      "stickyNotes": 3,
+      "connections": 15,
       "file": "n8n/workflows/live-attack-monitor.json"
     }
   ]
