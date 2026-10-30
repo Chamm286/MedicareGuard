@@ -141,7 +141,8 @@
           "name": "MedicareGuard PostgreSQL"
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "name": "📱 Telegram sẵn sàng?",

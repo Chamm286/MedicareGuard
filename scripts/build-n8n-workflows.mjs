@@ -898,7 +898,7 @@ FROM (
 ) t;`, positions.monitorLoad),
     code("✉️ Soạn tin cảnh báo", buildMessageCode, positions.monitorBuild),
     ifNode("❓ Có tấn công mới?", `={{ $json.count }}`, 1, positions.monitorGate),
-    postgres("👥 Tải người nhận", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients),
+    postgres("👥 Tải người nhận", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients, { alwaysOutputData: true }),
     ifNode("📱 Telegram sẵn sàng?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.monitorNotifyGate),
     ifNode("📧 Gmail sẵn sàng?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.monitorGmailGate),
     node("📱 Gửi Telegram", "n8n-nodes-base.telegram", 1.2, {
