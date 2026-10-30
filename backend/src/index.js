@@ -28,6 +28,7 @@ const reportRoutes = require("./routes/reports");
 const aiRoutes = require("./routes/ai");
 const automationRoutes = require("./routes/automation");
 const demoRoutes = require("./routes/demo");
+const ingestRoutes = require("./routes/ingest");
 const storeRoutes = require("./routes/store");
 const systemRoutes = require("./routes/system");
 const { buildGenericRouter } = require("./routes/generic");
@@ -80,6 +81,7 @@ app.use(`${api}/reports`, authenticate, reportRoutes);
 app.use(`${api}/ai`, authenticate, aiRoutes);
 app.use(`${api}/automation`, authenticate, automationRoutes);
 if (process.env.DEMO_MODE === "true") app.use(`${api}/demo`, demoRoutes);
+app.use(`${api}/ingest`, ingestRoutes);
 app.use(`${api}/store`, storeRoutes);
 app.use(`${api}`, buildGenericRouter());
 
