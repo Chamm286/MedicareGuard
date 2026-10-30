@@ -341,6 +341,20 @@ const dispatchFraudWorkflow = async (payload) => {
   }
 };
 
+const dispatchFraudConfirmedWorkflow = async (payload) => {
+  try {
+    const response = await fetch(`${n8nBaseUrl()}/webhook/mg-fraud-confirmed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(3000),
+    });
+    return { dispatched: response.ok, status: response.ok ? "dispatched" : `HTTP ${response.status}` };
+  } catch (error) {
+    return { dispatched: false, status: error.name === "TimeoutError" ? "timeout" : "n8n-offline" };
+  }
+};
+
 const raiseFraudAlert = async ({ order, context, riskScore, flags, items }) => {
   const severity = riskScore >= 80 ? "critical" : riskScore >= FRAUD_RISK_THRESHOLD ? "high" : "medium";
   const title = `Gian lận thương mại điện tử — đơn ${order.order_number}`;
@@ -992,6 +1006,10 @@ router.patch(
     if (status && !ORDER_STATUSES.has(status)) throw new HttpError(400, "Trạng thái đơn hàng không hợp lệ");
     if (paymentStatus && !PAYMENT_STATUSES.has(paymentStatus)) throw new HttpError(400, "Trạng thái thanh toán không hợp lệ");
     if (!status && !paymentStatus) throw new HttpError(400, "Không có thay đổi nào");
+    const existing = await query("SELECT * FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!existing.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    const alreadyConfirmed = existing.rows[0].status === "cancelled" && Boolean(existing.rows[0].metadata?.fraudConfirmed);
+
     const result = await query(
       `UPDATE store_orders SET status = COALESCE($2, status), payment_status = COALESCE($3, payment_status), updated_at = now()
        WHERE id::text = $1 RETURNING *`,
@@ -1002,7 +1020,37 @@ router.patch(
       await query("UPDATE store_payments SET status = $2, updated_at = now() WHERE order_id = $1", [result.rows[0].id, paymentStatus === "paid" ? "captured" : paymentStatus]);
     }
     await recordAudit({ req, action: "update", resource: "store_orders", resourceId: result.rows[0].id, details: { status, paymentStatus } });
-    res.json({ data: await orderPayload(result.rows[0].id) });
+
+    let fraudConfirmation = null;
+    if (status === "cancelled" && !alreadyConfirmed) {
+      const executionId = crypto.randomUUID();
+      fraudConfirmation = await dispatchFraudConfirmedWorkflow({
+        entityId: result.rows[0].id,
+        alertId: result.rows[0].id,
+        orderId: result.rows[0].id,
+        orderNumber: result.rows[0].order_number,
+        ip: result.rows[0].ip_address,
+        countryCode: result.rows[0].ip_country_code,
+        country: result.rows[0].ip_country,
+        adminId: req.user.id,
+        adminEmail: req.user.email,
+        reason: "Admin confirmed fraud",
+        executionId,
+      });
+      await recordActivity({
+        eventType: "store_fraud_confirmed",
+        req,
+        resource: "store_orders",
+        resourceId: result.rows[0].id,
+        action: "cancel_fraud",
+        message: `Admin đã xác nhận đơn ${result.rows[0].order_number} là gian lận và hủy đơn. IP ${result.rows[0].ip_address} đã được gửi sang n8n để chặn.`,
+        metadata: { executionId, dispatch: fraudConfirmation },
+      });
+    } else if (status === "cancelled" && alreadyConfirmed) {
+      fraudConfirmation = { dispatched: false, status: "already-confirmed" };
+    }
+
+    res.json({ data: { ...(await orderPayload(result.rows[0].id)), fraudConfirmation } });
   }),
 );
 

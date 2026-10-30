@@ -60,7 +60,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nreturn [{ json: { ...base, order, ip, orderNumber, admin, telegramText: text } }];"
+        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nreturn [{ json: { ...base, order, ip, orderNumber, order_id: orderNumber, admin, admin_email: admin, country: order.ip_country || base.country || 'không rõ', reason: 'Admin confirmed fraud', telegramText: text } }];"
       },
       "position": [
         660,
@@ -142,7 +142,7 @@
         "resource": "message",
         "operation": "sendMessage",
         "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
-        "text": "={{ $('✉️ Soạn tin xác nhận').first().json.telegramText }}",
+        "text": "=🚨 <b>PHÁT HIỆN GIAN LẬN - MEDICAREGUARD</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━\n📦 <b>Mã đơn hàng:</b> <code>{{ $json.order_id }}</code>\n🌐 <b>IP khách hàng:</b> <code>{{ $json.ip }}</code> ({{ $json.country }})\n👤 <b>Admin xử lý:</b> {{ $json.admin_email }}\n📝 <b>Lý do:</b> {{ $json.reason }}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ <b>HÀNH ĐỘNG ĐÃ THỰC HIỆN:</b>\n- Đã tự động chặn IP.\n- Đã cập nhật trạng thái SOC.\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Hệ thống MedicareGuard SOC tự động gửi.</i>",
         "additionalFields": {
           "parse_mode": "HTML",
           "disable_web_page_preview": true,
