@@ -1,5 +1,5 @@
 /**
- * Automation registry for the four production n8n workflows shipped with
+ * Automation registry for the production n8n workflows shipped with
  * MedicareGuard. The JSON definitions live in /n8n/workflows and are imported
  * into n8n on first boot. This registry exposes their operational metadata to
  * the SOC console without requiring the n8n API on the request path.
@@ -68,7 +68,7 @@ const workflows = [
     version: "1.8.4",
     owner: "Quản lý phơi nhiễm",
     targetSla: "24 giờ",
-    nodeCount: 17,
+    nodeCount: 19,
     tags: ["CVE", "SLA", "khắc phục", "rủi ro lâm sàng"],
     integrations: ["Elastic SIEM", "Jira Service Management", "Telegram", "Gmail"],
     stages: [
@@ -93,7 +93,7 @@ const workflows = [
     version: "2.0.1",
     owner: "GRC",
     targetSla: "Hằng đêm",
-    nodeCount: 17,
+    nodeCount: 19,
     tags: ["HIPAA", "NIST", "ISO 27001", "bằng chứng"],
     integrations: ["Okta", "Elastic SIEM", "AWS GuardDuty", "PostgreSQL", "Gmail"],
     stages: [
@@ -142,7 +142,7 @@ const workflows = [
     version: "1.0.0",
     owner: "Tự động hóa SOC",
     targetSla: "5 phút",
-    nodeCount: 16,
+    nodeCount: 18,
     tags: ["giám sát", "telegram", "gmail", "trực ban"],
     integrations: ["Telegram Bot API", "Gmail SMTP", "PostgreSQL"],
     stages: [

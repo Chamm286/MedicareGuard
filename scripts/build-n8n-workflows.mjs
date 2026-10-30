@@ -241,6 +241,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     name: "Leo thang SLA Lỗ hổng",
     triggerLabel: "Lỗ hổng mới",
     webhookPath: "mg-vulnerability",
+    schedule: { cron: "0 */6 * * *", label: "⏰ Lịch mỗi 6 giờ", pickName: "🔎 Chọn lỗ hổng ưu tiên", pickQuery: "SELECT id FROM vulnerabilities WHERE status = 'open' ORDER BY cvss_score DESC NULLS LAST LIMIT 1;" },
     loadName: "🗄️ Tải lỗ hổng",
     entityType: "vulnerability",
     recordName: "vulnerability",
@@ -282,6 +283,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     name: "Bằng chứng Tuân thủ Liên tục",
     triggerLabel: "Yêu cầu bằng chứng",
     webhookPath: "mg-compliance",
+    schedule: { cron: "0 2 * * *", label: "⏰ Lịch hằng đêm 02:00", pickName: "🔎 Chọn kiểm soát ưu tiên", pickQuery: "SELECT id FROM compliance_controls ORDER BY score ASC NULLS LAST LIMIT 1;" },
     loadName: "🗄️ Tải kiểm soát",
     entityType: "compliance_control",
     recordName: "compliance control",
@@ -376,7 +378,7 @@ const buildWorkflow = (spec) => {
   if (spec.id === "ecommerce-fraud-response") return buildEcommerceWorkflow(spec);
 
   const validateCode = `const body = $json.body ?? $json;
-const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;
+const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;
 const entityId = String(raw || '').trim();
 if (!entityId) { throw new Error('entityId is required'); }
 const executionId = String(body.executionId || ('ext-' + Date.now()));
@@ -441,7 +443,8 @@ const emailHtml = '<div style="background:#f1f5f9;padding:24px;font-family:Arial
 const emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
 return [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: '${spec.name}', entityId: base.entityId, entityType: '${spec.entityType}', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];`;
 
-  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${L.validate}').first().json.receivedAt).getTime()), nodeCount: 17, metrics: { risk_score: $('${L.score}').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất ${spec.name} cho execution ' + $('${L.validate}').first().json.executionId`;
+  const nodeCount = 17 + (spec.schedule ? 2 : 0);
+  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${L.validate}').first().json.receivedAt).getTime()), nodeCount: ${nodeCount}, metrics: { risk_score: $('${L.score}').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất ${spec.name} cho execution ' + $('${L.validate}').first().json.executionId`;
 
   const nodes = [
     node("📥 " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.webhook, { webhookId: id() }),
@@ -463,7 +466,14 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     http(L.finalize, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref(L.validate, "executionId")} + '/complete' }}`, positions.finalize, jsonBody(finalizeFields)),
   ];
 
-  nodes.push(sticky("Ghi chú — Tổng quan", `# ${spec.name}\n${spec.stageSummary}\n\n**Kích hoạt:** webhook \`${spec.webhookPath}\` · **Node thực thi:** 17 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation`, [0, -440], 2100, 180, 4));
+  if (spec.schedule) {
+    nodes.push(
+      node(spec.schedule.label, "n8n-nodes-base.scheduleTrigger", 1.2, { rule: { interval: [{ field: "cronExpression", expression: spec.schedule.cron }] } }, [0, 180]),
+      postgres(spec.schedule.pickName, spec.schedule.pickQuery, [220, 180]),
+    );
+  }
+
+  nodes.push(sticky("Ghi chú — Tổng quan", `# ${spec.name}\n${spec.stageSummary}\n\n**Kích hoạt:** webhook \`${spec.webhookPath}\` · **Node thực thi:** ${nodeCount} · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation`, [0, -440], 2100, 180, 4));
   nodes.push(sticky("Ghi chú — Tiếp nhận & Đánh giá", "## ① Tiếp nhận & Đánh giá\nKiểm tra dữ liệu, tải bản ghi, làm giàu ngữ cảnh và chấm điểm rủi ro theo mức độ nghiêm trọng và tầm quan trọng của tài sản.", [0, -240], 1050, 150, 1));
   nodes.push(sticky("Ghi chú — Phản hồi & Thông báo", "## ② Phản hồi & Thông báo\nMở sự cố hoặc ticket, gửi 📱 node Telegram và 📧 Gmail (SMTP) độc lập, thực thi phản ứng, xác minh rồi ghi nhận kết quả.", [1320, -240], 1050, 150, 3));
 
@@ -501,6 +511,11 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     [L.mark]: { main: [[{ node: L.finalize, type: "main", index: 0 }]] },
   };
 
+  if (spec.schedule) {
+    connections[spec.schedule.label] = { main: [[{ node: spec.schedule.pickName, type: "main", index: 0 }]] };
+    connections[spec.schedule.pickName] = { main: [[{ node: L.validate, type: "main", index: 0 }]] };
+  }
+
   return {
     id: spec.id,
     name: spec.name,
@@ -537,7 +552,7 @@ const parseFlags = (value) => {
 const flags = parseFlags(base.flags && base.flags.length ? base.flags : order.fraud_flags);
 const velocity = Number(order.ip_order_count || 1);
 const riskScore = Math.max(Number(base.riskScore || 0), Number(order.risk_score || 0), Math.min(100, velocity * 5));
-const severity = riskScore >= 80 ? 'critical' : riskScore >= 60 ? 'high' : 'medium';
+const severity = riskScore >= 80 ? 'critical' : riskScore >= 50 ? 'high' : 'medium';
 const sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH' }[severity];
 const sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04' }[severity];
 const consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';
@@ -608,7 +623,7 @@ SELECT (SELECT count(*) FROM alert)::int AS alerts_updated, (SELECT count(*) FRO
 FROM store_orders o LEFT JOIN store_customers c ON c.id = o.customer_id
 WHERE o.id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' LIMIT 1;`, [440, 0]),
     code("🧮 Chấm điểm & Soạn cảnh báo", scoreCode, [660, 0]),
-    ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 70, [880, 0]),
+    ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 50, [880, 0]),
     postgres("🔒 Tạm giữ đơn hàng", `UPDATE store_orders SET status = 'on_hold',
   metadata = metadata || jsonb_build_object('fraudWorkflowAt', now()::text, 'fraudWorkflowExecution', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}', 'fraudWorkflowRisk', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}'),
   updated_at = now()
@@ -633,7 +648,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' RETURNING id, o
       options: {},
     }, [1980, -120], { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
     postgres("📝 Ghi nhận phản hồi", recordQuery, [2200, 0]),
-    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 70, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
+    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 50, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
   ];
 
   nodes.push(sticky("Ghi chú — Tổng quan", "# Phản hồi Gian lận Thương mại điện tử\nXác minh IP/quốc gia · chấm điểm rủi ro · tạm giữ đơn · cảnh báo SOC\n\n**Kích hoạt:** webhook `mg-ecommerce-fraud` · **Node thực thi:** 13 · **Kênh:** 📱 Telegram + 📧 Gmail · **Phụ trách:** SOC Automation", [0, -420], 1800, 170, 4));
@@ -730,7 +745,11 @@ return [{ json: { ...base, count: attacks.length, attacks, summary: lines.join('
   const metricsCode = `const base = $('🧭 Chuẩn hóa dữ liệu').first().json;
 const built = $('✉️ Soạn tin cảnh báo').first().json;
 const count = Number(built.count || 0);
-return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 16, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];`;
+return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 18, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];`;
+
+  const channelCheckCode = `const sent = (name) => { try { return !$(name).first().json.error; } catch (error) { return false; } };
+const telegramSent = Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) && sent('📱 Gửi Telegram');
+return [{ json: { telegramSent } }];`;
 
   const nodes = [
     node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.monitorWebhook, { webhookId: id() }),
@@ -767,17 +786,19 @@ FROM (
       options: {},
     }, positions.monitorGmail, { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
     simulate("🔔 Thông báo trong ứng dụng", "notify", positions.monitorInApp, `executionId: ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")}, title: 'Giám sát tấn công: ' + $('✉️ Soạn tin cảnh báo').first().json.count + ' tấn công mới', message: $('✉️ Soạn tin cảnh báo').first().json.summary, severity: 'critical', channel: 'phone'`),
+    code("🧾 Kiểm tra Telegram đã gửi", channelCheckCode, [2200, 270]),
+    ifNode("✅ Telegram đã gửi?", "={{ $json.telegramSent }}", true, [2310, 270]),
     postgres("📝 Đánh dấu đã gửi", `UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()
 WHERE severity IN ('critical','high')
   AND detected_at > now() - interval '24 hours'
   AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
 RETURNING id;`, positions.monitorUpdate),
     code("📈 Tổng hợp số liệu", metricsCode, positions.monitorMetrics),
-    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 16, metrics: $json.metrics, message: $json.message`)),
+    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message`)),
     node("😴 Không có tấn công mới", "n8n-nodes-base.noOp", 1, {}, positions.monitorNoAttacks),
   ];
 
-  nodes.push(sticky("Ghi chú — Tổng quan", "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 16 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation", [0, -360], 1800, 160, 4));
+  nodes.push(sticky("Ghi chú — Tổng quan", "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 18 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation", [0, -360], 1800, 160, 4));
   nodes.push(sticky("Ghi chú — Quét & Tổng hợp", "## ① Quét & Tổng hợp\nMỗi 5 phút, quét cảnh báo critical/high trong 24 giờ chưa gửi cho trực ban và gộp thành một tin nhắn dễ đọc.", [0, -170], 1000, 130, 1));
   nodes.push(sticky("Ghi chú — Cảnh báo & Ghi nhận", "## ② Cảnh báo & Ghi nhận\n📱 Telegram: đẩy ngay về điện thoại.\n📧 Gmail: bản lưu cho kiểm toán.\nHai kênh hoạt động độc lập, sau đó đánh dấu đã gửi.", [1100, -170], 1000, 130, 3));
 
@@ -808,7 +829,14 @@ RETURNING id;`, positions.monitorUpdate),
       ],
     },
     "📧 Gửi Gmail (SMTP)": { main: [[{ node: "🔔 Thông báo trong ứng dụng", type: "main", index: 0 }]] },
-    "🔔 Thông báo trong ứng dụng": { main: [[{ node: "📝 Đánh dấu đã gửi", type: "main", index: 0 }]] },
+    "🔔 Thông báo trong ứng dụng": { main: [[{ node: "🧾 Kiểm tra Telegram đã gửi", type: "main", index: 0 }]] },
+    "🧾 Kiểm tra Telegram đã gửi": { main: [[{ node: "✅ Telegram đã gửi?", type: "main", index: 0 }]] },
+    "✅ Telegram đã gửi?": {
+      main: [
+        [{ node: "📝 Đánh dấu đã gửi", type: "main", index: 0 }],
+        [{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }],
+      ],
+    },
     "📝 Đánh dấu đã gửi": { main: [[{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }]] },
     "📈 Tổng hợp số liệu": { main: [[{ node: "🏁 Kết thúc phiên chạy", type: "main", index: 0 }]] },
     "😴 Không có tấn công mới": { main: [[{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }]] },

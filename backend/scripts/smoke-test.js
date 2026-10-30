@@ -103,10 +103,10 @@ const run = async () => {
   const expectedNodes = {
     "ransomware-containment": 17,
     "phishing-triage": 17,
-    "vulnerability-sla": 17,
-    "compliance-evidence": 17,
+    "vulnerability-sla": 19,
+    "compliance-evidence": 19,
     "ecommerce-fraud-response": 13,
-    "live-attack-monitor": 16,
+    "live-attack-monitor": 18,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
@@ -115,9 +115,9 @@ const run = async () => {
     ok: suiteResponse.ok && suite.length === 6 && suiteSummary.active === 6,
   });
   results.push({
-    name: "automation suite totals 97 nodes",
+    name: "automation suite totals 103 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 97,
+    ok: suiteResponse.ok && suiteSummary.nodes === 103,
   });
   results.push({
     name: "automation node counts match the compact design",
