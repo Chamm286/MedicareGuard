@@ -136,6 +136,7 @@ const resources = [
     searchColumns: ["ip_address", "user_agent"],
     filterColumns: ["user_id", "revoked"],
     requiredColumns: ["user_id", "token_hash", "expires_at"],
+    readRoles: ["admin", "analyst"],
     description: "Phiên xác thực đang hoạt động và dấu vân tay thiết bị.",
   },
   {
@@ -148,6 +149,7 @@ const resources = [
     searchColumns: ["name", "key_prefix"],
     filterColumns: ["user_id", "revoked"],
     requiredColumns: ["name", "key_prefix", "key_hash"],
+    readRoles: ["admin"],
     description: "Thông tin xác thực máy cho tích hợp và tự động hóa.",
   },
   {
@@ -184,6 +186,8 @@ const resources = [
     searchColumns: ["name", "provider"],
     filterColumns: ["type", "status"],
     requiredColumns: ["name"],
+    readRoles: ["admin"],
+    writePermission: "integrations:manage",
     description: "Trình kết nối SIEM, EDR, phiếu hỗ trợ và đám mây.",
   },
   {
@@ -219,6 +223,8 @@ const resources = [
     searchColumns: ["key", "description"],
     filterColumns: ["scope"],
     requiredColumns: ["key"],
+    readRoles: ["admin"],
+    writePermission: "settings:manage",
     description: "Cấu hình thời gian chạy và cờ tính năng.",
   },
   {

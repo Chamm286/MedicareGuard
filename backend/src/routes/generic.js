@@ -2,7 +2,7 @@ const express = require("express");
 const { query, withTransaction } = require("../config/db");
 const { resources } = require("../config/resources");
 const { asyncHandler, HttpError, parsePagination, buildListQuery, serializeValue } = require("../utils/http");
-const { authenticate, requirePermission } = require("../middleware/auth");
+const { authenticate, authorize, requirePermission } = require("../middleware/auth");
 const { recordAudit } = require("../services/audit");
 
 const CSV_ESCAPE = (value) => {
@@ -23,12 +23,16 @@ const createCrudRouter = (resource) => {
     filterColumns = [],
     requiredColumns = [],
     defaultOrder = "created_at",
+    readRoles,
+    writePermission,
   } = resource;
 
-  const writeGuard = requirePermission("write");
+  const readGuard = readRoles?.length ? authorize(...readRoles) : (_req, _res, next) => next();
+  const writeGuard = requirePermission(writePermission || "write");
 
   router.get(
     "/",
+    readGuard,
     asyncHandler(async (req, res) => {
       const { page, limit, offset } = parsePagination(req.query);
       const { where, values, sort, order, selectColumns } = buildListQuery({
@@ -58,6 +62,7 @@ const createCrudRouter = (resource) => {
 
   router.get(
     "/export",
+    readGuard,
     asyncHandler(async (req, res) => {
       const result = await query(
         `SELECT ${["id", ...columns, "created_at", "updated_at"].filter((v, i, a) => a.indexOf(v) === i).join(", ")} FROM ${table} ORDER BY ${defaultOrder} DESC LIMIT 5000`,
@@ -73,6 +78,7 @@ const createCrudRouter = (resource) => {
 
   router.get(
     "/:id",
+    readGuard,
     asyncHandler(async (req, res) => {
       const result = await query(`SELECT * FROM ${table} WHERE id = $1`, [req.params.id]);
       if (!result.rows.length) throw new HttpError(404, `Không tìm thấy ${label}`);
@@ -82,6 +88,7 @@ const createCrudRouter = (resource) => {
 
   router.get(
     "/:id/comments",
+    readGuard,
     asyncHandler(async (req, res) => {
       const result = await query(
         `SELECT c.*, u.full_name AS author_name, u.email AS author_email
