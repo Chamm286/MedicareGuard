@@ -1037,6 +1037,7 @@ router.patch(
         reason: "Admin confirmed fraud",
         executionId,
       });
+      await query("UPDATE store_orders SET metadata = metadata || $2::jsonb, updated_at = now() WHERE id = $1", [result.rows[0].id, JSON.stringify({ fraudConfirmed: true, fraudConfirmedAt: new Date().toISOString(), fraudExecutionId: executionId })]);
       await recordActivity({
         eventType: "store_fraud_confirmed",
         req,
