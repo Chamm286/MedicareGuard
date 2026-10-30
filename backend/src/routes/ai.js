@@ -118,6 +118,9 @@ router.post(
     const { message, conversationId } = req.body;
     if (!message || !String(message).trim()) throw new HttpError(400, "Nội dung tin nhắn là bắt buộc");
 
+    const currentUser = await query("SELECT id FROM users WHERE id = $1", [req.user.id]);
+    if (!currentUser.rows.length) throw new HttpError(401, "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.");
+
     let conversation;
     if (conversationId) {
       const existing = await query("SELECT * FROM ai_conversations WHERE id = $1", [conversationId]);
