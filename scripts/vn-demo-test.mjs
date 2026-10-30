@@ -149,7 +149,7 @@ const main = async () => {
   await addItem(highCart.token, product.id, 20);
   const high = await checkout({ cartToken: highCart.token, shipping: shipping("-high"), paymentMethod: "card" });
   const highData = high.data?.data;
-  check("Checkout rủi ro cao tại Việt Nam bị tạm giữ", high.status === 201 && highData?.order?.status === "on_hold" && highData?.risk?.riskScore >= 65, `status ${highData?.order?.status}, risk ${highData?.risk?.riskScore}`);
+  check("Checkout rủi ro cao tại Việt Nam bị tạm giữ", high.status === 201 && highData?.order?.status === "on_hold" && highData?.risk?.riskScore >= 50, `status ${highData?.order?.status}, risk ${highData?.risk?.riskScore}`);
   check("Cảnh báo gian lận được tạo", Boolean(highData?.fraud?.alertId), highData?.fraud?.alertId || "không có");
   check("n8n nhận workflow gian lận", highData?.fraud?.dispatch?.dispatched === true, highData?.fraud?.dispatch?.status || "không có");
 

@@ -74,7 +74,7 @@ export default function OrdersPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-mono text-sm text-white">{order.order_number}</p>
                   <span className={cn("chip", order.status === "cancelled" ? "border-critical/25 bg-critical/10 text-critical" : order.status === "on_hold" ? "border-high/25 bg-high/10 text-high" : order.status === "delivered" ? "border-low/25 bg-low/10 text-low" : "border-brand-400/25 bg-brand-500/10 text-brand-200")}>{orderStatusLabel[order.status] || order.status}</span>
-                  {order.risk_score >= 60 && <span className="chip border-high/25 bg-high/10 text-high"><ShieldAlert className="h-3 w-3" /> Rủi ro {order.risk_score}</span>}
+                  {order.risk_score >= 50 && <span className="chip border-high/25 bg-high/10 text-high"><ShieldAlert className="h-3 w-3" /> Rủi ro {order.risk_score}</span>}
                 </div>
                 <p className="mt-1.5 text-[10px] text-slate-500">{formatStoreDate(order.created_at)} · {order.shipping_city}, {order.shipping_country}</p>
               </div>

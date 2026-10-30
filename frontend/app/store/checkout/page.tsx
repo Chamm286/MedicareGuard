@@ -90,7 +90,7 @@ export default function CheckoutPage() {
   if (result) {
     const order = result.order;
     const held = order.status === "on_hold";
-    const risky = result.risk.riskScore >= 60;
+    const risky = result.risk.riskScore >= 50;
     return (
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
         <div className={cn("panel overflow-hidden p-0", risky ? "border-high/25" : "border-low/25")}>
