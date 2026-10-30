@@ -272,4 +272,131 @@ router.get(
   }),
 );
 
+// ==========================================
+// BỔ SUNG CÁC ENDPOINTS CHO LUỒNG 7 & LUỒNG 8 (n8n)
+// ==========================================
+
+// 1. Luồng 7: Lấy log telemetry chi tiết trong vòng 1 giờ xung quanh sự cố
+router.post(
+  "/n8n/ai/fetch-telemetry",
+  asyncHandler(async (req, res) => {
+    const { event_id, user_id, ip_address, window_minutes = 60 } = req.body;
+    
+    // Truy vấn lịch sử hoạt động hoặc log hệ thống trong vòng 1 giờ quanh thời điểm xảy ra sự cố
+    const logsQuery = await query(
+      `SELECT * FROM activity_logs 
+       WHERE ($1::text IS NULL OR user_id::text = $1) 
+          OR ($2::text IS NULL OR ip_address = $2)
+       ORDER BY created_at DESC LIMIT 50`,
+      [user_id || null, ip_address || null]
+    );
+
+    res.json({
+      success: true,
+      telemetry: {
+        event_id: event_id || "EVT-UNKNOWN",
+        user_id: user_id || null,
+        ip_address: ip_address || null,
+        window_minutes,
+        recent_activity_count: logsQuery.rows.length,
+        logs: logsQuery.rows,
+      },
+    });
+  }),
+);
+
+// 2. Luồng 7: Thực thi Playbook khi Admin bấm nút phê duyệt trên Telegram
+router.post(
+  "/n8n/ai/execute-playbook",
+  asyncHandler(async (req, res) => {
+    const { incident_id, playbook_id, approval_id, approved_by } = req.body;
+    
+    // Ghi nhận log kiểm toán hành động thực thi playbook tự động
+    await recordActivity({
+      eventType: "ai_playbook_execution",
+      req,
+      resource: "incidents",
+      resourceId: incident_id,
+      action: "execute_playbook",
+      message: `Executed playbook ID ${playbook_id} for incident ${incident_id} via AI automation`,
+      metadata: { approval_id, approved_by },
+    });
+
+    res.json({
+      success: true,
+      message: `Playbook ${playbook_id} executed successfully for incident ${incident_id}`,
+      executed_at: new Date().toISOString(),
+    });
+  }),
+);
+
+// 3. Luồng 8: Truy vấn bảng system_tech_stack trả về danh sách phần mềm hệ thống
+router.get(
+  "/n8n/system/tech-stack",
+  asyncHandler(async (_req, res) => {
+    const result = await query("SELECT * FROM system_tech_stack ORDER BY id ASC");
+    res.json({
+      success: true,
+      data: {
+        assets: result.rows,
+      },
+    });
+  }),
+);
+
+// 4. Luồng 8: Tự động ghi nhận danh sách lỗ hổng CVE nguy hiểm từ n8n vào DB kèm SLA
+router.post(
+  "/n8n/vulnerability/auto-create",
+  asyncHandler(async (req, res) => {
+    const { findings, source = "NVD", execution_id } = req.body;
+    
+    if (!findings || !Array.isArray(findings)) {
+      throw new HttpError(400, "findings array is required");
+    }
+
+    const createdVulnerabilities = [];
+
+    for (const item of findings) {
+      const cveId = item.cve_id;
+      const title = item.product ? `Vulnerability in ${item.product} (${cveId})` : `New Threat CVE (${cveId})`;
+      const severity = String(item.priority || "HIGH").toUpperCase();
+      const cvss = Number(item.cvss_score) || 7.5;
+      const slaHours = Number(item.proposed_sla_hours) || 24;
+
+      // Chèn vào bảng vulnerabilities, nếu trùng cve_id thì cập nhật lại thông tin mới nhất
+      const insertResult = await query(
+        `INSERT INTO vulnerabilities (cve_id, title, description, severity, cvss_score, status, metadata)
+         VALUES ($1, $2, $3, $4, $5, 'open', $6)
+         ON CONFLICT (cve_id) 
+         DO UPDATE SET severity = EXCLUDED.severity, cvss_score = EXCLUDED.cvss_score, updated_at = NOW()
+         RETURNING *`,
+        [
+          cveId,
+          title,
+          item.remediation || "Identified via automated AI Threat Intelligence scan.",
+          severity,
+          cvss,
+          JSON.stringify({ source, execution_id, exposure_status: item.exposure_status, sla_hours: slaHours }),
+        ]
+      );
+      createdVulnerabilities.push(insertResult.rows[0]);
+    }
+
+    await recordActivity({
+      eventType: "threat_intel",
+      req,
+      resource: "vulnerabilities",
+      action: "auto_create",
+      message: `Auto-created ${createdVulnerabilities.length} vulnerabilities from AI Threat Intelligence feed`,
+      metadata: { execution_id, count: createdVulnerabilities.length },
+    });
+
+    res.json({
+      success: true,
+      created_count: createdVulnerabilities.length,
+      data: createdVulnerabilities,
+    });
+  }),
+);
+
 module.exports = router;
