@@ -299,6 +299,52 @@
       "onError": "continueRegularOutput"
     },
     {
+      "name": "🧾 Kiểm tra Telegram đã gửi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const sent = (name) => { try { return !$(name).first().json.error; } catch (error) { return false; } };\nconst telegramSent = Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) && sent('📱 Gửi Telegram');\nreturn [{ json: { telegramSent } }];"
+      },
+      "position": [
+        2200,
+        270
+      ],
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
+    },
+    {
+      "name": "✅ Telegram đã gửi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+              "leftValue": "={{ $json.telegramSent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2310,
+        270
+      ],
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+    },
+    {
       "name": "📝 Đánh dấu đã gửi",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -311,7 +357,7 @@
         2420,
         90
       ],
-      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -325,13 +371,13 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('🧭 Chuẩn hóa dữ liệu').first().json;\nconst built = $('✉️ Soạn tin cảnh báo').first().json;\nconst count = Number(built.count || 0);\nreturn [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 16, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];"
+        "jsCode": "const base = $('🧭 Chuẩn hóa dữ liệu').first().json;\nconst built = $('✉️ Soạn tin cảnh báo').first().json;\nconst count = Number(built.count || 0);\nreturn [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 18, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];"
       },
       "position": [
         2640,
         90
       ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d"
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
     },
     {
       "name": "🏁 Kết thúc phiên chạy",
@@ -359,13 +405,13 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 16, metrics: $json.metrics, message: $json.message }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message }) }}"
       },
       "position": [
         2860,
         90
       ],
-      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
       "onError": "continueRegularOutput"
     },
     {
@@ -377,14 +423,14 @@
         1320,
         270
       ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
     },
     {
       "name": "Ghi chú — Tổng quan",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 16 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation",
+        "content": "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 18 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation",
         "height": 160,
         "width": 1800,
         "color": 4
@@ -393,7 +439,7 @@
         0,
         -360
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     },
     {
       "name": "Ghi chú — Quét & Tổng hợp",
@@ -409,7 +455,7 @@
         0,
         -170
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
       "name": "Ghi chú — Cảnh báo & Ghi nhận",
@@ -425,7 +471,7 @@
         1100,
         -170
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
     }
   ],
   "connections": {
@@ -575,7 +621,36 @@
       "main": [
         [
           {
+            "node": "🧾 Kiểm tra Telegram đã gửi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧾 Kiểm tra Telegram đã gửi": {
+      "main": [
+        [
+          {
+            "node": "✅ Telegram đã gửi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Telegram đã gửi?": {
+      "main": [
+        [
+          {
             "node": "📝 Đánh dấu đã gửi",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📈 Tổng hợp số liệu",
             "type": "main",
             "index": 0
           }

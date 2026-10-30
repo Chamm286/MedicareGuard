@@ -67,7 +67,7 @@ const sampleEntity = async (workflowId) => {
     return result.rows[0]?.id || null;
   }
   if (workflowId === "ecommerce-fraud-response") {
-    const result = await query("SELECT id FROM store_orders WHERE status = 'on_hold' OR risk_score >= 60 ORDER BY risk_score DESC, created_at DESC LIMIT 1");
+    const result = await query("SELECT id FROM store_orders WHERE status = 'on_hold' OR risk_score >= 50 ORDER BY risk_score DESC, created_at DESC LIMIT 1");
     return result.rows[0]?.id || null;
   }
   return null;

@@ -1,5 +1,5 @@
 {
-  "nodeCount": 102,
+  "nodeCount": 108,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -20,17 +20,17 @@
     {
       "id": "vulnerability-sla",
       "name": "Leo thang SLA Lỗ hổng",
-      "executable": 17,
+      "executable": 19,
       "stickyNotes": 3,
-      "connections": 16,
+      "connections": 18,
       "file": "n8n/workflows/vulnerability-sla.json"
     },
     {
       "id": "compliance-evidence",
       "name": "Bằng chứng Tuân thủ Liên tục",
-      "executable": 17,
+      "executable": 19,
       "stickyNotes": 3,
-      "connections": 16,
+      "connections": 18,
       "file": "n8n/workflows/compliance-evidence.json"
     },
     {
@@ -44,9 +44,9 @@
     {
       "id": "live-attack-monitor",
       "name": "Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại",
-      "executable": 16,
+      "executable": 18,
       "stickyNotes": 3,
-      "connections": 15,
+      "connections": 17,
       "file": "n8n/workflows/live-attack-monitor.json"
     },
     {

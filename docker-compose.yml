@@ -40,6 +40,11 @@ services:
       SEED_ON_START: ${SEED_ON_START:-true}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      N8N_BASE_URL: http://n8n:5678
+      N8N_AI_CHAT_URL: http://n8n:5678/webhook/mg-ai-chat
+      N8N_AI_CHAT_TIMEOUT_MS: ${N8N_AI_CHAT_TIMEOUT_MS:-15000}
     ports:
       - "4000:4000"
     depends_on:
@@ -63,6 +68,8 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+      NEXT_PUBLIC_MAILPIT_URL: ${NEXT_PUBLIC_MAILPIT_URL:-http://localhost:8025}
+      BACKEND_INTERNAL_URL: http://backend:4000
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
       - "3000:3000"
@@ -96,7 +103,7 @@ services:
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_RUNNERS_ENABLED: "true"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      MG_API_URL: http://host.docker.internal:4000/api
+      MG_API_URL: http://backend:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
       MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
