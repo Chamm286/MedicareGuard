@@ -408,7 +408,9 @@ return [{ json: { message, conversationId: body.conversationId || null, executio
   'countries', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_attacks_by_country LIMIT 6) t),
   'assets', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6) t),
   'compliance', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC) t),
-  'firewall', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT action, count(*)::int AS total, COALESCE(sum(hit_count), 0)::bigint AS hits FROM firewall_rules GROUP BY action) t)
+  'firewall', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT action, count(*)::int AS total, COALESCE(sum(hit_count), 0)::bigint AS hits FROM firewall_rules GROUP BY action) t),
+  'storeOrders', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, created_at FROM store_orders ORDER BY risk_score DESC, created_at DESC LIMIT 8) t),
+  'storeFraudEvents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, event_type, severity, ip_address, country, risk_score, created_at FROM store_security_events ORDER BY created_at DESC LIMIT 8) t)
 ) AS context;`;
 
   const composeCode = `const base = $('🔍 Kiểm tra câu hỏi').first().json;
@@ -426,6 +428,7 @@ const intent = has(/(cảnh báo|alert|detection|phát hiện)/) ? 'alerts'
   : has(/(asset|tài sản|thiết bị|hạ tầng|server|máy chủ)/) ? 'assets'
   : has(/(compliance|tuân thủ|nist|iso|hipaa|pci)/) ? 'compliance'
   : has(/(firewall|tường lửa|chặn|block|rule)/) ? 'firewall'
+  : has(/(store|cửa hàng|đơn hàng|order|gian lận|fraud|checkout)/) ? 'store'
   : 'overview';
 let reply = '';
 if (intent === 'alerts') {
@@ -449,6 +452,10 @@ if (intent === 'alerts') {
 } else if (intent === 'firewall') {
   const lines = (ctx.firewall || []).map((f) => '• hành động=' + f.action + ': ' + f.total + ' quy tắc, ' + f.hits + ' lượt khớp').join('\\n');
   reply = '**Tường lửa** — ' + o.enabled_rules + ' quy tắc đang bật.\\n\\n' + (lines || 'Chưa có dữ liệu tường lửa.');
+} else if (intent === 'store') {
+  const orderLines = (ctx.storeOrders || []).map((o, i) => (i + 1) + '. ' + o.order_number + ' — ' + o.shipping_name + ' · ' + Number(o.total || 0).toLocaleString('vi-VN') + ' ₫ · rủi ro ' + o.risk_score + '/100 · ' + o.status + ((o.fraud_flags && o.fraud_flags.length) ? ' · ' + o.fraud_flags.join(', ') : '')).join('\\n');
+  const eventLines = (ctx.storeFraudEvents || []).map((e) => '• ' + e.event_type + ' — ' + e.ip_address + ' (' + e.country + ') · ' + e.risk_score + '/100').join('\\n');
+  reply = '**Đơn hàng & gian lận Store** — ' + (ctx.storeOrders || []).length + ' đơn rủi ro cao nhất, ' + (ctx.storeFraudEvents || []).length + ' sự kiện gian lận gần đây.\\n\\n' + (orderLines || 'Chưa có đơn hàng rủi ro.') + '\\n\\nSự kiện gần đây:\\n' + (eventLines || 'Chưa có security event.');
 } else {
   reply = '**Tổng quan SOC (dữ liệu PostgreSQL trực tiếp)** — ' + o.total_alerts + ' cảnh báo (' + o.open_alerts + ' mở, ' + o.critical_alerts + ' nghiêm trọng), ' + o.active_threats + ' mối đe dọa hoạt động, ' + o.open_incidents + ' sự cố mở, ' + o.total_assets + ' tài sản, rủi ro TB ' + o.avg_asset_risk + '/100, tuân thủ ' + o.compliance_score + '%.\\n\\nĐiểm nóng: ' + ((ctx.countries && ctx.countries[0]) ? ctx.countries[0].country + ' (' + ctx.countries[0].attacks + ' sự kiện)' : 'chưa xác định') + '. Kẻ tấn công nổi bật: ' + ((ctx.attackers && ctx.attackers[0]) ? ctx.attackers[0].source_ip : 'n/a') + '.';
 }

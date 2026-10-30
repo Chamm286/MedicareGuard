@@ -7,7 +7,7 @@ const VI_REGEX = /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩ�
 const isVietnamese = (text = "") => VI_REGEX.test(text);
 
 const getContext = async () => {
-  const [overview, countries, attackers, alerts, incidents, assets, compliance, firewall] = await Promise.all([
+  const [overview, countries, attackers, alerts, incidents, assets, compliance, firewall, storeOrders, storeFraudEvents] = await Promise.all([
     query(`SELECT
       (SELECT count(*)::int FROM alerts) AS total_alerts,
       (SELECT count(*)::int FROM alerts WHERE status IN ('open','investigating')) AS open_alerts,
@@ -28,6 +28,10 @@ const getContext = async () => {
     query("SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6"),
     query("SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC"),
     query("SELECT action, count(*)::int AS total, coalesce(sum(hit_count),0)::bigint AS hits FROM firewall_rules GROUP BY action"),
+    query(`SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, created_at
+           FROM store_orders ORDER BY risk_score DESC, created_at DESC LIMIT 8`),
+    query(`SELECT id, event_type, severity, ip_address, country, risk_score, created_at
+           FROM store_security_events ORDER BY created_at DESC LIMIT 8`),
   ]);
   return {
     overview: overview.rows[0],
@@ -38,6 +42,8 @@ const getContext = async () => {
     assets: assets.rows,
     compliance: compliance.rows,
     firewall: firewall.rows,
+    storeOrders: storeOrders.rows,
+    storeFraudEvents: storeFraudEvents.rows,
   };
 };
 
@@ -50,6 +56,7 @@ const intentOf = (message = "") => {
   if (/(asset|tài sản|thiết bị|hạ tầng|server|máy chủ)/.test(m)) return "assets";
   if (/(compliance|tuân thủ|nist|iso|hipaa|pci)/.test(m)) return "compliance";
   if (/(firewall|tường lửa|chặn|block|rule)/.test(m)) return "firewall";
+  if (/(store|cửa hàng|đơn hàng|order|gian lận|fraud|checkout)/.test(m)) return "store";
   if (/(report|báo cáo|export|pdf|xuất)/.test(m)) return "reports";
   if (/(khắc phục|remediat|mitigat|xử lý|fix|playbook)/.test(m)) return "remediation";
   if (/(tổng quan|overview|tình hình|posture|summary|summary|tóm tắt)/.test(m)) return "overview";
@@ -135,6 +142,20 @@ const compose = (intent, context, message) => {
         ? `**Khuyến nghị khắc phục ưu tiên**\n\n1. Cô lập tài sản có rủi ro ≥ 80 (${o.high_risk_assets} tài sản) và thu thập ảnh pháp chứng.\n2. Chặn IP tấn công có rủi ro cao tại tường lửa, bật quy tắc từ chối ưu tiên 10.\n3. Vá ${o.open_vulnerabilities} lỗ hổng đang mở, ưu tiên CVSS ≥ 9.0 trong 72 giờ.\n4. Xoay vòng thông tin xác thực và bật MFA cho tài khoản bị ảnh hưởng.\n5. Ghi nhận dòng thời gian, nguyên nhân gốc và cập nhật cẩm nang SOAR tương ứng.`
         : `**Prioritised remediation plan**\n\n1. Isolate assets with risk ≥ 80 (${o.high_risk_assets} assets) and capture forensic images.\n2. Block high-risk attacker IPs at the firewall with priority 10 deny rules.\n3. Patch ${o.open_vulnerabilities} open vulnerabilities, prioritising CVSS ≥ 9.0 within 72 hours.\n4. Rotate credentials and enforce MFA for affected accounts.\n5. Record timeline and root cause, then update the matching SOAR playbook.`;
       suggestions.push(vi ? "Tạo quy tắc tường lửa chặn IP" : "Create the firewall block rule", vi ? "Giao việc khắc phục cho chuyên viên" : "Assign remediation to an analyst");
+      break;
+
+    case "store":
+      reply = vi
+        ? `**Đơn hàng & gian lận Store** — ${context.storeOrders.length} đơn rủi ro cao nhất, ${context.storeFraudEvents.length} sự kiện gian lận gần đây.
+
+${context.storeOrders.map((o, i) => `${i + 1}. ${o.order_number} — ${o.shipping_name} · ${Number(o.total || 0).toLocaleString("vi-VN")} ₫ · rủi ro ${o.risk_score}/100 · ${o.status}${o.fraud_flags?.length ? ` · ${o.fraud_flags.join(", ")}` : ""}`).join("\n")}
+
+Sự kiện gần đây:
+${context.storeFraudEvents.map((e) => `• ${e.event_type} — ${e.ip_address} (${e.country}) · ${e.risk_score}/100 · ${new Date(e.created_at).toLocaleString("vi-VN")}`).join("\n")}`
+        : `**Store orders & fraud** — top ${context.storeOrders.length} risky orders and ${context.storeFraudEvents.length} recent fraud events.
+
+${context.storeOrders.map((o, i) => `${i + 1}. ${o.order_number} — ${o.shipping_name} · ${Number(o.total || 0).toLocaleString("vi-VN")} ₫ · risk ${o.risk_score}/100 · ${o.status}`).join("\n")}`;
+      suggestions.push(vi ? "Đơn nào đang bị giữ?" : "Which orders are on hold?", vi ? "IP nào gây gian lận nhiều nhất?" : "Which IP has the most fraud?");
       break;
 
     default:

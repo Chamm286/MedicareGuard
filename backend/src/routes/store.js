@@ -955,7 +955,7 @@ router.get(
     const count = await query(`SELECT count(*)::int AS total FROM store_orders ${where}`, values);
     const dataValues = [...values, limit, offset];
     const orders = await query(
-      `SELECT id, order_number, shipping_name, shipping_email, total, status, payment_status, risk_score, ip_address, ip_country, created_at
+      `SELECT id, order_number, shipping_name, shipping_email, shipping_phone, shipping_address, shipping_city, shipping_country, shipping_country_code, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, ip_country_code, ip_source, created_at
        FROM store_orders ${where} ORDER BY created_at DESC LIMIT $${dataValues.length - 1} OFFSET $${dataValues.length}`,
       dataValues,
     );
@@ -963,6 +963,22 @@ router.get(
       data: orders.rows.map((order) => ({ ...order, total: money(order.total) })),
       pagination: { page, limit, total: count.rows[0].total, pages: Math.ceil(count.rows[0].total / limit) || 1 },
     });
+  }),
+);
+
+router.get(
+  "/admin/orders/:id",
+  authenticate,
+  requirePermission("read"),
+  asyncHandler(async (req, res) => {
+    const order = await query("SELECT id FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!order.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    const events = await query(
+      `SELECT id, event_type, severity, ip_address, country, country_code, risk_score, metadata, created_at
+       FROM store_security_events WHERE order_id = $1 ORDER BY created_at DESC`,
+      [req.params.id],
+    );
+    res.json({ data: { ...await orderPayload(req.params.id), securityEvents: events.rows } });
   }),
 );
 
