@@ -58,7 +58,7 @@ export default function CheckoutPage() {
         city: current.city || customer.city || "",
       }));
     }
-  }, [customer]);
+  }, [customer?.id]);
 
   const set = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
 
