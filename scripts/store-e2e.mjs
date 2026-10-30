@@ -36,6 +36,12 @@ try {
   if (!cartText.includes("Đang áp dụng: MEDICARE10")) throw new Error("Coupon was not applied in UI");
   await page.screenshot({ path: path.join(OUT, "store-cart.png"), fullPage: true });
 
+  await page.goto(`${BASE}/store/account`, { waitUntil: "networkidle" });
+  await page.fill('input[placeholder="ban@example.com"]', "an.nguyen@example.com");
+  await page.fill('input[placeholder="Tối thiểu 8 ký tự"]', "Customer@123");
+  await page.click('button[type="submit"]');
+  await page.waitForSelector("text=Tài khoản Medicare Store", { timeout: 15000 });
+
   await page.goto(`${BASE}/store/checkout`, { waitUntil: "networkidle" });
   await page.fill('input[placeholder="Nguyễn Văn An"]', "Nguyễn Văn An");
   await page.fill('input[placeholder="ban@example.com"]', `store-e2e-${Date.now()}@example.com`);
@@ -51,9 +57,6 @@ try {
   await page.screenshot({ path: path.join(OUT, "store-checkout-success.png"), fullPage: true });
 
   await page.goto(`${BASE}/store/account`, { waitUntil: "networkidle" });
-  await page.fill('input[placeholder="ban@example.com"]', "an.nguyen@example.com");
-  await page.fill('input[placeholder="Tối thiểu 8 ký tự"]', "Customer@123");
-  await page.click('button[type="submit"]');
   await page.waitForSelector("text=Tài khoản Medicare Store", { timeout: 15000 });
   await page.screenshot({ path: path.join(OUT, "store-account.png"), fullPage: true });
 

@@ -6,22 +6,22 @@ The local stack is exposed through Cloudflare Quick Tunnels so the console, API,
 
 | Service | URL |
 | --- | --- |
-| SOC console (Next.js) | https://aerospace-advancement-their-bowling.trycloudflare.com |
-| Medicare Store | https://aerospace-advancement-their-bowling.trycloudflare.com/store |
-| Store admin | https://aerospace-advancement-their-bowling.trycloudflare.com/store/admin |
-| REST API | https://humanities-hottest-vol-inter.trycloudflare.com/api |
-| Store API | https://humanities-hottest-vol-inter.trycloudflare.com/api/store/products |
-| Swagger UI | https://aerospace-advancement-their-bowling.trycloudflare.com/api/docs/ |
-| n8n editor | https://birmingham-screens-identified-virtual.trycloudflare.com |
-| pgAdmin (database UI) | https://atlantic-plants-note-heights.trycloudflare.com |
-| Mailpit (hộp thư demo) | https://buttons-milwaukee-certification-tail.trycloudflare.com |
+| SOC console (Next.js) | https://dollar-disclose-dynamic-graph.trycloudflare.com |
+| Medicare Store | https://dollar-disclose-dynamic-graph.trycloudflare.com/store |
+| Store admin | https://dollar-disclose-dynamic-graph.trycloudflare.com/store/admin |
+| REST API | https://return-sagem-westminster-acres.trycloudflare.com/api |
+| Store API | https://return-sagem-westminster-acres.trycloudflare.com/api/store/products |
+| Swagger UI | https://dollar-disclose-dynamic-graph.trycloudflare.com/api/docs/ |
+| n8n editor | https://let-fell-dns-persons.trycloudflare.com |
+| pgAdmin (database UI) | https://limit-precipitation-programmes-patio.trycloudflare.com |
+| Mailpit (hộp thư demo) | https://van-dependent-sensitivity-dear.trycloudflare.com |
 
 Demo login:
 
 - SOC console: `admin@medicareguard.io` / `Admin@123`
 - Store customer: `an.nguyen@example.com` / `Customer@123`
 - pgAdmin: `admin@riceguard.vn` / `admin123`
-- PostgreSQL inside pgAdmin: host `medicareguard-postgres`, port `5432`, database `medicareguard`, user `medicare`, password `medicare`
+- PostgreSQL inside pgAdmin: host `172.17.0.1` (Docker host), port `5433`, database `medicareguard`, user `medicare`, password `medicare`. From a container on `medicareguard-soc_socnet`, use `mg-postgres:5432` instead.
 
 ## Ba bề mặt demo
 
@@ -63,7 +63,7 @@ cd backend && npm run seed:reset
 - `Sự kiện gian lận`: lấy từ `store_security_events`, do checkout rủi ro cao tạo ra.
 - `Bán chạy`: tổng hợp từ `store_order_items`.
 
-Dữ liệu seed có 6 đơn, tất cả IP đều ở Việt Nam. Hai đơn rủi ro cao dùng kịch bản đơn giá trị lớn + thẻ + số lượng lớn, nên vẫn bị tạm giữ mà không cần IP nước ngoài. Checkout thật từ trình duyệt của bạn cũng lấy IP/quốc gia Việt Nam.
+Dữ liệu seed có 6 đơn, tất cả IP đều ở Việt Nam. Hai đơn rủi ro cao dùng kịch bản đơn giá trị lớn + thẻ + số lượng lớn, nên vẫn bị tạm giữ mà không cần IP nước ngoài. Ngưỡng chặn và gửi n8n là `risk_score >= 50`. Checkout thật từ trình duyệt của bạn cũng lấy IP/quốc gia Việt Nam.
 
 ## Khách hàng "tấn công" gì?
 
@@ -76,7 +76,7 @@ Khách bình thường chỉ mua hàng. Kịch bản tấn công là một khác
 
 ## Khi nào gửi Telegram/Mailpit?
 
-- Chỉ khi checkout tạo đơn có `risk_score >= 60`: backend gọi webhook n8n `mg-ecommerce-fraud`.
+- Chỉ khi checkout tạo đơn có `risk_score >= 50`: backend gọi webhook n8n `mg-ecommerce-fraud`.
 - n8n gửi Telegram thật nếu `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID` có trong môi trường.
 - "Gmail" trong demo được mô phỏng bằng SMTP local Mailpit (`127.0.0.1:1025`), không phải Gmail thật. Xem thư tại link Mailpit ở trên.
 - Các workflow SOC khác (giám sát tấn công, ransomware, phishing, SLA) cũng gửi Telegram/Mailpit khi có sự kiện.
