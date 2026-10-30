@@ -92,6 +92,7 @@ services:
       DB_POSTGRESDB_USER: ${POSTGRES_USER:-medicare}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-medicare}
       DB_POSTGRESDB_SCHEMA: public
+      N8N_RUNNERS_MODE: "external"
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_RUNNERS_ENABLED: "true"
