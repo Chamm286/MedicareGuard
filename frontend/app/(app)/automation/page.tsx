@@ -88,7 +88,7 @@ export default function AutomationPage() {
         title="SOAR Automation"
         subtitle="n8n workflows that contain threats, reset credentials and collect compliance evidence"
         icon={Workflow}
-        badge={<Badge tone="info" dot>{active}/{list.length || 5} active</Badge>}
+        badge={<Badge tone="info" dot>{active}/{list.length || 6} active</Badge>}
         actions={
           <>
             <Button icon={RefreshCw} onClick={() => { refetch(); executions.refetch(); }} loading={refreshing}>Refresh</Button>
@@ -118,7 +118,7 @@ export default function AutomationPage() {
           <div className="relative mt-4 grid gap-2 sm:grid-cols-5">
             {[
               { label: "SOC API", icon: Server, detail: "REST + webhooks" },
-              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 98} nodes` },
+              { label: "n8n engine", icon: Workflow, detail: `${summary?.nodes || 114} nodes` },
               { label: "EDR / SIEM", icon: ShieldCheck, detail: "CrowdStrike · Elastic" },
               { label: "Identity", icon: Settings2, detail: "Okta · Microsoft 365" },
               { label: "On-call alerts", icon: Bell, detail: "Telegram · Gmail" },
@@ -142,7 +142,7 @@ export default function AutomationPage() {
         ) : (
           <>
             <StatCard label="Active workflows" value={active} hint={`${list.length} production playbooks`} icon={Workflow} tone="brand" />
-            <StatCard label="Orchestrated nodes" value={summary?.nodes || 98} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
+            <StatCard label="Orchestrated nodes" value={summary?.nodes || 114} hint="Across the workflow suite" icon={Cpu} tone="cyan" />
             <StatCard label="Executions" value={formatNumber(totalRuns)} hint={`${successRate}% successful`} icon={Activity} tone={successRate >= 95 ? "success" : "warning"} />
             <StatCard label="Mean duration" value={avgDuration ? `${avgDuration}ms` : "—"} hint="Manual and triggered runs" icon={Timer} tone="warning" />
           </>
@@ -168,7 +168,7 @@ export default function AutomationPage() {
                     <p className="mt-0.5 text-[9px] text-slate-600">{workflow.category} · v{workflow.version} · {workflow.nodeCount} nodes</p>
                   </div>
                 </div>
-                <Toggle checked={workflow.enabled} onChange={() => toggleWorkflow(workflow)} label={`Toggle ${workflow.name}`} />
+                {!workflow.demoOnly && <Toggle checked={workflow.enabled} onChange={() => toggleWorkflow(workflow)} label={`Toggle ${workflow.name}`} />}
               </div>
 
               <p className="mt-2.5 line-clamp-2 text-[10.5px] leading-relaxed text-slate-600">{workflow.description}</p>
@@ -200,11 +200,11 @@ export default function AutomationPage() {
               <div className="mt-auto flex items-center justify-between gap-2 pt-3">
                 <div className="flex items-center gap-3">
                   <button onClick={() => setSelectedId(workflow.id)} className="text-[9.5px] text-slate-600 transition hover:text-brand-300">View pipeline →</button>
-                  <a href={workflow.n8n_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9.5px] text-slate-600 transition hover:text-brand-300">Open in n8n <ExternalLink className="h-2.5 w-2.5" /></a>
+                  <a href={workflow.n8n_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9.5px] text-slate-600 transition hover:text-brand-300">{workflow.demoOnly ? "Open demo in n8n" : "Open in n8n"} <ExternalLink className="h-2.5 w-2.5" /></a>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="hidden text-[8.5px] text-slate-700 sm:inline">{workflow.schedule}</span>
-                  <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>Run now</Button>
+                  {!workflow.demoOnly && <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>Run now</Button>}
                 </div>
               </div>
             </Card>
@@ -233,7 +233,7 @@ export default function AutomationPage() {
           <>
             <Button variant="ghost" onClick={() => setSelectedId(null)}>Close</Button>
             {selected && <a href={selected.n8n_url} target="_blank" rel="noreferrer"><Button variant="ghost" icon={ExternalLink}>Open in n8n</Button></a>}
-            {selected && <Button variant="primary" icon={Play} loading={running === selected.id} disabled={!selected.enabled} onClick={() => runWorkflow(selected)}>Run workflow</Button>}
+            {selected && !selected.demoOnly && <Button variant="primary" icon={Play} loading={running === selected.id} disabled={!selected.enabled} onClick={() => runWorkflow(selected)}>Run workflow</Button>}
           </>
         }
       >

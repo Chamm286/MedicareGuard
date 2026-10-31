@@ -10,6 +10,8 @@ MedicareGuard ships five focused n8n playbooks. Every workflow stays between **1
 | Continuous Compliance Evidence | 20 | `POST /webhook/mg-compliance` | HIPAA/NIST/ISO evidence pack, immutable audit trail |
 | Live Attack Monitor & Phone Alerts | 18 | `POST /webhook/mg-attack-monitor` + every 5 minutes | Telegram + Gmail digest of new critical/high attacks |
 
+Workflow 7 — AI Incident Analysis Agent is also listed in the console as a demo-only link to its n8n editor. It is not part of the five production playbooks and cannot be run or toggled from the console.
+
 ## Integration flow
 
 ```text
