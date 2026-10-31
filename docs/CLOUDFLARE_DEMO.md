@@ -6,15 +6,15 @@ The local stack is exposed through Cloudflare Quick Tunnels so the console, API,
 
 | Service | URL |
 | --- | --- |
-| SOC console (Next.js) | https://dollar-disclose-dynamic-graph.trycloudflare.com |
-| Medicare Store | https://dollar-disclose-dynamic-graph.trycloudflare.com/store |
-| Store admin | https://dollar-disclose-dynamic-graph.trycloudflare.com/store/admin |
-| REST API | https://return-sagem-westminster-acres.trycloudflare.com/api |
-| Store API | https://return-sagem-westminster-acres.trycloudflare.com/api/store/products |
-| Swagger UI | https://dollar-disclose-dynamic-graph.trycloudflare.com/api/docs/ |
-| n8n editor | https://let-fell-dns-persons.trycloudflare.com |
-| pgAdmin (database UI) | https://limit-precipitation-programmes-patio.trycloudflare.com |
-| Mailpit (hộp thư demo) | https://van-dependent-sensitivity-dear.trycloudflare.com |
+| SOC console (Next.js) | https://incidence-zones-baths-clearly.trycloudflare.com |
+| Medicare Store | https://incidence-zones-baths-clearly.trycloudflare.com/store |
+| Store admin | https://incidence-zones-baths-clearly.trycloudflare.com/store/admin |
+| REST API | https://versus-declaration-substitute-rent.trycloudflare.com/api |
+| Store API | https://versus-declaration-substitute-rent.trycloudflare.com/api/store/products |
+| Swagger UI | https://incidence-zones-baths-clearly.trycloudflare.com/api/docs/ |
+| n8n editor | https://locations-bookmark-mods-hey.trycloudflare.com |
+| pgAdmin (database UI) | https://versus-origins-minolta-vitamin.trycloudflare.com |
+| Mailpit (hộp thư demo) | https://provided-rugs-airline-shut.trycloudflare.com |
 
 Demo login:
 
