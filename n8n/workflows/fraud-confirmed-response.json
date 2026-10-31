@@ -60,7 +60,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nreturn [{ json: { ...base, order, ip, orderNumber, order_id: orderNumber, admin, admin_email: admin, country: order.ip_country || base.country || 'không rõ', reason: 'Admin confirmed fraud', telegramText: text } }];"
+        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nconst emailHtml = '<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;\">'\n  + '<div style=\"background-color: #0f172a; color: #fff; padding: 20px; text-align: center;\"><h2 style=\"margin: 0;\">🚨 CẢNH BÁO GIAN LẬN - MEDICAREGUARD</h2></div>'\n  + '<div style=\"padding: 20px; background-color: #f7fafc;\">'\n  + '<table style=\"width: 100%; border-collapse: collapse;\">'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Mã đơn hàng:</b></td><td>' + String(orderNumber) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>IP khách hàng:</b></td><td>' + String(ip) + ' (' + String(order.ip_country || base.country || 'không rõ') + ')</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Admin xử lý:</b></td><td>' + String(admin) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Lý do:</b></td><td>' + String(base.reason || 'Admin confirmed fraud') + '</td></tr>'\n  + '</table>'\n  + '<p style=\"margin-top: 20px; color: #e53e3e;\"><b>✅ Hệ thống đã tự động chặn IP và cập nhật SOC.</b></p>'\n  + '</div>'\n  + '<div style=\"background-color: #edf2f7; padding: 10px; text-align: center; font-size: 12px; color: #718096;\">Hệ thống MedicareGuard SOC tự động gửi.</div>'\n  + '</div>';\nreturn [{ json: { ...base, order, ip, orderNumber, order_id: orderNumber, admin, admin_email: admin, country: order.ip_country || base.country || 'không rõ', reason: 'Admin confirmed fraud', telegramText: text, emailHtml: emailHtml } }];"
       },
       "position": [
         660,
@@ -74,13 +74,13 @@
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:4000/api' + '/firewall-rules' }}",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/firewall-rules' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYjcyZjM5NC00M2M1LTRhNjktYjJlMy1iMzFhOGVhNGQ0MjkiLCJlbWFpbCI6ImFkbWluQG1lZGljYXJlZ3VhcmQuaW8iLCJuYW1lIjoiTmd1eeG7hW4gVGjhu4sgQsOtY2ggVHLDom0iLCJyb2xlIjoiYWRtaW4iLCJyb2xlSWQiOiI2MDAzODc2Ny0xNTIzLTRhYzAtYTAwNi05OTY2YWYzZWEwN2YiLCJwZXJtaXNzaW9ucyI6WyIqIl0sImF1ZCI6Im1lZGljYXJlZ3VhcmQtbjhuIiwiaWF0IjoxNzkzMzkzNDQyLCJleHAiOjE3OTU5ODU0NDJ9.AmONc-dpX9dlGUuZdUwqLTqA82AldqiqxEtEEQLRsFw"
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
             },
             {
               "name": "Content-Type",
@@ -142,7 +142,7 @@
         "resource": "message",
         "operation": "sendMessage",
         "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
-        "text": "=🚨 <b>PHÁT HIỆN GIAN LẬN - MEDICAREGUARD</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━\n📦 <b>Mã đơn hàng:</b> <code>{{ $json.order_id }}</code>\n🌐 <b>IP khách hàng:</b> <code>{{ $json.ip }}</code> ({{ $json.country }})\n👤 <b>Admin xử lý:</b> {{ $json.admin_email }}\n📝 <b>Lý do:</b> {{ $json.reason }}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ <b>HÀNH ĐỘNG ĐÃ THỰC HIỆN:</b>\n- Đã tự động chặn IP.\n- Đã cập nhật trạng thái SOC.\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Hệ thống MedicareGuard SOC tự động gửi.</i>",
+        "text": "=🚨 <b>PHÁT HIỆN GIAN LẬN - MEDICAREGUARD</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━\n📦 <b>Mã đơn hàng:</b> <code>{{ $('✉️ Soạn tin xác nhận').first().json.order_id }}</code>\n🌐 <b>IP khách hàng:</b> <code>{{ $('✉️ Soạn tin xác nhận').first().json.ip }}</code> ({{ $('✉️ Soạn tin xác nhận').first().json.country }})\n👤 <b>Admin xử lý:</b> {{ $('✉️ Soạn tin xác nhận').first().json.admin_email }}\n📝 <b>Lý do:</b> {{ $('✉️ Soạn tin xác nhận').first().json.reason }}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ <b>HÀNH ĐỘNG ĐÃ THỰC HIỆN:</b>\n- Đã tự động chặn IP.\n- Đã cập nhật trạng thái SOC.\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Hệ thống MedicareGuard SOC tự động gửi.</i>",
         "additionalFields": {
           "parse_mode": "HTML",
           "disable_web_page_preview": true,
@@ -203,9 +203,11 @@
         "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
         "subject": "=✅ Admin xác nhận gian lận — {{ $('✉️ Soạn tin xác nhận').first().json.orderNumber }}",
         "emailFormat": "html",
-        "html": "={{ $('✉️ Soạn tin xác nhận').first().json.telegramText }}",
+        "html": "={{ $('✉️ Soạn tin xác nhận').first().json.emailHtml }}",
         "text": "={{ $('✉️ Soạn tin xác nhận').first().json.telegramText }}",
-        "options": {}
+        "options": {
+          "appendAttribution": false
+        }
       },
       "position": [
         1760,
@@ -248,13 +250,13 @@
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "={{ 'http://localhost:4000/api' + '/automation/executions/' + $('🔍 Kiểm tra dữ liệu').first().json.executionId + '/complete' }}",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('🔍 Kiểm tra dữ liệu').first().json.executionId + '/complete' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYjcyZjM5NC00M2M1LTRhNjktYjJlMy1iMzFhOGVhNGQ0MjkiLCJlbWFpbCI6ImFkbWluQG1lZGljYXJlZ3VhcmQuaW8iLCJuYW1lIjoiTmd1eeG7hW4gVGjhu4sgQsOtY2ggVHLDom0iLCJyb2xlIjoiYWRtaW4iLCJyb2xlSWQiOiI2MDAzODc2Ny0xNTIzLTRhYzAtYTAwNi05OTY2YWYzZWEwN2YiLCJwZXJtaXNzaW9ucyI6WyIqIl0sImF1ZCI6Im1lZGljYXJlZ3VhcmQtbjhuIiwiaWF0IjoxNzkzMzkzNDQyLCJleHAiOjE3OTU5ODU0NDJ9.AmONc-dpX9dlGUuZdUwqLTqA82AldqiqxEtEEQLRsFw"
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
             },
             {
               "name": "Content-Type",
