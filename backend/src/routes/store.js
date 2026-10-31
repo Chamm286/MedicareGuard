@@ -235,19 +235,52 @@ const cartPayload = async (client, cartId) => {
   };
 };
 
-const evaluateRisk = ({ total, paymentMethod, context, shippingCountryCode, items, customer }) => {
+const FRAUD_RISK_THRESHOLD = 50;
+const NEW_ACCOUNT_WINDOW_MS = 10 * 60 * 1000;
+const ORDER_VELOCITY_WINDOW = "1 minute";
+const ORDER_VELOCITY_LIMIT = 4;
+
+const normalizePhone = (value) => String(value || "").replace(/[\s.\-()]/g, "");
+
+const isValidVietnamesePhone = (value) => /^(0(3|5|7|8|9)\d{8}|\+84(3|5|7|8|9)\d{8})$/.test(normalizePhone(value));
+
+const isValidAddress = (value) => {
+  const address = String(value || "").trim();
+  return address.length >= 10
+    && address.length <= 300
+    && /[0-9A-Za-zÀ-ỹ]/.test(address)
+    && !/[<>{}[\]$%^*=~`|\\]/.test(address);
+};
+
+const evaluateRisk = ({
+  total,
+  paymentMethod,
+  context,
+  shippingCountryCode,
+  items,
+  customer,
+  phone,
+  address,
+  recentOrderCount = 0,
+  customerCreatedAt = null,
+}) => {
   let score = 0;
   const flags = [];
+
+  if (context.countryCode !== "VN" && context.countryCode !== "UN") {
+    score += 35;
+    flags.push("foreign_ip");
+  }
   if (shippingCountryCode && context.countryCode !== shippingCountryCode) {
-    score += 30;
+    score += 10;
     flags.push("ip_country_mismatch");
   }
   if (context.countryCode === "UN") {
-    score += 12;
+    score += 10;
     flags.push("unknown_ip_country");
   }
   if (total >= 10_000_000) {
-    score += 25;
+    score += 30;
     flags.push("high_value_order");
   } else if (total >= 5_000_000) {
     score += 15;
@@ -261,6 +294,25 @@ const evaluateRisk = ({ total, paymentMethod, context, shippingCountryCode, item
   if (quantity >= 20) {
     score += 30;
     flags.push("bulk_quantity");
+  }
+  if (recentOrderCount >= ORDER_VELOCITY_LIMIT) {
+    score += 40;
+    flags.push("order_velocity");
+  }
+  if (!isValidVietnamesePhone(phone)) {
+    score += 20;
+    flags.push("invalid_phone");
+  }
+  if (!isValidAddress(address)) {
+    score += 20;
+    flags.push("invalid_address");
+  }
+  if (customerCreatedAt && total >= 5_000_000) {
+    const accountAge = Date.now() - new Date(customerCreatedAt).getTime();
+    if (Number.isFinite(accountAge) && accountAge >= 0 && accountAge <= NEW_ACCOUNT_WINDOW_MS) {
+      score += 30;
+      flags.push("new_account_high_value");
+    }
   }
   if (!customer) {
     score += 8;
@@ -289,8 +341,22 @@ const dispatchFraudWorkflow = async (payload) => {
   }
 };
 
+const dispatchFraudConfirmedWorkflow = async (payload) => {
+  try {
+    const response = await fetch(`${n8nBaseUrl()}/webhook/mg-fraud-confirmed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(3000),
+    });
+    return { dispatched: response.ok, status: response.ok ? "dispatched" : `HTTP ${response.status}` };
+  } catch (error) {
+    return { dispatched: false, status: error.name === "TimeoutError" ? "timeout" : "n8n-offline" };
+  }
+};
+
 const raiseFraudAlert = async ({ order, context, riskScore, flags, items }) => {
-  const severity = riskScore >= 80 ? "critical" : riskScore >= 60 ? "high" : "medium";
+  const severity = riskScore >= 80 ? "critical" : riskScore >= FRAUD_RISK_THRESHOLD ? "high" : "medium";
   const title = `Gian lận thương mại điện tử — đơn ${order.order_number}`;
   const description = [
     `Đơn hàng ${order.order_number} trị giá ${money(order.total).toLocaleString("vi-VN")} ₫ có điểm rủi ro ${riskScore}/100.`,
@@ -658,7 +724,12 @@ router.post(
     for (const field of required) {
       if (!sanitizeText(shipping[field], 300)) throw new HttpError(400, `Thiếu thông tin giao hàng: ${field}`);
     }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(shipping.email))) throw new HttpError(400, "Email giao hàng không hợp lệ");
+    const shippingEmail = String(shipping.email).trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(shippingEmail)) throw new HttpError(400, "Email giao hàng không hợp lệ");
+    const shippingName = sanitizeText(shipping.name, 160);
+    const shippingPhone = sanitizeText(shipping.phone, 40);
+    const shippingAddress = sanitizeText(shipping.address, 300);
+    const shippingCity = sanitizeText(shipping.city, 120);
     const shippingCountryCode = String(shipping.countryCode || "VN").toUpperCase().slice(0, 2);
     const shippingCountry = sanitizeText(shipping.country, 80) || COUNTRY_NAMES[shippingCountryCode] || "Việt Nam";
 
@@ -671,6 +742,17 @@ router.post(
       const shippingFee = calculated.subtotal >= 500_000 ? 0 : 30_000;
       const tax = money(calculated.total * 0.08);
       const total = money(calculated.total + shippingFee + tax);
+      const recentOrders = await client.query(
+        `SELECT count(*)::int AS count FROM store_orders
+         WHERE created_at > now() - interval '${ORDER_VELOCITY_WINDOW}'
+           AND (customer_id = $1 OR lower(shipping_email) = lower($2) OR shipping_phone = $3)`,
+        [req.customer?.id || null, shippingEmail, shippingPhone],
+      );
+      let customerCreatedAt = null;
+      if (req.customer?.id) {
+        const customer = await client.query("SELECT created_at FROM store_customers WHERE id = $1", [req.customer.id]);
+        customerCreatedAt = customer.rows[0]?.created_at || null;
+      }
       const risk = evaluateRisk({
         total,
         paymentMethod,
@@ -678,6 +760,10 @@ router.post(
         shippingCountryCode,
         items,
         customer: req.customer,
+        phone: shippingPhone,
+        address: shippingAddress,
+        recentOrderCount: Number(recentOrders.rows[0]?.count || 0),
+        customerCreatedAt,
       });
 
       for (const item of items) {
@@ -700,19 +786,19 @@ router.post(
           orderNumber,
           req.customer?.id || null,
           cart.id,
-          risk.riskScore >= 65 ? "on_hold" : "pending",
-          paymentMethod === "card" && risk.riskScore < 65 ? "paid" : "unpaid",
+          risk.riskScore >= FRAUD_RISK_THRESHOLD ? "on_hold" : "pending",
+          paymentMethod === "card" && risk.riskScore < FRAUD_RISK_THRESHOLD ? "paid" : "unpaid",
           paymentMethod,
           calculated.subtotal,
           calculated.discount,
           shippingFee,
           tax,
           total,
-          sanitizeText(shipping.name, 160),
-          String(shipping.email).trim().toLowerCase(),
-          sanitizeText(shipping.phone, 40),
-          sanitizeText(shipping.address, 300),
-          sanitizeText(shipping.city, 120),
+          shippingName,
+          shippingEmail,
+          shippingPhone,
+          shippingAddress,
+          shippingCity,
           shippingCountry,
           shippingCountryCode,
           sanitizeText(req.body?.notes, 500) || null,
@@ -756,7 +842,7 @@ router.post(
     });
 
     let fraud = null;
-    if (result.risk.riskScore >= 60) {
+    if (result.risk.riskScore >= FRAUD_RISK_THRESHOLD) {
       fraud = await raiseFraudAlert({ order: result.order, context, riskScore: result.risk.riskScore, flags: result.risk.flags, items: result.items });
     }
 
@@ -776,11 +862,9 @@ router.post(
         risk: result.risk,
         fraud: fraud ? { alertId: fraud.alert.id, dispatch: fraud.dispatch } : null,
         client: context,
-        message: result.risk.riskScore >= 65
+        message: result.risk.riskScore >= FRAUD_RISK_THRESHOLD
           ? "Đơn hàng đã được giữ để kiểm tra gian lận. SOC đã nhận cảnh báo và n8n đang xử lý."
-          : result.risk.riskScore >= 60
-            ? "Đặt hàng thành công. Hệ thống đã gửi cảnh báo rủi ro tới SOC để theo dõi."
-            : "Đặt hàng thành công. Cảm ơn bạn đã mua sắm tại Medicare Store.",
+          : "Đặt hàng thành công. Cảm ơn bạn đã mua sắm tại Medicare Store.",
       },
     });
   }),
@@ -885,7 +969,7 @@ router.get(
     const count = await query(`SELECT count(*)::int AS total FROM store_orders ${where}`, values);
     const dataValues = [...values, limit, offset];
     const orders = await query(
-      `SELECT id, order_number, shipping_name, shipping_email, total, status, payment_status, risk_score, ip_address, ip_country, created_at
+      `SELECT id, order_number, shipping_name, shipping_email, shipping_phone, shipping_address, shipping_city, shipping_country, shipping_country_code, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, ip_country_code, ip_source, created_at
        FROM store_orders ${where} ORDER BY created_at DESC LIMIT $${dataValues.length - 1} OFFSET $${dataValues.length}`,
       dataValues,
     );
@@ -893,6 +977,22 @@ router.get(
       data: orders.rows.map((order) => ({ ...order, total: money(order.total) })),
       pagination: { page, limit, total: count.rows[0].total, pages: Math.ceil(count.rows[0].total / limit) || 1 },
     });
+  }),
+);
+
+router.get(
+  "/admin/orders/:id",
+  authenticate,
+  requirePermission("read"),
+  asyncHandler(async (req, res) => {
+    const order = await query("SELECT id FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!order.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    const events = await query(
+      `SELECT id, event_type, severity, ip_address, country, country_code, risk_score, metadata, created_at
+       FROM store_security_events WHERE order_id = $1 ORDER BY created_at DESC`,
+      [req.params.id],
+    );
+    res.json({ data: { ...await orderPayload(req.params.id), securityEvents: events.rows } });
   }),
 );
 
@@ -906,6 +1006,10 @@ router.patch(
     if (status && !ORDER_STATUSES.has(status)) throw new HttpError(400, "Trạng thái đơn hàng không hợp lệ");
     if (paymentStatus && !PAYMENT_STATUSES.has(paymentStatus)) throw new HttpError(400, "Trạng thái thanh toán không hợp lệ");
     if (!status && !paymentStatus) throw new HttpError(400, "Không có thay đổi nào");
+    const existing = await query("SELECT * FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!existing.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    const alreadyConfirmed = existing.rows[0].status === "cancelled" && Boolean(existing.rows[0].metadata?.fraudConfirmed);
+
     const result = await query(
       `UPDATE store_orders SET status = COALESCE($2, status), payment_status = COALESCE($3, payment_status), updated_at = now()
        WHERE id::text = $1 RETURNING *`,
@@ -916,7 +1020,38 @@ router.patch(
       await query("UPDATE store_payments SET status = $2, updated_at = now() WHERE order_id = $1", [result.rows[0].id, paymentStatus === "paid" ? "captured" : paymentStatus]);
     }
     await recordAudit({ req, action: "update", resource: "store_orders", resourceId: result.rows[0].id, details: { status, paymentStatus } });
-    res.json({ data: await orderPayload(result.rows[0].id) });
+
+    let fraudConfirmation = null;
+    if (status === "cancelled" && !alreadyConfirmed) {
+      const executionId = crypto.randomUUID();
+      fraudConfirmation = await dispatchFraudConfirmedWorkflow({
+        entityId: result.rows[0].id,
+        alertId: result.rows[0].id,
+        orderId: result.rows[0].id,
+        orderNumber: result.rows[0].order_number,
+        ip: result.rows[0].ip_address,
+        countryCode: result.rows[0].ip_country_code,
+        country: result.rows[0].ip_country,
+        adminId: req.user.id,
+        adminEmail: req.user.email,
+        reason: "Admin confirmed fraud",
+        executionId,
+      });
+      await query("UPDATE store_orders SET metadata = metadata || $2::jsonb, updated_at = now() WHERE id = $1", [result.rows[0].id, JSON.stringify({ fraudConfirmed: true, fraudConfirmedAt: new Date().toISOString(), fraudExecutionId: executionId })]);
+      await recordActivity({
+        eventType: "store_fraud_confirmed",
+        req,
+        resource: "store_orders",
+        resourceId: result.rows[0].id,
+        action: "cancel_fraud",
+        message: `Admin đã xác nhận đơn ${result.rows[0].order_number} là gian lận và hủy đơn. IP ${result.rows[0].ip_address} đã được gửi sang n8n để chặn.`,
+        metadata: { executionId, dispatch: fraudConfirmation },
+      });
+    } else if (status === "cancelled" && alreadyConfirmed) {
+      fraudConfirmation = { dispatched: false, status: "already-confirmed" };
+    }
+
+    res.json({ data: { ...(await orderPayload(result.rows[0].id)), fraudConfirmation } });
   }),
 );
 

@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "@/lib/api";
 
-const MAILPIT_URL = process.env.NEXT_PUBLIC_MAILPIT_URL || "https://buttons-milwaukee-certification-tail.trycloudflare.com";
+const MAILPIT_URL = process.env.NEXT_PUBLIC_MAILPIT_URL || "http://localhost:8025";
 
 type Patient = {
   id: string;
@@ -426,7 +426,7 @@ export default function MedicarePortalPage() {
               <div className="mt-4 space-y-3 text-xs">
                 {[
                   ["MedicareGuard SOC", "Đang trực", "text-emerald-700 bg-emerald-50 border-emerald-200"],
-                  ["n8n Automation", "5 luồng đang hoạt động", "text-blue-700 bg-blue-50 border-blue-200"],
+                  ["n8n Automation", "7 luồng đang hoạt động", "text-blue-700 bg-blue-50 border-blue-200"],
                   ["Cảnh báo Telegram", "Qua n8n", "text-blue-700 bg-blue-50 border-blue-200"],
                   ["Gmail / SMTP", "Mailpit demo", "text-amber-700 bg-amber-50 border-amber-200"],
                 ].map(([label, value, tone]) => (

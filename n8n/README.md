@@ -1,14 +1,16 @@
 # n8n response workflows
 
-MedicareGuard ships five focused n8n playbooks. Every workflow stays at **17 executable nodes** (the monitor has **16**) so it is easy to explain, review and demonstrate. All node labels, sticky notes and alert copy are in **Vietnamese**, and every canvas uses three colour-coded notes (overview + two stage notes) with a straight left-to-right layout.
+MedicareGuard ships seven focused n8n playbooks. Every workflow stays at **17–19 executable nodes** (the monitor has **18**, AI chat has **5**) so it is easy to explain, review and demonstrate. All node labels, sticky notes and alert copy are in **Vietnamese**. Automation canvases use three colour-coded notes (overview + two stage notes) with a straight left-to-right layout.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
 | Cô lập & Phục hồi Ransomware | 17 | `POST /webhook/mg-ransomware` | Cô lập EDR, chặn C2, mở sự cố P1, cảnh báo Telegram + Gmail |
 | Phân tích & Xử lý Phishing | 17 | `POST /webhook/mg-phishing` | Detonate sandbox, dọn hộp thư, thu hồi phiên, cảnh báo điện thoại |
-| Leo thang SLA Lỗ hổng | 17 | `POST /webhook/mg-vulnerability` | Chấm EPSS/KEV, giao chủ sở hữu, tạo yêu cầu thay đổi, cảnh báo |
-| Bằng chứng Tuân thủ Liên tục | 17 | `POST /webhook/mg-compliance` | Gói bằng chứng HIPAA/NIST/ISO, nhật ký kiểm toán bất biến |
-| Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 16 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
+| Leo thang SLA Lỗ hổng | 19 | `POST /webhook/mg-vulnerability` + cron `0 */6 * * *` | Chấm EPSS/KEV, giao chủ sở hữu, tạo yêu cầu thay đổi, cảnh báo |
+| Bằng chứng Tuân thủ Liên tục | 19 | `POST /webhook/mg-compliance` + cron `0 2 * * *` | Gói bằng chứng HIPAA/NIST/ISO, nhật ký kiểm toán bất biến |
+| Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 18 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
+| Phản hồi Gian lận Thương mại điện tử | 13 | `POST /webhook/mg-ecommerce-fraud` | Giữ đơn, mở điều tra, cảnh báo SOC |
+| Chat AI phân tích SOC | 5 | `POST /webhook/mg-ai-chat` | Trả lời câu hỏi SOC từ PostgreSQL |
 
 ## Integration flow
 
@@ -66,7 +68,7 @@ export MG_ALERT_EMAIL="<inbox that should receive the alert>"
 bash scripts/setup-n8n.sh
 ```
 
-The setup script imports `mg-postgres-credential`, imports `mg-smtp-credential` when the SMTP variables are present, imports all five workflows under the n8n owner and publishes them. It runs the n8n CLI from `/tmp` on purpose: a project `.env` containing `N8N_ENCRYPTION_KEY` would otherwise override the key used by the running instance.
+The setup script imports `mg-postgres-credential`, imports `mg-smtp-credential` when the SMTP variables are present, imports all seven workflows under the n8n owner and publishes them. It runs the n8n CLI from `/tmp` on purpose: a project `.env` containing `N8N_ENCRYPTION_KEY` would otherwise override the key used by the running instance.
 
 For Docker, point the database credential at the Compose service instead:
 
@@ -89,7 +91,7 @@ Every scenario flow checks **Telegram Ready?** and **Gmail Ready?** independentl
 - **Gmail** — enabled by `MG_SMTP_HOST` + `MG_SMTP_USER` + `MG_SMTP_PASSWORD`; inbox and audit-friendly copy through the imported SMTP credential.
 - **Live Attack Monitor** — runs every five minutes, aggregates up to five unnotified critical/high alerts and pushes one digest; this is the "away from the laptop" view.
 
-If Gmail is not configured, Telegram still fires and the flow continues. If Telegram is not configured, Gmail still fires. The execution metrics record which channels were actually ready.
+If Gmail is not configured, Telegram still fires and the flow continues. If Telegram is not configured, Gmail still fires. The live monitor only marks alerts as notified after Telegram delivery succeeds, so a missing bot token retries on the next five-minute run.
 
 ### Telegram bot in 30 seconds
 

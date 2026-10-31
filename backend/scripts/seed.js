@@ -882,28 +882,6 @@ const seed = async () => {
     ].map(([name, provider, type, status, config, last_sync_at]) => ({ name, provider, type, status, config, last_sync_at })),
   );
 
-  const conversations = await insert(
-    "ai_conversations",
-    ["user_id", "title", "model"],
-    [
-      [userIds[0], "Phân loại cảnh báo ransomware nghiêm trọng", "medicareguard-analyst"],
-      [userIds[1], "Nguồn tấn công hàng đầu tuần này", "medicareguard-analyst"],
-      [userIds[2], "Khoảng trống tuân thủ HIPAA", "medicareguard-analyst"],
-    ].map(([user_id, title, model]) => ({ user_id, title, model })),
-  );
-  await insert(
-    "ai_messages",
-    ["conversation_id", "role", "content", "tokens"],
-    [
-      [conversations[0].id, "user", "Phân tích cảnh báo ransomware nghiêm trọng nhất và đề xuất cách xử lý.", 28],
-      [conversations[0].id, "assistant", "Cảnh báo ransomware nghiêm trọng cần được cô lập trong 15 phút đầu. Khuyến nghị: cô lập máy chủ bị ảnh hưởng, thu thập forensic image, chặn IP nguồn tại firewall và xoay vòng credential.", 58],
-      [conversations[1].id, "user", "Những kẻ tấn công hàng đầu tuần này là ai?", 12],
-      [conversations[1].id, "assistant", "Các IP nguồn hàng đầu tập trung ở CN, RU và IR. Tôi đề xuất chặn các IP có rủi ro ≥ 80 và giám sát phần còn lại trong 24 giờ.", 34],
-      [conversations[2].id, "user", "Những kiểm soát HIPAA nào cần chú ý?", 10],
-      [conversations[2].id, "assistant", "Kiểm soát quy trình sự cố HIPAA đang ở mức 79%. Hãy chỉ định người phụ trách và khắc phục khoảng trống bằng chứng trong 30 ngày.", 32],
-    ].map(([conversation_id, role, content, tokens]) => ({ conversation_id, role, content, tokens })),
-  );
-
   await insert(
     "metrics",
     ["name", "value", "unit", "source", "tags", "recorded_at"],
@@ -1091,7 +1069,7 @@ const seed = async () => {
   logger.info("Seed completed", {
     roles: roles.length, users: users.length, assets: assets.length, threats: threats.length,
     alerts: alerts.length, incidents: incidents.length, firewallRules: firewallRules.length,
-    reports: reports.length, conversations: conversations.length,
+    reports: reports.length,
   });
 };
 

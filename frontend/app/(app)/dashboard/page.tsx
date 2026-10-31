@@ -17,7 +17,8 @@ import {
   Siren,
   Workflow,
 } from "lucide-react";
-import { useApi } from "@/lib/api";
+import { api, useApi } from "@/lib/api";
+import { useState } from "react";
 import { getUser } from "@/lib/auth";
 import { normalizeRole, ROLE_META } from "@/lib/access";
 import { cn, countryName, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
@@ -77,7 +78,22 @@ export default function DashboardPage() {
   const user = getUser();
   const role = normalizeRole(user?.role);
   const { data, loading, error, refetch, refreshing } = useApi<any>("/dashboard/summary", { refreshInterval: 30000 });
-  const { success } = useToast();
+  const runtime = useApi<any>("/automation/runtime", { refreshInterval: 30000 });
+  const { success, error: toastError } = useToast();
+  const [simulating, setSimulating] = useState(false);
+
+  const simulateAttack = async () => {
+    setSimulating(true);
+    try {
+      const response = await api<any>("/demo/attack", { method: "POST", body: { scenario: "ransomware", patientId: "BN-2401" } });
+      success("Đã mô phỏng tấn công", `Alert ${response.data?.alert?.id || ""} đã được tạo và gửi tới n8n.`);
+      refetch();
+    } catch (err) {
+      toastError("Mô phỏng thất bại", err instanceof Error ? err.message : "Không thể gọi API demo.");
+    } finally {
+      setSimulating(false);
+    }
+  };
   const summary = data?.data;
   const overview = summary?.overview;
 
@@ -110,6 +126,9 @@ export default function DashboardPage() {
               {summary?.generatedAt ? relativeTime(summary.generatedAt) : "đang đồng bộ"}
             </span>
             <Button icon={RefreshCw} onClick={() => refetch()} loading={refreshing}>Làm mới</Button>
+            {role !== "viewer" && (
+              <Button variant="danger" icon={Siren} onClick={simulateAttack} loading={simulating}>Mô phỏng Tấn công</Button>
+            )}
             <Link href="/reports">
               <Button variant="primary" icon={Download}>Xuất tóm tắt</Button>
             </Link>
@@ -118,6 +137,14 @@ export default function DashboardPage() {
       />
 
       <RoleWorkspaceBanner role={role} />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs">
+        <span className="font-medium text-slate-200">n8n Runtime</span>
+        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", runtime.data?.data?.online ? "border-low/25 bg-low/10 text-low" : "border-critical/25 bg-critical/10 text-critical")}>
+          {runtime.data?.data?.online ? "Online" : "Offline"}
+        </span>
+        <span className="text-slate-500">Latency: {runtime.data?.data?.latencyMs ?? "—"} ms</span>
+      </div>
 
       {loading && !summary ? (
         <div className="space-y-4">

@@ -25,7 +25,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'phishing-triage', workflowName: 'Phân tích & Xử lý Phishing', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'phishing-triage', workflowName: 'Phân tích & Xử lý Phishing', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
         220,

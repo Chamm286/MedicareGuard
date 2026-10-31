@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 N8N_DB="${N8N_DB:-$HOME/.n8n/database.sqlite}"
 WORKFLOW_DIR="$ROOT/n8n/workflows"
-WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor)
+WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst fraud-confirmed-response)
 
 if ! command -v n8n >/dev/null 2>&1; then
   echo "n8n CLI not found. Install n8n or add it to PATH." >&2
@@ -119,6 +119,7 @@ Imported and published ${#WORKFLOW_IDS[@]} MedicareGuard workflows.
 Next steps:
   1. Add these values to the environment used to start n8n:
        MG_API_URL=http://localhost:4000/api
+       N8N_AI_CHAT_URL=http://localhost:5678/webhook/mg-ai-chat
        MG_API_TOKEN=<token from: cd backend && npm run token:n8n>
   2. Restart n8n.
   3. Verify: curl -X POST http://localhost:5678/webhook/mg-ransomware -H 'Content-Type: application/json' -d '{"entityId":"<alert-uuid>"}'

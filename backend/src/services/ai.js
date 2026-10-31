@@ -7,7 +7,7 @@ const VI_REGEX = /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩ�
 const isVietnamese = (text = "") => VI_REGEX.test(text);
 
 const getContext = async () => {
-  const [overview, countries, attackers, alerts, incidents, assets, compliance, firewall] = await Promise.all([
+  const [overview, countries, attackers, alerts, incidents, assets, compliance, firewall, storeOrders, storeFraudEvents] = await Promise.all([
     query(`SELECT
       (SELECT count(*)::int FROM alerts) AS total_alerts,
       (SELECT count(*)::int FROM alerts WHERE status IN ('open','investigating')) AS open_alerts,
@@ -28,6 +28,10 @@ const getContext = async () => {
     query("SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6"),
     query("SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC"),
     query("SELECT action, count(*)::int AS total, coalesce(sum(hit_count),0)::bigint AS hits FROM firewall_rules GROUP BY action"),
+    query(`SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, created_at
+           FROM store_orders ORDER BY risk_score DESC, created_at DESC LIMIT 8`),
+    query(`SELECT id, event_type, severity, ip_address, country, risk_score, created_at
+           FROM store_security_events ORDER BY created_at DESC LIMIT 8`),
   ]);
   return {
     overview: overview.rows[0],
@@ -38,6 +42,8 @@ const getContext = async () => {
     assets: assets.rows,
     compliance: compliance.rows,
     firewall: firewall.rows,
+    storeOrders: storeOrders.rows,
+    storeFraudEvents: storeFraudEvents.rows,
   };
 };
 
@@ -50,6 +56,7 @@ const intentOf = (message = "") => {
   if (/(asset|tài sản|thiết bị|hạ tầng|server|máy chủ)/.test(m)) return "assets";
   if (/(compliance|tuân thủ|nist|iso|hipaa|pci)/.test(m)) return "compliance";
   if (/(firewall|tường lửa|chặn|block|rule)/.test(m)) return "firewall";
+  if (/(store|cửa hàng|đơn hàng|order|gian lận|fraud|checkout)/.test(m)) return "store";
   if (/(report|báo cáo|export|pdf|xuất)/.test(m)) return "reports";
   if (/(khắc phục|remediat|mitigat|xử lý|fix|playbook)/.test(m)) return "remediation";
   if (/(tổng quan|overview|tình hình|posture|summary|summary|tóm tắt)/.test(m)) return "overview";
@@ -137,6 +144,20 @@ const compose = (intent, context, message) => {
       suggestions.push(vi ? "Tạo quy tắc tường lửa chặn IP" : "Create the firewall block rule", vi ? "Giao việc khắc phục cho chuyên viên" : "Assign remediation to an analyst");
       break;
 
+    case "store":
+      reply = vi
+        ? `**Đơn hàng & gian lận Store** — ${context.storeOrders.length} đơn rủi ro cao nhất, ${context.storeFraudEvents.length} sự kiện gian lận gần đây.
+
+${context.storeOrders.map((o, i) => `${i + 1}. ${o.order_number} — ${o.shipping_name} · ${Number(o.total || 0).toLocaleString("vi-VN")} ₫ · rủi ro ${o.risk_score}/100 · ${o.status}${o.fraud_flags?.length ? ` · ${o.fraud_flags.join(", ")}` : ""}`).join("\n")}
+
+Sự kiện gần đây:
+${context.storeFraudEvents.map((e) => `• ${e.event_type} — ${e.ip_address} (${e.country}) · ${e.risk_score}/100 · ${new Date(e.created_at).toLocaleString("vi-VN")}`).join("\n")}`
+        : `**Store orders & fraud** — top ${context.storeOrders.length} risky orders and ${context.storeFraudEvents.length} recent fraud events.
+
+${context.storeOrders.map((o, i) => `${i + 1}. ${o.order_number} — ${o.shipping_name} · ${Number(o.total || 0).toLocaleString("vi-VN")} ₫ · risk ${o.risk_score}/100 · ${o.status}`).join("\n")}`;
+      suggestions.push(vi ? "Đơn nào đang bị giữ?" : "Which orders are on hold?", vi ? "IP nào gây gian lận nhiều nhất?" : "Which IP has the most fraud?");
+      break;
+
     default:
       reply = vi
         ? `**Tổng quan SOC** — ${o.total_alerts} cảnh báo (${o.open_alerts} mở, ${o.critical_alerts} nghiêm trọng), ${o.active_threats} mối đe dọa hoạt động, ${o.open_incidents} sự cố mở, ${o.total_assets} tài sản, rủi ro TB ${o.avg_asset_risk}/100, tuân thủ ${o.compliance_score}%.\n\nĐiểm nóng: ${context.countries[0] ? `${context.countries[0].country} (${context.countries[0].attacks} sự kiện)` : "chưa xác định"}. Kẻ tấn công nổi bật: ${context.attackers[0]?.source_ip || "n/a"}.\n\nBạn muốn tôi đào sâu vào cảnh báo, kẻ tấn công, sự cố hay tài sản?`
@@ -158,49 +179,99 @@ const compose = (intent, context, message) => {
   return { reply, suggestions, insights, references, intent, language: vi ? "vi" : "en" };
 };
 
-const maybeOpenAI = async (message, context) => {
-  if (!config.openai.apiKey) return null;
+const requestJson = async (url, options, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openai.apiKey}` },
-      body: JSON.stringify({
-        model: config.openai.model,
-        messages: [
-          { role: "system", content: `You are MedicareGuard SOC analyst. Answer using this live data: ${JSON.stringify(context)}` },
-          { role: "user", content: message },
-        ],
-        temperature: 0.2,
-        max_tokens: 600,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) return null;
-    const payload = await response.json();
-    return payload.choices?.[0]?.message?.content || null;
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) {
+      logger.warn("AI provider returned an error", { url: url.split("?")[0], status: response.status });
+      return null;
+    }
+    return await response.json();
   } catch (error) {
-    logger.warn("OpenAI fallback failed", { error: error.message });
+    logger.warn("AI provider request failed", { url: url.split("?")[0], error: error.message });
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
-const chat = async (message) => {
+const maybeN8n = async (message, conversationId) => {
+  if (!config.n8n.aiChatUrl) return null;
+  const payload = await requestJson(
+    config.n8n.aiChatUrl,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, conversationId }),
+    },
+    config.n8n.timeoutMs,
+  );
+  const data = payload?.data || payload;
+  if (!data?.reply) return null;
+  return {
+    reply: data.reply,
+    model: data.model || "n8n-medicareguard-analyst",
+    provider: "n8n",
+    latencyMs: data.latencyMs,
+  };
+};
+
+const maybeOpenAI = async (message, context) => {
+  if (!config.openai.apiKey) return null;
+  const payload = await requestJson("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openai.apiKey}` },
+    body: JSON.stringify({
+      model: config.openai.model,
+      messages: [
+        { role: "system", content: `You are MedicareGuard SOC analyst. Answer only with facts from this live PostgreSQL context. Never invent alerts, incidents, assets or numbers: ${JSON.stringify(context)}` },
+        { role: "user", content: message },
+      ],
+      temperature: 0.2,
+      max_tokens: 600,
+    }),
+  });
+  const reply = payload?.choices?.[0]?.message?.content || null;
+  return reply ? { reply, model: config.openai.model, provider: "openai" } : null;
+};
+
+const maybeGemini = async (message, context) => {
+  if (!config.gemini.apiKey) return null;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.gemini.model)}:generateContent?key=${encodeURIComponent(config.gemini.apiKey)}`;
+  const payload = await requestJson(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: `You are MedicareGuard SOC analyst. Answer only with facts from this live PostgreSQL context. Never invent alerts, incidents, assets or numbers: ${JSON.stringify(context)}` }] },
+      contents: [{ role: "user", parts: [{ text: message }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+    }),
+  });
+  const reply = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || null;
+  return reply ? { reply, model: config.gemini.model, provider: "gemini" } : null;
+};
+
+const chat = async (message, conversationId = null) => {
   const startedAt = Date.now();
   const context = await getContext();
   const composed = compose(intentOf(message), context, message);
-  const external = await maybeOpenAI(message, context);
+  const external =
+    (await maybeN8n(message, conversationId)) ||
+    (await maybeOpenAI(message, context)) ||
+    (await maybeGemini(message, context));
+  const reply = external?.reply || composed.reply;
   return {
-    reply: external || composed.reply,
+    reply,
     intent: composed.intent,
     language: composed.language,
     insights: composed.insights,
     suggestions: composed.suggestions,
     references: composed.references,
-    model: external ? config.openai.model : "medicareguard-analyst",
-    latencyMs: Date.now() - startedAt,
+    model: external?.model || "medicareguard-analyst",
+    provider: external?.provider || "database",
+    latencyMs: external?.latencyMs || Date.now() - startedAt,
   };
 };
 

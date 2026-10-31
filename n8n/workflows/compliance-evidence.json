@@ -25,7 +25,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'compliance-evidence', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityType: 'compliance_control', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'compliance-evidence', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityType: 'compliance_control', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
         220,
@@ -453,7 +453,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'compliance-evidence', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 17, metrics: { risk_score: $('🧮 Chấm điểm rủi ro').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất Bằng chứng Tuân thủ Liên tục cho execution ' + $('🔍 Kiểm tra dữ liệu').first().json.executionId }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'compliance-evidence', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 19, metrics: { risk_score: $('🧮 Chấm điểm rủi ro').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất Bằng chứng Tuân thủ Liên tục cho execution ' + $('🔍 Kiểm tra dữ liệu').first().json.executionId }) }}"
       },
       "position": [
         3300,
@@ -463,11 +463,53 @@
       "onError": "continueRegularOutput"
     },
     {
+      "name": "⏰ Lịch hằng đêm 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        180
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+    },
+    {
+      "name": "🔎 Chọn kiểm soát ưu tiên",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM compliance_controls ORDER BY score ASC NULLS LAST LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        220,
+        180
+      ],
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "name": "Ghi chú — Tổng quan",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Bằng chứng Tuân thủ Liên tục\nBằng chứng danh tính/thiết bị/audit · Gói bất biến · Báo cáo kiểm toán\n\n**Kích hoạt:** webhook `mg-compliance` · **Node thực thi:** 17 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation",
+        "content": "# Bằng chứng Tuân thủ Liên tục\nBằng chứng danh tính/thiết bị/audit · Gói bất biến · Báo cáo kiểm toán\n\n**Kích hoạt:** webhook `mg-compliance` · **Node thực thi:** 19 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation",
         "height": 180,
         "width": 2100,
         "color": 4
@@ -476,7 +518,7 @@
         0,
         -440
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     },
     {
       "name": "Ghi chú — Tiếp nhận & Đánh giá",
@@ -492,7 +534,7 @@
         0,
         -240
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
       "name": "Ghi chú — Phản hồi & Thông báo",
@@ -508,7 +550,7 @@
         1320,
         -240
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
     }
   ],
   "connections": {
@@ -703,6 +745,28 @@
         [
           {
             "node": "🏁 Kết thúc phiên chạy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ Lịch hằng đêm 02:00": {
+      "main": [
+        [
+          {
+            "node": "🔎 Chọn kiểm soát ưu tiên",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 Chọn kiểm soát ưu tiên": {
+      "main": [
+        [
+          {
+            "node": "🔍 Kiểm tra dữ liệu",
             "type": "main",
             "index": 0
           }

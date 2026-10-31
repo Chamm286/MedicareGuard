@@ -118,6 +118,9 @@ router.post(
     const { message, conversationId } = req.body;
     if (!message || !String(message).trim()) throw new HttpError(400, "Nội dung tin nhắn là bắt buộc");
 
+    const currentUser = await query("SELECT id FROM users WHERE id = $1", [req.user.id]);
+    if (!currentUser.rows.length) throw new HttpError(401, "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.");
+
     let conversation;
     if (conversationId) {
       const existing = await query("SELECT * FROM ai_conversations WHERE id = $1", [conversationId]);
@@ -132,10 +135,10 @@ router.post(
     }
 
     await query("INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1,'user',$2)", [conversation.id, String(message)]);
-    const result = await chat(String(message));
+    const result = await chat(String(message), conversation.id);
     const assistant = await query(
       "INSERT INTO ai_messages (conversation_id, role, content, tokens, metadata) VALUES ($1,'assistant',$2,$3,$4) RETURNING *",
-      [conversation.id, result.reply, Math.ceil(result.reply.length / 4), JSON.stringify({ intent: result.intent, model: result.model, latencyMs: result.latencyMs })],
+      [conversation.id, result.reply, Math.ceil(result.reply.length / 4), JSON.stringify({ intent: result.intent, model: result.model, provider: result.provider, latencyMs: result.latencyMs })],
     );
     await query("UPDATE ai_conversations SET updated_at = now(), title = CASE WHEN title = 'New investigation' THEN $1 ELSE title END WHERE id = $2", [String(message).slice(0, 120), conversation.id]);
     await recordActivity({ eventType: "ai_chat", req, resource: "ai_conversations", resourceId: conversation.id, action: "chat", message: String(message).slice(0, 200), metadata: { intent: result.intent } });
@@ -150,6 +153,7 @@ router.post(
         suggestions: result.suggestions,
         references: result.references,
         model: result.model,
+        provider: result.provider,
         latencyMs: result.latencyMs,
       },
     });

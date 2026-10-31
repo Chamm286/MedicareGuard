@@ -241,6 +241,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     name: "Leo thang SLA Lỗ hổng",
     triggerLabel: "Lỗ hổng mới",
     webhookPath: "mg-vulnerability",
+    schedule: { cron: "0 */6 * * *", label: "⏰ Lịch mỗi 6 giờ", pickName: "🔎 Chọn lỗ hổng ưu tiên", pickQuery: "SELECT id FROM vulnerabilities WHERE status = 'open' ORDER BY cvss_score DESC NULLS LAST LIMIT 1;" },
     loadName: "🗄️ Tải lỗ hổng",
     entityType: "vulnerability",
     recordName: "vulnerability",
@@ -282,6 +283,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     name: "Bằng chứng Tuân thủ Liên tục",
     triggerLabel: "Yêu cầu bằng chứng",
     webhookPath: "mg-compliance",
+    schedule: { cron: "0 2 * * *", label: "⏰ Lịch hằng đêm 02:00", pickName: "🔎 Chọn kiểm soát ưu tiên", pickQuery: "SELECT id FROM compliance_controls ORDER BY score ASC NULLS LAST LIMIT 1;" },
     loadName: "🗄️ Tải kiểm soát",
     entityType: "compliance_control",
     recordName: "compliance control",
@@ -333,6 +335,13 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, 
     entityType: "alert",
     stageSummary: "Quét tấn công mỗi 5 phút · Telegram + Gmail · Hiển thị cho trực ban",
   },
+  {
+    id: "ai-chat-analyst",
+    name: "Chat AI phân tích SOC",
+    triggerLabel: "Câu hỏi Chat AI",
+    webhookPath: "mg-ai-chat",
+    stageSummary: "Webhook · truy vấn PostgreSQL trực tiếp · trả lời theo dữ liệu thật",
+  },
 ];
 
 const telegramNode = (spec, position) => node(
@@ -370,13 +379,138 @@ const gmailNode = (spec, position) => node(
   { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" },
 );
 
+const buildAiChatWorkflow = (spec) => {
+  resetIds();
+
+  const validateCode = `const body = $json.body ?? $json;
+const message = String(body.message || body.chatInput || '').trim();
+if (!message) { throw new Error('message is required'); }
+return [{ json: { message, conversationId: body.conversationId || null, executionId: String(body.executionId || ('ai-' + Date.now())), startedAt: new Date().toISOString() } }];`;
+
+  const contextQuery = `SELECT json_build_object(
+  'overview', (SELECT json_build_object(
+    'total_alerts', (SELECT count(*)::int FROM alerts),
+    'open_alerts', (SELECT count(*)::int FROM alerts WHERE status IN ('open','investigating')),
+    'critical_alerts', (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status NOT IN ('resolved','false_positive')),
+    'active_threats', (SELECT count(*)::int FROM threats WHERE status = 'active'),
+    'open_incidents', (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')),
+    'total_assets', (SELECT count(*)::int FROM assets),
+    'high_risk_assets', (SELECT count(*)::int FROM assets WHERE risk_score >= 70),
+    'open_vulnerabilities', (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open'),
+    'enabled_rules', (SELECT count(*)::int FROM firewall_rules WHERE enabled),
+    'avg_asset_risk', (SELECT COALESCE(round(avg(risk_score))::int, 0) FROM assets),
+    'compliance_score', (SELECT COALESCE(round(avg(score))::int, 0) FROM compliance_controls),
+    'alerts_24h', (SELECT count(*)::int FROM alerts WHERE detected_at > now() - interval '24 hours')
+  )),
+  'alerts', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, title, severity, status, source_ip, country, detected_at FROM alerts ORDER BY detected_at DESC LIMIT 6) t),
+  'incidents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, incident_key, title, severity, status, priority, detected_at FROM incidents WHERE status NOT IN ('resolved','closed') ORDER BY detected_at DESC LIMIT 6) t),
+  'attackers', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_top_attackers LIMIT 5) t),
+  'countries', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_attacks_by_country LIMIT 6) t),
+  'assets', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6) t),
+  'compliance', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC) t),
+  'firewall', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT action, count(*)::int AS total, COALESCE(sum(hit_count), 0)::bigint AS hits FROM firewall_rules GROUP BY action) t),
+  'storeOrders', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, created_at FROM store_orders ORDER BY risk_score DESC, created_at DESC LIMIT 8) t),
+  'storeFraudEvents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, event_type, severity, ip_address, country, risk_score, created_at FROM store_security_events ORDER BY created_at DESC LIMIT 8) t)
+) AS context;`;
+
+  const composeCode = `const base = $('🔍 Kiểm tra câu hỏi').first().json;
+const raw = $json.context ?? $json;
+const ctx = typeof raw === 'string' ? JSON.parse(raw) : raw;
+const o = ctx.overview || {};
+const message = String(base.message || '');
+const lower = message.toLowerCase();
+const vi = /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(message);
+const has = (re) => re.test(lower);
+const intent = has(/(cảnh báo|alert|detection|phát hiện)/) ? 'alerts'
+  : has(/(sự cố|incident|sla|mttr)/) ? 'incidents'
+  : has(/(attacker|kẻ tấn công|source ip|top ip|ip nào|tấn công từ)/) ? 'attackers'
+  : has(/(country|quốc gia|vùng|lãnh thổ|địa lý|geo)/) ? 'countries'
+  : has(/(asset|tài sản|thiết bị|hạ tầng|server|máy chủ)/) ? 'assets'
+  : has(/(compliance|tuân thủ|nist|iso|hipaa|pci)/) ? 'compliance'
+  : has(/(firewall|tường lửa|chặn|block|rule)/) ? 'firewall'
+  : has(/(store|cửa hàng|đơn hàng|order|gian lận|fraud|checkout)/) ? 'store'
+  : 'overview';
+let reply = '';
+if (intent === 'alerts') {
+  const lines = (ctx.alerts || []).map((a, i) => (i + 1) + '. [' + String(a.severity || '').toUpperCase() + '] ' + a.title + ' — ' + (a.source_ip || 'không rõ') + ' (' + a.status + ')').join('\\n');
+  reply = '**Phân tích cảnh báo** — Tổng ' + o.total_alerts + ' cảnh báo, ' + o.open_alerts + ' đang mở, **' + o.critical_alerts + ' nghiêm trọng** và ' + o.alerts_24h + ' cảnh báo trong 24 giờ qua.\\n\\n' + (lines || 'Không có cảnh báo nào.');
+} else if (intent === 'incidents') {
+  const lines = (ctx.incidents || []).map((i) => '• ' + i.incident_key + ' — ' + i.title + ' · ' + i.severity + '/' + i.priority + ' · ' + i.status).join('\\n');
+  reply = '**Sự cố đang mở: ' + o.open_incidents + '**\\n\\n' + (lines || 'Không có sự cố nào đang mở.') + '\\n\\nKhuyến nghị: áp dụng containment trong 4 giờ đầu đối với P1 và xác minh root cause trước khi đóng sự cố.';
+} else if (intent === 'attackers') {
+  const lines = (ctx.attackers || []).map((a, i) => (i + 1) + '. \`' + a.source_ip + '\` — ' + (a.country || 'Unknown') + ' · ' + a.events + ' sự kiện · rủi ro ' + a.avg_risk).join('\\n');
+  reply = '**Top kẻ tấn công theo số sự kiện**\\n\\n' + (lines || 'Chưa có dữ liệu kẻ tấn công.') + '\\n\\nNên chặn các IP có rủi ro ≥ 80 tại tường lửa và theo dõi chặt các IP còn lại.';
+} else if (intent === 'countries') {
+  const lines = (ctx.countries || []).map((c) => '• ' + c.country + ' (' + c.country_code + ') — ' + c.attacks + ' sự kiện, rủi ro TB ' + c.avg_risk).join('\\n');
+  reply = '**Phân bố tấn công theo quốc gia**\\n\\n' + (lines || 'Chưa có dữ liệu địa lý.');
+} else if (intent === 'assets') {
+  const lines = (ctx.assets || []).map((a) => '• ' + a.name + ' (' + a.type + ') — ' + a.criticality + ', rủi ro ' + a.risk_score + ', IP ' + (a.ip_address || 'n/a')).join('\\n');
+  reply = '**Tài sản rủi ro cao** — ' + o.total_assets + ' tài sản, ' + o.high_risk_assets + ' có rủi ro ≥ 70, rủi ro trung bình ' + o.avg_asset_risk + '/100.\\n\\n' + (lines || 'Chưa có dữ liệu tài sản.');
+} else if (intent === 'compliance') {
+  const lines = (ctx.compliance || []).map((c) => '• ' + c.framework + ': ' + c.score + '%').join('\\n');
+  reply = '**Tư thế tuân thủ** — điểm trung bình **' + o.compliance_score + '%**.\\n\\n' + (lines || 'Chưa có dữ liệu tuân thủ.');
+} else if (intent === 'firewall') {
+  const lines = (ctx.firewall || []).map((f) => '• hành động=' + f.action + ': ' + f.total + ' quy tắc, ' + f.hits + ' lượt khớp').join('\\n');
+  reply = '**Tường lửa** — ' + o.enabled_rules + ' quy tắc đang bật.\\n\\n' + (lines || 'Chưa có dữ liệu tường lửa.');
+} else if (intent === 'store') {
+  const orderLines = (ctx.storeOrders || []).map((o, i) => (i + 1) + '. ' + o.order_number + ' — ' + o.shipping_name + ' · ' + Number(o.total || 0).toLocaleString('vi-VN') + ' ₫ · rủi ro ' + o.risk_score + '/100 · ' + o.status + ((o.fraud_flags && o.fraud_flags.length) ? ' · ' + o.fraud_flags.join(', ') : '')).join('\\n');
+  const eventLines = (ctx.storeFraudEvents || []).map((e) => '• ' + e.event_type + ' — ' + e.ip_address + ' (' + e.country + ') · ' + e.risk_score + '/100').join('\\n');
+  reply = '**Đơn hàng & gian lận Store** — ' + (ctx.storeOrders || []).length + ' đơn rủi ro cao nhất, ' + (ctx.storeFraudEvents || []).length + ' sự kiện gian lận gần đây.\\n\\n' + (orderLines || 'Chưa có đơn hàng rủi ro.') + '\\n\\nSự kiện gần đây:\\n' + (eventLines || 'Chưa có security event.');
+} else {
+  reply = '**Tổng quan SOC (dữ liệu PostgreSQL trực tiếp)** — ' + o.total_alerts + ' cảnh báo (' + o.open_alerts + ' mở, ' + o.critical_alerts + ' nghiêm trọng), ' + o.active_threats + ' mối đe dọa hoạt động, ' + o.open_incidents + ' sự cố mở, ' + o.total_assets + ' tài sản, rủi ro TB ' + o.avg_asset_risk + '/100, tuân thủ ' + o.compliance_score + '%.\\n\\nĐiểm nóng: ' + ((ctx.countries && ctx.countries[0]) ? ctx.countries[0].country + ' (' + ctx.countries[0].attacks + ' sự kiện)' : 'chưa xác định') + '. Kẻ tấn công nổi bật: ' + ((ctx.attackers && ctx.attackers[0]) ? ctx.attackers[0].source_ip : 'n/a') + '.';
+}
+const insights = [
+  { label: 'Cảnh báo mở', value: o.open_alerts, tone: 'warning' },
+  { label: 'Nghiêm trọng', value: o.critical_alerts, tone: 'critical' },
+  { label: 'Sự cố mở', value: o.open_incidents, tone: 'warning' },
+  { label: 'Tuân thủ', value: o.compliance_score + '%', tone: 'success' },
+];
+const suggestions = vi
+  ? ['Top 5 kẻ tấn công', 'Tài sản rủi ro cao nhất', 'Có sự cố nào quá SLA không?']
+  : ['Top 5 attackers', 'Highest-risk assets', 'Are any incidents past SLA?'];
+const references = [];
+(ctx.alerts || []).slice(0, 3).forEach((a) => references.push({ type: 'alert', id: a.id, label: a.title }));
+(ctx.incidents || []).slice(0, 2).forEach((i) => references.push({ type: 'incident', id: i.id, label: i.incident_key }));
+return [{ json: { reply, intent, language: vi ? 'vi' : 'en', insights, suggestions, references, model: 'n8n-medicareguard-analyst', provider: 'n8n', latencyMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()) } }];`;
+
+  const nodes = [
+    node('💬 Webhook Chat AI', 'n8n-nodes-base.webhook', 2, { httpMethod: 'POST', path: spec.webhookPath, responseMode: 'responseNode', options: {} }, [0, 0], { webhookId: id() }),
+    code('🔍 Kiểm tra câu hỏi', validateCode, [220, 0]),
+    postgres('🗄️ Tải ngữ cảnh SOC', contextQuery, [440, 0]),
+    code('🧠 Soạn câu trả lời từ Database', composeCode, [660, 0]),
+    node('📤 Trả lời Chat', 'n8n-nodes-base.respondToWebhook', 1.1, { respondWith: 'json', responseBody: '={{ JSON.stringify($json) }}', options: {} }, [880, 0]),
+    sticky('Ghi chú — Chat AI dữ liệu thật', '# Chat AI phân tích SOC\nWebhook `mg-ai-chat` · đọc trực tiếp PostgreSQL (alerts, incidents, attackers, assets, compliance, firewall) · trả lời JSON cho backend.\n\nKhông dùng câu trả lời mẫu: mọi số liệu lấy từ truy vấn SQL tại thời điểm hỏi.', [0, -240], 1000, 160, 4),
+  ];
+
+  const connections = {
+    '💬 Webhook Chat AI': { main: [[{ node: '🔍 Kiểm tra câu hỏi', type: 'main', index: 0 }]] },
+    '🔍 Kiểm tra câu hỏi': { main: [[{ node: '🗄️ Tải ngữ cảnh SOC', type: 'main', index: 0 }]] },
+    '🗄️ Tải ngữ cảnh SOC': { main: [[{ node: '🧠 Soạn câu trả lời từ Database', type: 'main', index: 0 }]] },
+    '🧠 Soạn câu trả lời từ Database': { main: [[{ node: '📤 Trả lời Chat', type: 'main', index: 0 }]] },
+  };
+
+  return {
+    id: spec.id,
+    name: spec.name,
+    active: false,
+    nodes,
+    connections,
+    settings: { executionOrder: 'v1', saveExecutionProgress: true, saveManualExecutions: true, timezone: 'Asia/Ho_Chi_Minh' },
+    staticData: null,
+    pinData: {},
+    meta: { templateCredsSetupCompleted: true, workflowDescription: spec.stageSummary },
+    tags: [{ name: 'MedicareGuard' }, { name: spec.id }],
+  };
+};
+
 const buildWorkflow = (spec) => {
   resetIds();
+  if (spec.id === "ai-chat-analyst") return buildAiChatWorkflow(spec);
   if (spec.id === "live-attack-monitor") return buildMonitorWorkflow(spec);
   if (spec.id === "ecommerce-fraud-response") return buildEcommerceWorkflow(spec);
 
   const validateCode = `const body = $json.body ?? $json;
-const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;
+const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;
 const entityId = String(raw || '').trim();
 if (!entityId) { throw new Error('entityId is required'); }
 const executionId = String(body.executionId || ('ext-' + Date.now()));
@@ -441,7 +575,8 @@ const emailHtml = '<div style="background:#f1f5f9;padding:24px;font-family:Arial
 const emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
 return [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: '${spec.name}', entityId: base.entityId, entityType: '${spec.entityType}', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];`;
 
-  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${L.validate}').first().json.receivedAt).getTime()), nodeCount: 17, metrics: { risk_score: $('${L.score}').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất ${spec.name} cho execution ' + $('${L.validate}').first().json.executionId`;
+  const nodeCount = 17 + (spec.schedule ? 2 : 0);
+  const finalizeFields = `workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${L.validate}').first().json.receivedAt).getTime()), nodeCount: ${nodeCount}, metrics: { risk_score: $('${L.score}').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất ${spec.name} cho execution ' + $('${L.validate}').first().json.executionId`;
 
   const nodes = [
     node("📥 " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.webhook, { webhookId: id() }),
@@ -463,7 +598,14 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     http(L.finalize, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref(L.validate, "executionId")} + '/complete' }}`, positions.finalize, jsonBody(finalizeFields)),
   ];
 
-  nodes.push(sticky("Ghi chú — Tổng quan", `# ${spec.name}\n${spec.stageSummary}\n\n**Kích hoạt:** webhook \`${spec.webhookPath}\` · **Node thực thi:** 17 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation`, [0, -440], 2100, 180, 4));
+  if (spec.schedule) {
+    nodes.push(
+      node(spec.schedule.label, "n8n-nodes-base.scheduleTrigger", 1.2, { rule: { interval: [{ field: "cronExpression", expression: spec.schedule.cron }] } }, [0, 180]),
+      postgres(spec.schedule.pickName, spec.schedule.pickQuery, [220, 180]),
+    );
+  }
+
+  nodes.push(sticky("Ghi chú — Tổng quan", `# ${spec.name}\n${spec.stageSummary}\n\n**Kích hoạt:** webhook \`${spec.webhookPath}\` · **Node thực thi:** ${nodeCount} · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation`, [0, -440], 2100, 180, 4));
   nodes.push(sticky("Ghi chú — Tiếp nhận & Đánh giá", "## ① Tiếp nhận & Đánh giá\nKiểm tra dữ liệu, tải bản ghi, làm giàu ngữ cảnh và chấm điểm rủi ro theo mức độ nghiêm trọng và tầm quan trọng của tài sản.", [0, -240], 1050, 150, 1));
   nodes.push(sticky("Ghi chú — Phản hồi & Thông báo", "## ② Phản hồi & Thông báo\nMở sự cố hoặc ticket, gửi 📱 node Telegram và 📧 Gmail (SMTP) độc lập, thực thi phản ứng, xác minh rồi ghi nhận kết quả.", [1320, -240], 1050, 150, 3));
 
@@ -501,6 +643,11 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     [L.mark]: { main: [[{ node: L.finalize, type: "main", index: 0 }]] },
   };
 
+  if (spec.schedule) {
+    connections[spec.schedule.label] = { main: [[{ node: spec.schedule.pickName, type: "main", index: 0 }]] };
+    connections[spec.schedule.pickName] = { main: [[{ node: L.validate, type: "main", index: 0 }]] };
+  }
+
   return {
     id: spec.id,
     name: spec.name,
@@ -537,7 +684,7 @@ const parseFlags = (value) => {
 const flags = parseFlags(base.flags && base.flags.length ? base.flags : order.fraud_flags);
 const velocity = Number(order.ip_order_count || 1);
 const riskScore = Math.max(Number(base.riskScore || 0), Number(order.risk_score || 0), Math.min(100, velocity * 5));
-const severity = riskScore >= 80 ? 'critical' : riskScore >= 60 ? 'high' : 'medium';
+const severity = riskScore >= 80 ? 'critical' : riskScore >= 50 ? 'high' : 'medium';
 const sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH' }[severity];
 const sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04' }[severity];
 const consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';
@@ -608,7 +755,7 @@ SELECT (SELECT count(*) FROM alert)::int AS alerts_updated, (SELECT count(*) FRO
 FROM store_orders o LEFT JOIN store_customers c ON c.id = o.customer_id
 WHERE o.id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' LIMIT 1;`, [440, 0]),
     code("🧮 Chấm điểm & Soạn cảnh báo", scoreCode, [660, 0]),
-    ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 70, [880, 0]),
+    ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 50, [880, 0]),
     postgres("🔒 Tạm giữ đơn hàng", `UPDATE store_orders SET status = 'on_hold',
   metadata = metadata || jsonb_build_object('fraudWorkflowAt', now()::text, 'fraudWorkflowExecution', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}', 'fraudWorkflowRisk', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}'),
   updated_at = now()
@@ -633,7 +780,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' RETURNING id, o
       options: {},
     }, [1980, -120], { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
     postgres("📝 Ghi nhận phản hồi", recordQuery, [2200, 0]),
-    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 70, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
+    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 50, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
   ];
 
   nodes.push(sticky("Ghi chú — Tổng quan", "# Phản hồi Gian lận Thương mại điện tử\nXác minh IP/quốc gia · chấm điểm rủi ro · tạm giữ đơn · cảnh báo SOC\n\n**Kích hoạt:** webhook `mg-ecommerce-fraud` · **Node thực thi:** 13 · **Kênh:** 📱 Telegram + 📧 Gmail · **Phụ trách:** SOC Automation", [0, -420], 1800, 170, 4));
@@ -730,7 +877,11 @@ return [{ json: { ...base, count: attacks.length, attacks, summary: lines.join('
   const metricsCode = `const base = $('🧭 Chuẩn hóa dữ liệu').first().json;
 const built = $('✉️ Soạn tin cảnh báo').first().json;
 const count = Number(built.count || 0);
-return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 16, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];`;
+return [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 18, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];`;
+
+  const channelCheckCode = `const sent = (name) => { try { return !$(name).first().json.error; } catch (error) { return false; } };
+const telegramSent = Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) && sent('📱 Gửi Telegram');
+return [{ json: { telegramSent } }];`;
 
   const nodes = [
     node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.monitorWebhook, { webhookId: id() }),
@@ -747,7 +898,7 @@ FROM (
 ) t;`, positions.monitorLoad),
     code("✉️ Soạn tin cảnh báo", buildMessageCode, positions.monitorBuild),
     ifNode("❓ Có tấn công mới?", `={{ $json.count }}`, 1, positions.monitorGate),
-    postgres("👥 Tải người nhận", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients),
+    postgres("👥 Tải người nhận", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients, { alwaysOutputData: true }),
     ifNode("📱 Telegram sẵn sàng?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.monitorNotifyGate),
     ifNode("📧 Gmail sẵn sàng?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.monitorGmailGate),
     node("📱 Gửi Telegram", "n8n-nodes-base.telegram", 1.2, {
@@ -767,17 +918,19 @@ FROM (
       options: {},
     }, positions.monitorGmail, { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
     simulate("🔔 Thông báo trong ứng dụng", "notify", positions.monitorInApp, `executionId: ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")}, title: 'Giám sát tấn công: ' + $('✉️ Soạn tin cảnh báo').first().json.count + ' tấn công mới', message: $('✉️ Soạn tin cảnh báo').first().json.summary, severity: 'critical', channel: 'phone'`),
+    code("🧾 Kiểm tra Telegram đã gửi", channelCheckCode, [2200, 270]),
+    ifNode("✅ Telegram đã gửi?", "={{ $json.telegramSent }}", true, [2310, 270]),
     postgres("📝 Đánh dấu đã gửi", `UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()
 WHERE severity IN ('critical','high')
   AND detected_at > now() - interval '24 hours'
   AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
 RETURNING id;`, positions.monitorUpdate),
     code("📈 Tổng hợp số liệu", metricsCode, positions.monitorMetrics),
-    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 16, metrics: $json.metrics, message: $json.message`)),
+    http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message`)),
     node("😴 Không có tấn công mới", "n8n-nodes-base.noOp", 1, {}, positions.monitorNoAttacks),
   ];
 
-  nodes.push(sticky("Ghi chú — Tổng quan", "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 16 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation", [0, -360], 1800, 160, 4));
+  nodes.push(sticky("Ghi chú — Tổng quan", "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 18 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation", [0, -360], 1800, 160, 4));
   nodes.push(sticky("Ghi chú — Quét & Tổng hợp", "## ① Quét & Tổng hợp\nMỗi 5 phút, quét cảnh báo critical/high trong 24 giờ chưa gửi cho trực ban và gộp thành một tin nhắn dễ đọc.", [0, -170], 1000, 130, 1));
   nodes.push(sticky("Ghi chú — Cảnh báo & Ghi nhận", "## ② Cảnh báo & Ghi nhận\n📱 Telegram: đẩy ngay về điện thoại.\n📧 Gmail: bản lưu cho kiểm toán.\nHai kênh hoạt động độc lập, sau đó đánh dấu đã gửi.", [1100, -170], 1000, 130, 3));
 
@@ -808,7 +961,14 @@ RETURNING id;`, positions.monitorUpdate),
       ],
     },
     "📧 Gửi Gmail (SMTP)": { main: [[{ node: "🔔 Thông báo trong ứng dụng", type: "main", index: 0 }]] },
-    "🔔 Thông báo trong ứng dụng": { main: [[{ node: "📝 Đánh dấu đã gửi", type: "main", index: 0 }]] },
+    "🔔 Thông báo trong ứng dụng": { main: [[{ node: "🧾 Kiểm tra Telegram đã gửi", type: "main", index: 0 }]] },
+    "🧾 Kiểm tra Telegram đã gửi": { main: [[{ node: "✅ Telegram đã gửi?", type: "main", index: 0 }]] },
+    "✅ Telegram đã gửi?": {
+      main: [
+        [{ node: "📝 Đánh dấu đã gửi", type: "main", index: 0 }],
+        [{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }],
+      ],
+    },
     "📝 Đánh dấu đã gửi": { main: [[{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }]] },
     "📈 Tổng hợp số liệu": { main: [[{ node: "🏁 Kết thúc phiên chạy", type: "main", index: 0 }]] },
     "😴 Không có tấn công mới": { main: [[{ node: "📈 Tổng hợp số liệu", type: "main", index: 0 }]] },
