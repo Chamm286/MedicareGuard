@@ -84,11 +84,11 @@ export default function IncidentDetailPage() {
     setUpdating(true);
     try {
       await api(`/incidents/${id}/status`, { method: "PATCH", body: { status } });
-      success("Status updated", `Incident moved to ${titleCase(status)}.`);
+      success("Đã cập nhật trạng thái", `Sự cố đã chuyển sang ${titleCase(status)}.`);
       refetch();
       timeline.refetch();
     } catch (err) {
-      toastError("Update failed", err instanceof Error ? err.message : "Unable to change status");
+      toastError("Cập nhật thất bại", err instanceof Error ? err.message : "Không thể đổi trạng thái");
     } finally {
       setUpdating(false);
     }
@@ -98,10 +98,10 @@ export default function IncidentDetailPage() {
     setUpdating(true);
     try {
       await api(`/incidents/${id}/assign`, { method: "POST", body: { assigneeId: assigneeId || null } });
-      success("Incident lead updated");
+      success("Đã cập nhật trưởng nhóm sự cố");
       refetch();
     } catch (err) {
-      toastError("Assignment failed", err instanceof Error ? err.message : "Unable to assign incident");
+      toastError("Phân công thất bại", err instanceof Error ? err.message : "Không thể phân công sự cố");
     } finally {
       setUpdating(false);
     }
@@ -115,9 +115,9 @@ export default function IncidentDetailPage() {
       await api(`/incidents/${id}/timeline`, { method: "POST", body: { message: note, kind: "note" } });
       setNote("");
       timeline.refetch();
-      success("Timeline updated");
+      success("Đã cập nhật dòng thời gian");
     } catch (err) {
-      toastError("Could not add note", err instanceof Error ? err.message : "Unknown error");
+      toastError("Không thể thêm ghi chú", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setPosting(false);
     }
@@ -126,13 +126,13 @@ export default function IncidentDetailPage() {
   const escalate = async () => {
     setEscalating(true);
     try {
-      await api(`/incidents/${id}/escalate`, { method: "POST", body: { reason: escalationReason || "Incident escalated by SOC" } });
-      success("Incident escalated", "Priority and severity were raised. SLA reset to 4 hours.");
+      await api(`/incidents/${id}/escalate`, { method: "POST", body: { reason: escalationReason || "Sự cố được SOC leo thang" } });
+      success("Đã leo thang sự cố", "Mức ưu tiên và mức độ nghiêm trọng đã tăng. SLA đặt lại thành 4 giờ.");
       setEscalateOpen(false);
       refetch();
       timeline.refetch();
     } catch (err) {
-      toastError("Escalation failed", err instanceof Error ? err.message : "Unable to escalate incident");
+      toastError("Leo thang thất bại", err instanceof Error ? err.message : "Không thể leo thang sự cố");
     } finally {
       setEscalating(false);
     }
@@ -141,13 +141,13 @@ export default function IncidentDetailPage() {
   const resolve = async () => {
     setResolving(true);
     try {
-      await api(`/incidents/${id}/resolve`, { method: "POST", body: { rootCause, resolution: resolution || "Incident resolved by SOC" } });
-      success("Incident resolved", "Resolution recorded and SLA clock stopped.");
+      await api(`/incidents/${id}/resolve`, { method: "POST", body: { rootCause, resolution: resolution || "Sự cố được SOC xử lý" } });
+      success("Đã xử lý sự cố", "Kết quả đã được ghi lại và đồng hồ SLA đã dừng.");
       setResolveOpen(false);
       refetch();
       timeline.refetch();
     } catch (err) {
-      toastError("Resolution failed", err instanceof Error ? err.message : "Unable to resolve incident");
+      toastError("Xử lý thất bại", err instanceof Error ? err.message : "Không thể xử lý sự cố");
     } finally {
       setResolving(false);
     }
@@ -171,26 +171,26 @@ export default function IncidentDetailPage() {
   const entries = timeline.data?.data || [];
   const linkedAlerts = incident.alerts || [];
   const alertColumns: Column[] = [
-    { key: "title", header: "Correlated alert", render: (row) => <span className="text-[11.5px] text-slate-300">{row.title}</span> },
-    { key: "severity", header: "Severity", width: "100px", render: (row) => <SeverityBadge severity={row.severity} /> },
-    { key: "status", header: "Status", width: "110px", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "detected_at", header: "Detected", width: "100px", render: (row) => <span className="text-[10px] text-slate-600">{relativeTime(row.detected_at)}</span> },
+    { key: "title", header: "Cảnh báo tương quan", render: (row) => <span className="text-[11.5px] text-slate-300">{row.title}</span> },
+    { key: "severity", header: "Mức độ", width: "100px", render: (row) => <SeverityBadge severity={row.severity} /> },
+    { key: "status", header: "Trạng thái", width: "110px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "detected_at", header: "Phát hiện", width: "100px", render: (row) => <span className="text-[10px] text-slate-600">{relativeTime(row.detected_at)}</span> },
   ];
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[10px] text-slate-600">
-          <Link href="/incidents" className="flex items-center gap-1 transition hover:text-brand-300"><ArrowLeft className="h-3 w-3" /> Incident register</Link>
+          <Link href="/incidents" className="flex items-center gap-1 transition hover:text-brand-300"><ArrowLeft className="h-3 w-3" /> Danh sách sự cố</Link>
           <span className="text-slate-800">/</span>
           <span className="font-mono text-slate-500">{incident.incident_key}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/ai?prompt=${encodeURIComponent(`Summarise incident ${incident.incident_key}: "${incident.title}" (${incident.severity}, ${incident.status}). What are the next response steps?`)}`}>
-            <Button icon={Bot}>Ask AI</Button>
+          <Link href={`/ai?prompt=${encodeURIComponent(`Tóm tắt sự cố ${incident.incident_key}: "${incident.title}" (${incident.severity}, ${incident.status}). Các bước ứng phó tiếp theo là gì?`)}`}>
+            <Button icon={Bot}>Hỏi AI</Button>
           </Link>
-          <Button icon={ChevronUp} onClick={() => setEscalateOpen(true)} disabled={!canWrite}>Escalate</Button>
-          <Button variant="primary" icon={CheckCircle2} onClick={() => setResolveOpen(true)} disabled={!canWrite}>Resolve</Button>
+          <Button icon={ChevronUp} onClick={() => setEscalateOpen(true)} disabled={!canWrite}>Leo thang</Button>
+          <Button variant="primary" icon={CheckCircle2} onClick={() => setResolveOpen(true)} disabled={!canWrite}>Xử lý</Button>
         </div>
       </div>
 
@@ -203,26 +203,26 @@ export default function IncidentDetailPage() {
             <StatusBadge status={incident.status} />
             <Badge tone={incident.priority === "P1" ? "critical" : incident.priority === "P2" ? "high" : "info"}>{incident.priority}</Badge>
             <Badge>{titleCase(incident.category)}</Badge>
-            <span className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-600"><Clock className="h-3 w-3" /> Detected {formatDate(incident.detected_at)}</span>
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-600"><Clock className="h-3 w-3" /> Phát hiện {formatDate(incident.detected_at)}</span>
           </div>
           <h1 className="mt-3 font-display text-xl font-semibold tracking-tight text-white md:text-2xl">{incident.title}</h1>
-          <p className="mt-2 max-w-4xl text-[13px] leading-relaxed text-slate-400">{incident.description || "No incident description recorded."}</p>
+          <p className="mt-2 max-w-4xl text-[13px] leading-relaxed text-slate-400">{incident.description || "Chưa ghi nhận mô tả sự cố."}</p>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
               <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">SLA</p>
-              <p className={cn("mt-1 text-[12px] font-medium", sla.breached ? "text-critical" : "text-slate-200")}>{incident.resolved_at ? "Met" : sla.due || "—"}</p>
+              <p className={cn("mt-1 text-[12px] font-medium", sla.breached ? "text-critical" : "text-slate-200")}>{incident.resolved_at ? "Đạt" : sla.due || "—"}</p>
             </div>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
-              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Impact</p>
-              <p className="mt-1 truncate text-[12px] font-medium text-slate-200">{incident.impact || "Not assessed"}</p>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Tác động</p>
+              <p className="mt-1 truncate text-[12px] font-medium text-slate-200">{incident.impact || "Chưa đánh giá"}</p>
             </div>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
-              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Incident lead</p>
-              <p className="mt-1 truncate text-[12px] font-medium text-slate-200">{incident.assignee_name || "Unassigned"}</p>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Trưởng nhóm sự cố</p>
+              <p className="mt-1 truncate text-[12px] font-medium text-slate-200">{incident.assignee_name || "Chưa phân công"}</p>
             </div>
             <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
-              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Linked alerts</p>
-              <p className="mt-1 text-[12px] font-medium text-slate-200">{linkedAlerts.length} correlated</p>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">Cảnh báo được liên kết</p>
+              <p className="mt-1 text-[12px] font-medium text-slate-200">{linkedAlerts.length} liên quan</p>
             </div>
           </div>
         </div>
@@ -233,13 +233,13 @@ export default function IncidentDetailPage() {
           <Card>
             <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
               <div>
-                <h2 className="font-display text-sm font-semibold text-slate-200">Response timeline</h2>
-                <p className="mt-0.5 text-[11px] text-slate-600">Detection, triage, containment and analyst notes</p>
+                <h2 className="font-display text-sm font-semibold text-slate-200">Dòng thời gian phản hồi</h2>
+                <p className="mt-0.5 text-[11px] text-slate-600">Ghi chú phát hiện, phân loại, ngăn chặn và phân tích</p>
               </div>
-              <Badge>{entries.length} events</Badge>
+              <Badge>{entries.length} sự kiện</Badge>
             </div>
             <div className="space-y-4 p-4">
-              {entries.length === 0 && <p className="py-6 text-center text-xs text-slate-600">No timeline events yet.</p>}
+              {entries.length === 0 && <p className="py-6 text-center text-xs text-slate-600">Chưa có sự kiện dòng thời gian nào.</p>}
               {entries.map((entry: any, index: number) => (
                 <div key={`${entry.created_at}-${index}`} className="flex gap-3">
                   <div className="flex flex-col items-center">
@@ -250,7 +250,7 @@ export default function IncidentDetailPage() {
                   </div>
                   <div className="min-w-0 flex-1 pb-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-medium text-slate-300">{entry.actor || "System"}</p>
+                      <p className="text-xs font-medium text-slate-300">{entry.actor || "Hệ thống"}</p>
                       <Badge tone={entry.kind === "escalation" ? "critical" : entry.kind === "resolution" ? "low" : "info"} className="text-[8px]">{titleCase(entry.kind || entry.type || "event")}</Badge>
                       <span className="text-[9px] text-slate-700">{relativeTime(entry.created_at)}</span>
                     </div>
@@ -260,10 +260,10 @@ export default function IncidentDetailPage() {
               ))}
             </div>
             <form onSubmit={addNote} className="border-t border-white/[0.05] p-3">
-              <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Document containment actions, evidence or handoff notes…" className="min-h-[74px] text-xs" disabled={!canWrite} />
+              <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Các hành động ngăn chặn tài liệu, bằng chứng hoặc biên bản bàn giao…" className="min-h-[74px] text-xs" disabled={!canWrite} />
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-[9px] text-slate-700">Timeline entries are retained for audit.</span>
-                <Button size="sm" variant="primary" icon={Send} loading={posting} disabled={!note.trim() || !canWrite}>Add entry</Button>
+                <span className="text-[9px] text-slate-700">Các mục nhập dòng thời gian được giữ lại để kiểm tra.</span>
+                <Button size="sm" variant="primary" icon={Send} loading={posting} disabled={!note.trim() || !canWrite}>Thêm mục</Button>
               </div>
             </form>
           </Card>
@@ -271,8 +271,8 @@ export default function IncidentDetailPage() {
           <Card>
             <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
               <div>
-                <h2 className="font-display text-sm font-semibold text-slate-200">Correlated alerts</h2>
-                <p className="mt-0.5 text-[11px] text-slate-600">Detections linked to this incident</p>
+                <h2 className="font-display text-sm font-semibold text-slate-200">Cảnh báo tương quan</h2>
+                <p className="mt-0.5 text-[11px] text-slate-600">Các phát hiện liên quan đến sự cố này</p>
               </div>
               <Badge>{linkedAlerts.length}</Badge>
             </div>
@@ -280,19 +280,19 @@ export default function IncidentDetailPage() {
               rows={linkedAlerts}
               columns={alertColumns}
               rowKey="id"
-              emptyTitle="No linked alerts"
-              emptyMessage="This incident has no directly correlated detections."
+              emptyTitle="Không có cảnh báo được liên kết"
+              emptyMessage="Sự cố này không có phát hiện tương quan trực tiếp."
               onRowClick={(row) => router.push(`/alerts/${row.id}`)}
             />
           </Card>
 
           {(incident.root_cause || incident.impact) && (
             <Card className="p-4">
-              <h2 className="font-display text-sm font-semibold text-slate-200">Root cause & impact</h2>
+              <h2 className="font-display text-sm font-semibold text-slate-200">Nguyên nhân và tác động gốc rễ</h2>
               <div className="mt-2">
-                <KeyValue label="Root cause" value={incident.root_cause || "Not yet determined"} />
-                <KeyValue label="Business impact" value={incident.impact || "Not assessed"} />
-                <KeyValue label="Resolved at" value={incident.resolved_at ? formatDate(incident.resolved_at) : "Open"} />
+                <KeyValue label="Nguyên nhân gốc rễ" value={incident.root_cause || "Chưa xác định"} />
+                <KeyValue label="Tác động kinh doanh" value={incident.impact || "Chưa đánh giá"} />
+                <KeyValue label="Đã giải quyết tại" value={incident.resolved_at ? formatDate(incident.resolved_at) : "Đang mở"} />
               </div>
             </Card>
           )}
@@ -302,83 +302,83 @@ export default function IncidentDetailPage() {
           <Card className="p-4">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="font-display text-sm font-semibold text-slate-200">SLA monitor</h2>
-                <p className="mt-0.5 text-[11px] text-slate-600">{incident.priority} response target</p>
+                <h2 className="font-display text-sm font-semibold text-slate-200">Đồng hồ SLA</h2>
+                <p className="mt-0.5 text-[11px] text-slate-600">Mục tiêu phản hồi {incident.priority}</p>
               </div>
               <Clock className={cn("h-4 w-4", sla.breached ? "text-critical" : "text-brand-400")} />
             </div>
             <div className="mt-4 flex items-end justify-between">
-              <p className={cn("font-display text-2xl font-semibold", sla.breached ? "text-critical" : "text-white")}>{incident.resolved_at ? "Met" : sla.due || "—"}</p>
-              <span className="text-[10px] text-slate-600">{Math.round(sla.pct)}% elapsed</span>
+              <p className={cn("font-display text-2xl font-semibold", sla.breached ? "text-critical" : "text-white")}>{incident.resolved_at ? "Đạt" : sla.due || "—"}</p>
+              <span className="text-[10px] text-slate-600">{Math.round(sla.pct)}% trôi qua</span>
             </div>
             <ProgressBar value={sla.pct} barClassName={sla.breached ? "from-critical to-rose-400" : sla.pct > 75 ? "from-high to-amber-400" : "from-brand-500 to-cyan-400"} className="mt-2 h-2" />
             <div className="mt-2 flex items-center justify-between text-[9px] text-slate-700">
-              <span>Detected {formatDate(incident.detected_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-              <span>Due {formatDate(incident.sla_due_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+              <span>Phát hiện {formatDate(incident.detected_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+              <span>Hạn {formatDate(incident.sla_due_at, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
             </div>
           </Card>
 
           <Card className="p-4">
-            <h2 className="font-display text-sm font-semibold text-slate-200">Response actions</h2>
+            <h2 className="font-display text-sm font-semibold text-slate-200">Hành động phản hồi</h2>
             <div className="mt-3 space-y-3">
-              <Field label="Status">
+              <Field label="Trạng thái">
                 <Select value={incident.status} onChange={(event) => updateStatus(event.target.value)} disabled={!canWrite || updating}>
                   {STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}
                 </Select>
               </Field>
-              <Field label="Incident lead">
+              <Field label="Trưởng nhóm sự cố">
                 <Select value={incident.assignee_id || ""} onChange={(event) => assign(event.target.value)} disabled={!canWrite || updating}>
-                  <option value="">Unassigned</option>
+                  <option value="">Chưa phân công</option>
                   {(users.data?.data || []).map((user: any) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={() => updateStatus("contained")} disabled={!canWrite || updating}>Contain</Button>
-                <Button size="sm" onClick={() => updateStatus("eradicated")} disabled={!canWrite || updating}>Eradicate</Button>
+                <Button size="sm" onClick={() => updateStatus("contained")} disabled={!canWrite || updating}>Cô lập</Button>
+                <Button size="sm" onClick={() => updateStatus("eradicated")} disabled={!canWrite || updating}>Diệt trừ</Button>
               </div>
-              <Button size="sm" variant="danger" className="w-full" icon={Flame} onClick={() => setEscalateOpen(true)} disabled={!canWrite}>Escalate priority</Button>
-              <Button size="sm" variant="primary" className="w-full" icon={CheckCircle2} onClick={() => setResolveOpen(true)} disabled={!canWrite}>Resolve incident</Button>
-              {!canWrite && <p className="text-center text-[9px] text-slate-700">Read-only role. Ask an analyst to take action.</p>}
+              <Button size="sm" variant="danger" className="w-full" icon={Flame} onClick={() => setEscalateOpen(true)} disabled={!canWrite}>Tăng mức độ ưu tiên</Button>
+              <Button size="sm" variant="primary" className="w-full" icon={CheckCircle2} onClick={() => setResolveOpen(true)} disabled={!canWrite}>Giải quyết sự cố</Button>
+              {!canWrite && <p className="text-center text-[9px] text-slate-700">Vai trò chỉ đọc. Yêu cầu một nhà phân tích hành động.</p>}
             </div>
           </Card>
 
           <Card className="p-4">
-            <h2 className="font-display text-sm font-semibold text-slate-200">Case details</h2>
+            <h2 className="font-display text-sm font-semibold text-slate-200">Chi tiết sự cố</h2>
             <div className="mt-2">
-              <KeyValue label="Incident key" value={<span className="font-mono text-[10px]">{incident.incident_key}</span>} />
-              <KeyValue label="Category" value={titleCase(incident.category)} />
-              <KeyValue label="Reporter" value={incident.reporter_name || "System"} />
-              <KeyValue label="Assignee" value={incident.assignee_name || "Unassigned"} />
-              <KeyValue label="Created" value={formatDate(incident.created_at)} />
-              <KeyValue label="Updated" value={formatDate(incident.updated_at)} />
+              <KeyValue label="Mã sự cố" value={<span className="font-mono text-[10px]">{incident.incident_key}</span>} />
+              <KeyValue label="Danh mục" value={titleCase(incident.category)} />
+              <KeyValue label="Người báo cáo" value={incident.reporter_name || "Hệ thống"} />
+              <KeyValue label="Người phụ trách" value={incident.assignee_name || "Chưa phân công"} />
+              <KeyValue label="Tạo" value={formatDate(incident.created_at)} />
+              <KeyValue label="Cập nhật" value={formatDate(incident.updated_at)} />
             </div>
             {incident.metadata?.assetId && (
               <Link href={`/assets/${incident.metadata.assetId}`} className="mt-3">
-                <Button size="sm" className="w-full">View affected asset <ArrowUpRight className="h-3 w-3" /></Button>
+                <Button size="sm" className="w-full">Xem tài sản bị ảnh hưởng <ArrowUpRight className="h-3 w-3" /></Button>
               </Link>
             )}
           </Card>
 
           <Card className="p-4">
-            <h2 className="font-display text-sm font-semibold text-slate-200">Team</h2>
+            <h2 className="font-display text-sm font-semibold text-slate-200">Đội phản hồi</h2>
             <div className="mt-2 space-y-2">
               <div className="flex items-center gap-2.5 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
                 <Avatar name={incident.assignee_name} email={incident.assignee_email} size="sm" />
                 <div className="min-w-0">
-                  <p className="truncate text-[11px] text-slate-300">{incident.assignee_name || "Unassigned"}</p>
-                  <p className="text-[8.5px] uppercase tracking-wider text-slate-600">Incident lead</p>
+                  <p className="truncate text-[11px] text-slate-300">{incident.assignee_name || "Chưa phân công"}</p>
+                  <p className="text-[8.5px] uppercase tracking-wider text-slate-600">Trưởng nhóm sự cố</p>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
                 <Avatar name={incident.reporter_name} email={incident.reporter_email} size="sm" />
                 <div className="min-w-0">
-                  <p className="truncate text-[11px] text-slate-300">{incident.reporter_name || "System"}</p>
-                  <p className="text-[8.5px] uppercase tracking-wider text-slate-600">Reporter</p>
+                  <p className="truncate text-[11px] text-slate-300">{incident.reporter_name || "Hệ thống"}</p>
+                  <p className="text-[8.5px] uppercase tracking-wider text-slate-600">Người báo cáo</p>
                 </div>
               </div>
             </div>
             <Link href="/playbooks" className="mt-3 flex items-center justify-center gap-1 text-[10px] text-brand-300/80 transition hover:text-brand-200">
-              Open response playbooks <ArrowUpRight className="h-3 w-3" />
+              Mở cẩm nang phản hồi <ArrowUpRight className="h-3 w-3" />
             </Link>
           </Card>
         </div>
@@ -387,40 +387,40 @@ export default function IncidentDetailPage() {
       <Modal
         open={escalateOpen}
         onClose={() => setEscalateOpen(false)}
-        title="Escalate incident"
-        description="This raises priority by one level, increases severity and resets the SLA to 4 hours."
+        title="Leo thang sự cố"
+        description="Điều này sẽ tăng mức độ ưu tiên lên một cấp, tăng mức độ nghiêm trọng và đặt lại SLA thành 4 giờ."
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setEscalateOpen(false)}>Cancel</Button>
-            <Button variant="danger" loading={escalating} onClick={escalate}>Escalate now</Button>
+            <Button variant="ghost" onClick={() => setEscalateOpen(false)}>Hủy</Button>
+            <Button variant="danger" loading={escalating} onClick={escalate}>Leo thang ngay</Button>
           </>
         }
       >
-        <Field label="Escalation reason">
-          <Textarea value={escalationReason} onChange={(event) => setEscalationReason(event.target.value)} placeholder="Why does this need executive / IR lead attention?" />
+        <Field label="Lý do leo thang">
+          <Textarea value={escalationReason} onChange={(event) => setEscalationReason(event.target.value)} placeholder="Tại sao điều này cần sự chú ý của lãnh đạo điều hành/IR?" />
         </Field>
       </Modal>
 
       <Modal
         open={resolveOpen}
         onClose={() => setResolveOpen(false)}
-        title="Resolve incident"
-        description="Record the root cause and final resolution for the audit trail."
+        title="Giải quyết sự cố"
+        description="Ghi lại nguyên nhân gốc rễ và giải pháp cuối cùng cho quá trình kiểm tra."
         size="md"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setResolveOpen(false)}>Cancel</Button>
-            <Button variant="primary" loading={resolving} onClick={resolve}>Resolve incident</Button>
+            <Button variant="ghost" onClick={() => setResolveOpen(false)}>Hủy</Button>
+            <Button variant="primary" loading={resolving} onClick={resolve}>Giải quyết sự cố</Button>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Root cause">
-            <Textarea value={rootCause} onChange={(event) => setRootCause(event.target.value)} placeholder="What enabled the incident? Misconfiguration, unpatched CVE, credential compromise…" />
+          <Field label="Nguyên nhân gốc rễ">
+            <Textarea value={rootCause} onChange={(event) => setRootCause(event.target.value)} placeholder="Điều gì đã gây ra sự cố? Cấu hình sai, CVE chưa được vá, xâm phạm thông tin xác thực…" />
           </Field>
-          <Field label="Resolution summary">
-            <Textarea value={resolution} onChange={(event) => setResolution(event.target.value)} placeholder="Containment, eradication and recovery steps taken…" />
+          <Field label="Tóm tắt xử lý">
+            <Textarea value={resolution} onChange={(event) => setResolution(event.target.value)} placeholder="Các bước ngăn chặn, diệt trừ và phục hồi đã được thực hiện…" />
           </Field>
         </div>
       </Modal>

@@ -1,3 +1,4 @@
+import type { Role } from "./access";
 import {
   Activity,
   AlertTriangle,
@@ -17,7 +18,10 @@ import {
   Radar,
   Shield,
   ShieldAlert,
+  ShoppingBag,
   Siren,
+  Store,
+  Target,
   Users,
   Workflow,
 } from "lucide-react";
@@ -27,6 +31,7 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   badge?: string;
+  roles?: Role[];
 };
 
 export type NavGroup = {
@@ -36,74 +41,83 @@ export type NavGroup = {
 
 export const navGroups: NavGroup[] = [
   {
-    title: "Operations",
+    title: "Vận hành",
     items: [
-      { label: "Command Center", href: "/dashboard", icon: Gauge },
-      { label: "Alerts", href: "/alerts", icon: ShieldAlert, badge: "live" },
-      { label: "Incidents", href: "/incidents", icon: Siren },
+      { label: "Trung tâm chỉ huy", href: "/dashboard", icon: Gauge, roles: ["admin", "analyst", "hunter", "viewer"] },
+      { label: "Săn tìm mối đe dọa", href: "/hunting", icon: Target, roles: ["admin", "analyst", "hunter"] },
+      { label: "Cảnh báo", href: "/alerts", icon: ShieldAlert, badge: "live", roles: ["admin", "analyst", "hunter", "viewer"] },
+      { label: "Sự cố", href: "/incidents", icon: Siren, roles: ["admin", "analyst", "hunter", "viewer"] },
     ],
   },
   {
-    title: "Threat Intelligence",
+    title: "Tình báo mối đe dọa",
     items: [
-      { label: "Threat Landscape", href: "/threats", icon: Radar },
-      { label: "Threat Intel", href: "/threat-intel", icon: Fingerprint },
-      { label: "Vulnerabilities", href: "/vulnerabilities", icon: Bug },
+      { label: "Bối cảnh mối đe dọa", href: "/threats", icon: Radar, roles: ["admin", "analyst", "hunter"] },
+      { label: "Tình báo đe dọa", href: "/threat-intel", icon: Fingerprint, roles: ["admin", "analyst", "hunter"] },
+      { label: "Lỗ hổng", href: "/vulnerabilities", icon: Bug, roles: ["admin", "analyst", "hunter"] },
     ],
   },
   {
-    title: "Exposure & Response",
+    title: "Phơi nhiễm & Ứng phó",
     items: [
-      { label: "Asset Inventory", href: "/assets", icon: HardDrive },
-      { label: "Firewall Policy", href: "/firewall", icon: Flame },
-      { label: "Playbooks", href: "/playbooks", icon: ListTree },
-      { label: "Automation", href: "/automation", icon: Workflow, badge: "n8n" },
+      { label: "Kiểm kê tài sản", href: "/assets", icon: HardDrive, roles: ["admin", "analyst", "hunter"] },
+      { label: "Chính sách tường lửa", href: "/firewall", icon: Flame, roles: ["admin", "analyst"] },
+      { label: "Playbook", href: "/playbooks", icon: ListTree, roles: ["admin", "analyst"] },
+      { label: "Tự động hóa", href: "/automation", icon: Workflow, badge: "n8n", roles: ["admin", "analyst"] },
     ],
   },
   {
-    title: "Intelligence & Reporting",
+    title: "Tình báo & Báo cáo",
     items: [
-      { label: "AI Analyst", href: "/ai", icon: Bot, badge: "AI" },
-      { label: "Reports", href: "/reports", icon: FileText },
-      { label: "Activity Logs", href: "/logs", icon: Activity },
+      { label: "Chuyên viên AI", href: "/ai", icon: Bot, badge: "AI", roles: ["admin", "analyst", "hunter", "viewer"] },
+      { label: "Báo cáo", href: "/reports", icon: FileText, roles: ["admin", "analyst", "hunter", "viewer"] },
+      { label: "Nhật ký hoạt động", href: "/logs", icon: Activity, roles: ["admin", "analyst", "hunter"] },
     ],
   },
   {
-    title: "Administration",
+    title: "Thương mại điện tử",
     items: [
-      { label: "Users & Roles", href: "/users", icon: Users },
-      { label: "Settings", href: "/settings", icon: LockKeyhole },
+      { label: "Medicare Store", href: "/store", icon: ShoppingBag, roles: ["admin", "analyst", "hunter", "viewer"] },
+      { label: "Quản trị cửa hàng", href: "/store/admin", icon: Store, roles: ["admin", "analyst"] },
+    ],
+  },
+  {
+    title: "Quản trị",
+    items: [
+      { label: "Người dùng & Vai trò", href: "/users", icon: Users, roles: ["admin", "analyst"] },
+      { label: "Cài đặt", href: "/settings", icon: LockKeyhole, roles: ["admin"] },
     ],
   },
 ];
 
 export const pageTitles: Record<string, { title: string; subtitle: string; icon: LucideIcon }> = {
-  "/dashboard": { title: "Command Center", subtitle: "Live security posture across the Medicare platform", icon: Gauge },
-  "/alerts": { title: "Alert Queue", subtitle: "Triage and respond to detections in real time", icon: ShieldAlert },
-  "/incidents": { title: "Incident Response", subtitle: "Contain, eradicate and recover from security incidents", icon: Siren },
-  "/threats": { title: "Threat Landscape", subtitle: "Attack origins, actors and MITRE coverage", icon: Radar },
-  "/threat-intel": { title: "Threat Intelligence", subtitle: "Curated indicators and actor attribution", icon: Fingerprint },
-  "/vulnerabilities": { title: "Vulnerability Management", subtitle: "CVE exposure across the asset estate", icon: Bug },
-  "/assets": { title: "Asset Inventory", subtitle: "Criticality, ownership and risk posture", icon: HardDrive },
-  "/firewall": { title: "Firewall Policy", subtitle: "Network enforcement and automated blocking", icon: Flame },
-  "/playbooks": { title: "Response Playbooks", subtitle: "Repeatable procedures for the SOC team", icon: ListTree },
-  "/automation": { title: "SOAR Automation", subtitle: "n8n workflows connected to the SOC database", icon: Workflow },
-  "/ai": { title: "AI Analyst", subtitle: "Investigations grounded on live security telemetry", icon: Bot },
-  "/reports": { title: "Reports & Analytics", subtitle: "Executive and operational security reporting", icon: FileText },
-  "/logs": { title: "Activity Logs", subtitle: "Immutable stream of platform and security events", icon: Activity },
-  "/users": { title: "Users & Roles", subtitle: "Identity lifecycle and role-based access control", icon: Users },
-  "/settings": { title: "Platform Settings", subtitle: "Profile, integrations and platform configuration", icon: LockKeyhole },
+  "/dashboard": { title: "Trung tâm chỉ huy", subtitle: "Tình trạng bảo mật trực tiếp trên nền tảng Medicare", icon: Gauge },
+  "/hunting": { title: "Săn tìm mối đe dọa", subtitle: "Giả thuyết, tín hiệu và điều tra chuyên sâu cho threat hunter", icon: Target },
+  "/alerts": { title: "Hàng đợi cảnh báo", subtitle: "Phân loại và phản hồi các phát hiện trong thời gian thực", icon: ShieldAlert },
+  "/incidents": { title: "Ứng phó sự cố", subtitle: "Cô lập, loại bỏ và phục hồi sau các sự cố bảo mật", icon: Siren },
+  "/threats": { title: "Bối cảnh mối đe dọa", subtitle: "Nguồn gốc tấn công, tác nhân và kỹ thuật MITRE", icon: Radar },
+  "/threat-intel": { title: "Tình báo mối đe dọa", subtitle: "Chỉ số tình báo và phân bổ tác nhân", icon: Fingerprint },
+  "/vulnerabilities": { title: "Quản lý lỗ hổng", subtitle: "Mức độ tiếp xúc với CVE trên toàn bộ tài sản", icon: Bug },
+  "/assets": { title: "Kiểm kê tài sản", subtitle: "Mức độ quan trọng, quyền sở hữu và mức độ rủi ro", icon: HardDrive },
+  "/firewall": { title: "Chính sách tường lửa", subtitle: "Thực thi mạng và chặn tự động", icon: Flame },
+  "/playbooks": { title: "Playbook ứng phó", subtitle: "Các thủ tục lặp lại cho nhóm SOC", icon: ListTree },
+  "/automation": { title: "Tự động hóa SOAR", subtitle: "Quy trình n8n được kết nối với cơ sở dữ liệu SOC", icon: Workflow },
+  "/ai": { title: "Chuyên viên AI", subtitle: "Điều tra dựa trên dữ liệu an ninh trực tiếp", icon: Bot },
+  "/reports": { title: "Báo cáo & Phân tích", subtitle: "Báo cáo an ninh điều hành và vận hành", icon: FileText },
+  "/logs": { title: "Nhật ký hoạt động", subtitle: "Dòng bất biến của các sự kiện nền tảng và bảo mật", icon: Activity },
+  "/users": { title: "Người dùng & Vai trò", subtitle: "Vòng đời nhận dạng và kiểm soát truy cập dựa trên vai trò", icon: Users },
+  "/settings": { title: "Cài đặt nền tảng", subtitle: "Cấu hình, tích hợp và cấu hình nền tảng", icon: LockKeyhole },
 };
 
 export const quickCommands: NavItem[] = [
-  { label: "Open alert queue", href: "/alerts", icon: ShieldAlert },
-  { label: "Launch AI Analyst", href: "/ai", icon: Bot },
-  { label: "Review incidents", href: "/incidents", icon: Siren },
-  { label: "Export security report", href: "/reports", icon: BarChart3 },
-  { label: "Firewall policy", href: "/firewall", icon: Network },
-  { label: "Asset inventory", href: "/assets", icon: HardDrive },
-  { label: "Threat intelligence", href: "/threat-intel", icon: AlertTriangle },
-  { label: "Workflow automation", href: "/automation", icon: Workflow },
+  { label: "Mở hàng đợi cảnh báo", href: "/alerts", icon: ShieldAlert, roles: ["admin", "analyst", "hunter", "viewer"] },
+  { label: "Mở chuyên viên AI", href: "/ai", icon: Bot, roles: ["admin", "analyst", "hunter", "viewer"] },
+  { label: "Xem xét sự cố", href: "/incidents", icon: Siren, roles: ["admin", "analyst", "hunter", "viewer"] },
+  { label: "Xuất báo cáo bảo mật", href: "/reports", icon: BarChart3, roles: ["admin", "analyst", "hunter", "viewer"] },
+  { label: "Chính sách tường lửa", href: "/firewall", icon: Network, roles: ["admin", "analyst"] },
+  { label: "Kiểm kê tài sản", href: "/assets", icon: HardDrive, roles: ["admin", "analyst", "hunter"] },
+  { label: "Thông tin về mối đe dọa", href: "/threat-intel", icon: AlertTriangle, roles: ["admin", "analyst", "hunter"] },
+  { label: "Tự động hóa quy trình làm việc", href: "/automation", icon: Workflow, roles: ["admin", "analyst"] },
 ];
 
 export { ChevronRight };

@@ -2,7 +2,7 @@
   "name": "@medicareguard/backend",
   "version": "1.0.0",
   "private": true,
-  "description": "MedicareGuard SOC — REST API, analytics, reporting and AI analyst service",
+  "description": "MedicareGuard SOC \u2014 REST API, analytics, reporting and AI analyst service",
   "main": "src/index.js",
   "engines": {
     "node": ">=20"
@@ -14,7 +14,8 @@
     "seed": "node scripts/seed.js",
     "seed:reset": "node scripts/seed.js --reset",
     "test": "node scripts/smoke-test.js",
-    "token:n8n": "node scripts/mint-service-token.js"
+    "token:n8n": "node scripts/mint-service-token.js",
+    "test:security": "node scripts/security-test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -27,7 +28,8 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "pdfkit": "^0.15.1",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "swagger-ui-dist": "^5.34.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

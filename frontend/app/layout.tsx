@@ -22,16 +22,16 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "MedicareGuard SOC — Security Operations Center",
+    default: "MedicareGuard SOC — Trung tâm vận hành an ninh",
     template: "%s · MedicareGuard SOC",
   },
   description:
-    "Autonomous Security Operations Center protecting the Medicare healthcare platform with real-time detection, AI-assisted response and n8n SOAR automation.",
-  keywords: ["SOC", "cybersecurity", "Medicare", "threat detection", "SIEM", "n8n", "AI analyst"],
-  authors: [{ name: "MedicareGuard Security Team" }],
+    "Trung tâm Điều hành An ninh Tự động bảo vệ nền tảng chăm sóc sức khỏe của Medicare bằng khả năng phát hiện theo thời gian thực, phản hồi được hỗ trợ bởi AI và tự động hóa SOAR n8n.",
+  keywords: ["SOC", "an ninh mạng", "Medicare", "phát hiện mối đe dọa", "SIEM", "n8n", "chuyên viên AI"],
+  authors: [{ name: "Đội ngũ an ninh MedicareGuard" }],
   openGraph: {
     title: "MedicareGuard SOC",
-    description: "Autonomous security operations center for the Medicare healthcare platform.",
+    description: "Trung tâm điều hành an ninh tự động dành cho nền tảng chăm sóc sức khỏe của Medicare.",
     type: "website",
   },
 };
@@ -44,7 +44,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${space.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="vi" className={`dark ${inter.variable} ${space.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <div className="relative z-10 min-h-screen">{children}</div>
       </body>

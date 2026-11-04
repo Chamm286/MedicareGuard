@@ -1,10 +1,10 @@
 {
   "id": "phishing-triage",
-  "name": "Phishing Triage & Credential Reset",
+  "name": "Phân tích & Xử lý Phishing",
   "active": false,
   "nodes": [
     {
-      "name": "Webhook — Phish Report",
+      "name": "📥 Báo cáo Phishing",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "parameters": {
@@ -21,80 +21,32 @@
       "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
     },
     {
-      "name": "Validate Webhook Payload",
+      "name": "🔍 Kiểm tra dữ liệu",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'phishing-triage', workflowName: 'Phishing Triage & Credential Reset', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'phishing-triage', workflowName: 'Phân tích & Xử lý Phishing', entityType: 'alert', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
-        0,
-        180
+        220,
+        0
       ],
       "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
     },
     {
-      "name": "Deduplicate Active Run",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const payload = $json;\nconst idempotencyKey = payload.workflowId + ':' + payload.entityId + ':' + payload.executionId;\nreturn [{ json: { ...payload, idempotencyKey, dedupeStatus: 'unique', lane: 'primary' } }];"
-      },
-      "position": [
-        0,
-        360
-      ],
-      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
-    },
-    {
-      "name": "Stamp Correlation Context",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
-              "name": "correlationId",
-              "value": "={{ $json.workflowId + '-' + $json.executionId.slice(0, 8) }}",
-              "type": "string"
-            },
-            {
-              "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e",
-              "name": "workflowName",
-              "value": "Phishing Triage & Credential Reset",
-              "type": "string"
-            },
-            {
-              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
-              "name": "entityType",
-              "value": "alert",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "position": [
-        0,
-        540
-      ],
-      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
-    },
-    {
-      "name": "Load Alert Record",
+      "name": "🗄️ Tải cảnh báo",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, title, severity, status, source, source_ip, risk_score, asset_id, metadata, detected_at\nFROM alerts WHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' LIMIT 1;",
+        "query": "SELECT al.id, al.title, al.severity, al.status, al.source, al.source_ip, al.risk_score, al.asset_id, al.metadata, al.detected_at,\n  a.name AS asset_name, a.ip_address AS asset_ip, a.criticality AS asset_criticality, a.risk_score AS asset_risk_score,\n  u.full_name AS asset_owner_name, u.email AS asset_owner_email\nFROM alerts al LEFT JOIN assets a ON a.id = al.asset_id LEFT JOIN users u ON u.id = a.owner_id\nWHERE al.id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' LIMIT 1;",
         "options": {}
       },
       "position": [
-        0,
-        720
+        440,
+        0
       ],
-      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -104,7 +56,7 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Enrich — Sandbox Detonation",
+      "name": "🧪 Làm giàu – Sandbox",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -129,183 +81,30 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, url: $('Load Alert Record').first().json.metadata?.url || $('Load Alert Record').first().json.title }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, url: $('🗄️ Tải cảnh báo').first().json.metadata?.url || $('🗄️ Tải cảnh báo').first().json.title }) }}"
       },
       "position": [
-        320,
+        660,
         0
       ],
-      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+      "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Enrich — Threat Reputation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-reputation' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicator: $('Load Alert Record').first().json.metadata?.file_hash || $('Validate Webhook Payload').first().json.entityId }) }}"
-      },
-      "position": [
-        320,
-        180
-      ],
-      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Enrich — Recipient Identity",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/identity-context' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, email: $('Load Alert Record').first().json.metadata?.recipient || 'analyst@medicareguard.io' }) }}"
-      },
-      "position": [
-        320,
-        360
-      ],
-      "id": "36b91229-3aaa-5950-98b2-27822433b566",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Merge Enrichment Context",
+      "name": "🧮 Chấm điểm rủi ro",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Validate Webhook Payload');\nconst record = read('Load Alert Record');\nreturn [{ json: { ...base, record, enrichment: { primary: read('Enrich — Sandbox Detonation'), reputation: read('Enrich — Threat Reputation'), identity: read('Enrich — Recipient Identity') } } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('🔍 Kiểm tra dữ liệu');\nconst record = read('🗄️ Tải cảnh báo');\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('🧪 Làm giàu – Sandbox');\nconst severity = String(record.severity || (record.status === 'compliant' ? 'low' : record.status) || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH', low: '🟢 THẤP' }[severity] || severity;\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#16a34a' }[severity] || '#64748b';\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst detailPath = 'alert' === 'vulnerability' ? '/vulnerabilities/' : 'alert' === 'compliance_control' ? '/reports' : '/alerts/';\nconst consoleLink = 'alert' === 'compliance_control' ? consoleUrl + '/reports' : consoleUrl + detailPath + base.entityId;\nconst recordTitle = record.title || record.control_name || record.name || 'Phân tích & Xử lý Phishing';\nconst recordDescription = record.description || record.summary || 'Hệ thống tự động phát hiện sự kiện an ninh cần được xử lý.';\nconst sourceIp = record.source_ip || record.source || record.ip_address || 'Không xác định';\nconst telegramText = [\n  '🚨 <b>CẢNH BÁO AN NINH MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Luồng</b>  ' + esc('Phân tích & Xử lý Phishing'),\n  '<b>Mức độ</b>  ' + sevLabel,\n  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',\n  '<b>Đối tượng</b>  <code>' + esc(base.entityId) + '</code>',\n  '<b>Nguồn</b>  ' + esc(sourceIp),\n  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(consoleLink) + '\">Mở bảng điều khiển SOC</a>',\n].join('\\n');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Cảnh báo an ninh mới</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<div style=\"display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700\">' + esc(sevLabel) + '</div>'\n  + '<h2 style=\"font-size:18px;margin:16px 0 8px\">' + esc(recordTitle) + '</h2>'\n  + '<p style=\"color:#475569;line-height:1.6;margin:0 0 18px\">' + esc(recordDescription) + '</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:14px\">'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Luồng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc('Phân tích & Xử lý Phishing') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Điểm rủi ro</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + riskScore + '/100</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Đối tượng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(base.entityId) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Tài sản</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(asset.name || 'Không xác định') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Nguồn</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(sourceIp) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Thời gian</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(new Date().toLocaleString('vi-VN')) + '</td></tr>'\n  + '</table>'\n  + '<a href=\"' + esc(consoleLink) + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở bảng điều khiển SOC</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nreturn [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: 'Phân tích & Xử lý Phishing', entityId: base.entityId, entityType: 'alert', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];"
       },
       "position": [
-        320,
-        540
-      ],
-      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
-    },
-    {
-      "name": "Correlate Threat Indicators",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Merge Enrichment Context');\nconst record = context.record || {};\nconst indicators = [record.source_ip, record.cve_id, record.control_id, record.title].filter(Boolean);\nreturn [{ json: { ...context, indicators, correlationCount: indicators.length, correlatedAt: new Date().toISOString() } }];"
-      },
-      "position": [
-        320,
-        720
-      ],
-      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b"
-    },
-    {
-      "name": "Load Asset Ownership",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT a.id, a.name, a.ip_address, a.criticality, a.risk_score, a.status, u.full_name AS owner_name, u.email AS owner_email\nFROM assets a LEFT JOIN users u ON u.id = a.owner_id\nWHERE a.id = (SELECT asset_id FROM alerts WHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}') LIMIT 1;",
-        "options": {}
-      },
-      "position": [
-        640,
+        880,
         0
       ],
-      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
+      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e"
     },
     {
-      "name": "Load Related Activity",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')) AS open_incidents,\n       (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status IN ('open','investigating')) AS critical_alerts,\n       (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open') AS open_vulnerabilities;",
-        "options": {}
-      },
-      "position": [
-        640,
-        180
-      ],
-      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Compute Business Impact",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('Correlate Threat Indicators');\nconst record = read('Load Alert Record');\nconst asset = read('Load Asset Ownership');\nconst related = read('Load Related Activity');\nconst severity = String(record.severity || record.status || '').toLowerCase();\nconst severityWeight = { critical: 45, high: 30, medium: 15, low: 5 }[severity] || 10;\nconst criticalityWeight = { critical: 25, high: 18, medium: 10, low: 4 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst exposure = Number(record.cvss_score ? Number(record.cvss_score) * 6 : record.score ? (100 - Number(record.score)) * 0.55 : 25);\nconst relatedWeight = Math.min(20, Object.values(related).reduce((sum, value) => sum + Number(value || 0), 0) * 2);\nlet riskScore = Math.round(severityWeight + criticalityWeight + exposure + relatedWeight);\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = Math.max(15, Math.min(100, 100 - Number(record.score)));\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nreturn [{ json: { ...base, record, asset, related, riskScore, severity: severity || 'medium', workflowName: 'Phishing Triage & Credential Reset', entityId: base.entityId, entityType: 'alert', correlationId: base.correlationId } }];"
-      },
-      "position": [
-        640,
-        360
-      ],
-      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
-    },
-    {
-      "name": "Check SLA Clock",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst slaMinutes = { critical: 60, high: 240, medium: 1440, low: 4320 }[String(context.severity || '').toLowerCase()] || 1440;\nreturn [{ json: { ...context, slaMinutes, slaDueAt: new Date(Date.now() + slaMinutes * 60000).toISOString(), breachRisk: context.riskScore >= 75 ? 'high' : 'normal' } }];"
-      },
-      "position": [
-        640,
-        540
-      ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d"
-    },
-    {
-      "name": "Business Impact Gate",
+      "name": "⚠️ Rủi ro cao?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
@@ -318,7 +117,7 @@
           },
           "conditions": [
             {
-              "id": "1c686689-0223-5ef0-b42a-7885fd251667",
+              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
               "leftValue": "={{ $json.riskScore }}",
               "rightValue": 70,
               "operator": {
@@ -332,47 +131,25 @@
         "options": {}
       },
       "position": [
-        640,
-        720
-      ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db"
-    },
-    {
-      "name": "Open P1 Incident",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Phishing credential compromise — automated P1', 'n8n detonated the payload, purged matching mail and forced credential rotation.',\n'critical', 'open', 'P1', 'phishing', now(), now() + interval '2 hours',\n'AUTO-' || upper(substr(md5('{{ $('Validate Webhook Payload').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'entityId', '{{ $('Validate Webhook Payload').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
-        "options": {}
-      },
-      "position": [
-        960,
+        1100,
         0
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
     },
     {
-      "name": "Open Standard Ticket",
+      "name": "🚨 Mở sự cố P1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated phishing triage', 'open', 'high', 'Reported message routed for analyst review after automated triage.',\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('Validate Webhook Payload').first().json.executionId }}')\nRETURNING id;",
+        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Phishing credential compromise — automated P1', 'n8n detonated the payload, purged matching mail and forced credential rotation.',\n'critical', 'open', 'P1', 'phishing', now(), now() + interval '2 hours',\n'AUTO-' || upper(substr(md5('{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}', 'entityId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
         "options": {}
       },
       "position": [
-        960,
-        180
+        1320,
+        -150
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -382,34 +159,19 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Merge Case Handling",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        960,
-        360
-      ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
-    },
-    {
-      "name": "Load Notification Recipients",
+      "name": "🎫 Mở ticket chuẩn",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') LIMIT 1;",
+        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated phishing triage', 'open', 'high', 'Reported message routed for analyst review after automated triage.',\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nRETURNING id;",
         "options": {}
       },
       "position": [
-        960,
-        540
+        1320,
+        150
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
+      "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -419,99 +181,127 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Notify SOC Channel",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "📱 Telegram sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
             {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
+              "id": "cfdc8197-371b-55be-8a9a-f30467289ba1",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Phishing triage started', message: 'Automated phishing triage is detonating the payload and resetting credentials.', severity: $('Compute Business Impact').first().json.severity, channel: '#soc-alerts' }) }}"
-      },
-      "position": [
-        960,
-        720
-      ],
-      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Create External Ticket",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/ticket-sync' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'phishing-triage', subject: 'Phishing Triage & Credential Reset' }) }}"
-      },
-      "position": [
-        960,
-        900
-      ],
-      "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Update Case Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('alerts', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'n8n automation: Phishing Triage & Credential Reset completed enrichment, notification and case routing.',\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}')) RETURNING id;",
         "options": {}
       },
       "position": [
-        960,
-        1080
+        1540,
+        0
       ],
-      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c",
+      "id": "36b91229-3aaa-5950-98b2-27822433b566"
+    },
+    {
+      "name": "📱 Gửi Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "={{ $('🧮 Chấm điểm rủi ro').first().json.telegramText }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true,
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        1760,
+        -150
+      ],
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
       "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
+        "telegramApi": {
+          "id": "mg-telegram-credential",
+          "name": "MedicareGuard Telegram"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Quarantine Matching Mail",
+      "name": "📧 Gmail sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
+              "leftValue": "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1980,
+        0
+      ],
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b"
+    },
+    {
+      "name": "📧 Gửi Gmail (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "fromEmail": "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
+        "toEmail": "={{ $env.MG_ALERT_EMAIL || 'soc@medicareguard.io' }}",
+        "subject": "=🚨 [{{ $('🧮 Chấm điểm rủi ro').first().json.severity }}] {{ $('🧮 Chấm điểm rủi ro').first().json.workflowName }}",
+        "emailFormat": "html",
+        "html": "={{ $('🧮 Chấm điểm rủi ro').first().json.emailHtml }}",
+        "text": "={{ $('🧮 Chấm điểm rủi ro').first().json.emailText }}",
+        "options": {}
+      },
+      "position": [
+        2200,
+        -150
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "credentials": {
+        "smtp": {
+          "id": "mg-smtp-credential",
+          "name": "MedicareGuard SMTP"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🧹 Cách ly thư khớp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -536,17 +326,17 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, alertId: $('Validate Webhook Payload').first().json.entityId }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, alertId: $('🔍 Kiểm tra dữ liệu').first().json.entityId }) }}"
       },
       "position": [
-        1280,
+        2420,
         0
       ],
-      "id": "9619fd28-6e68-531d-b47e-189e21536dd8",
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Revoke Sessions & Reset",
+      "name": "🔑 Thu hồi phiên & đặt lại mật khẩu",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -571,32 +361,17 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, email: $('Load Alert Record').first().json.metadata?.recipient || 'analyst@medicareguard.io' }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, email: $('🗄️ Tải cảnh báo').first().json.metadata?.recipient || 'analyst@medicareguard.io' }) }}"
       },
       "position": [
-        1280,
-        180
+        2640,
+        0
       ],
-      "id": "339234ac-71d5-511e-83c2-88fad6ee218a",
+      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Wait for Propagation",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "parameters": {
-        "amount": 2,
-        "unit": "seconds"
-      },
-      "position": [
-        1280,
-        360
-      ],
-      "id": "18c51e09-99e6-5650-9b5f-ee096c36b192",
-      "webhookId": "6c533bf0-10da-58fb-86f9-d94477a54e71"
-    },
-    {
-      "name": "Verify Identity Containment",
+      "name": "✅ Xác minh thu hồi danh tính",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
@@ -621,274 +396,29 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, userId: $('Enrich — Recipient Identity').first().json.data?.user?.id }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, email: $('🗄️ Tải cảnh báo').first().json.metadata?.recipient || 'analyst@medicareguard.io' }) }}"
       },
       "position": [
-        1280,
-        540
-      ],
-      "id": "92523c5e-ab9b-5d29-99c9-21f08691dd39",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Response Verified?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "0ba3ea8e-1504-5aa4-84eb-b4e078c84eff",
-              "leftValue": "={{ $json.data.verified }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        1280,
-        720
-      ],
-      "id": "5f4c81bf-41ab-5b20-8cd7-f040c8678841"
-    },
-    {
-      "name": "Mark Record Responded",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('quarantinedBy', 'n8n', 'quarantinedAt', now()::text), updated_at = now()\nWHERE id = '{{ $('Validate Webhook Payload').first().json.entityId }}' RETURNING id, status;",
-        "options": {}
-      },
-      "position": [
-        1600,
-        360
-      ],
-      "id": "5321cfac-4bba-5b69-940d-0043b7a0d2fb",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Escalate to IR Lead",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, title: 'Manual intervention required — Phishing Triage & Credential Reset', message: 'Automated verification failed or needs review.', severity: 'critical', channel: '#soc-escalations' }) }}"
-      },
-      "position": [
-        1600,
-        540
-      ],
-      "id": "d1410ad6-2a1d-5614-8209-6bafe8c7455d",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Merge Verification",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "parameters": {
-        "mode": "append",
-        "numberInputs": 2,
-        "options": {}
-      },
-      "position": [
-        1600,
-        720
-      ],
-      "id": "b132885a-bc6a-5bba-b8af-04a3519e0626"
-    },
-    {
-      "name": "Build Forensic Timeline",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Compute Business Impact');\nconst caseRecord = read('Merge Case Handling');\nconst verification = read('Merge Verification');\nreturn [{ json: { ...context, caseRecord, verification, verified: Boolean(verification.id || verification.verified || verification.data?.verified), stages: ['detected', 'enriched', 'case_opened', 'notified', 'responded', 'verified'], completedAt: new Date().toISOString() } }];"
-      },
-      "position": [
-        1600,
-        900
-      ],
-      "id": "0bd66cc9-5a5f-5ce8-86cc-376c6520ccaf"
-    },
-    {
-      "name": "Persist Response Timeline",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO comments (resource, resource_id, body, metadata)\nVALUES ('alerts', '{{ $('Validate Webhook Payload').first().json.entityId }}',\n'Automated timeline rebuilt: detected → enriched → case opened → response → verification.',\njsonb_build_object('automation', 'phishing-triage', 'executionId', '{{ $('Validate Webhook Payload').first().json.executionId }}', 'timeline', true)) RETURNING id;",
-        "options": {}
-      },
-      "position": [
-        1920,
+        2860,
         0
       ],
-      "id": "c1993f64-47a6-5d93-b4c5-208cf86d2631",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Write Audit Evidence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-write' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'phishing-triage', riskScore: $('Compute Business Impact').first().json.riskScore, report: 'Phishing Triage Report' }) }}"
-      },
-      "position": [
-        1920,
-        180
-      ],
-      "id": "2059055e-7f01-5f98-9b6e-da0cd5ba1b0b",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Attach Evidence Artifact",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/evidence-persist' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, workflowId: 'phishing-triage', controlId: $('Validate Webhook Payload').first().json.entityId }) }}"
-      },
-      "position": [
-        1920,
-        360
-      ],
-      "id": "c42d4cc0-4e40-56dc-abe2-662650a64f05",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Sync Threat Intelligence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/intel-sync' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('Validate Webhook Payload').first().json.executionId, indicators: $('Correlate Threat Indicators').first().json.indicators }) }}"
-      },
-      "position": [
-        1920,
-        540
-      ],
-      "id": "5604e906-caa3-5c72-b749-c81d67feb3de",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Update Asset Risk Posture",
+      "name": "📝 Cập nhật bản ghi",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE assets SET risk_score = LEAST(100, risk_score + 3), metadata = metadata || jsonb_build_object('lastAutomationAt', now()::text), updated_at = now()\nWHERE id = NULLIF('{{ $('Load Asset Ownership').first().json.id }}', '')::uuid RETURNING id, risk_score;",
+        "query": "UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('quarantinedBy', 'n8n', 'quarantinedAt', now()::text), updated_at = now()\nWHERE id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' RETURNING id, status;",
         "options": {}
       },
       "position": [
-        1920,
-        720
+        3080,
+        0
       ],
-      "id": "65fd3727-b101-5408-9362-7cb32f5c2041",
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -898,12 +428,12 @@
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Generate Response Report",
+      "name": "🏁 Kết thúc phiên chạy",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/reports/generate' }}",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('🔍 Kiểm tra dữ liệu').first().json.executionId + '/complete' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -923,657 +453,256 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: 'Phishing Triage Report — ' + $('Validate Webhook Payload').first().json.executionId.slice(0, 8), type: 'incident', format: 'json', days: 30 }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'phishing-triage', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 17, metrics: { risk_score: $('🧮 Chấm điểm rủi ro').first().json.riskScore, verified: true, stages_completed: 4, email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD), telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }, message: 'n8n đã hoàn tất Phân tích & Xử lý Phishing cho execution ' + $('🔍 Kiểm tra dữ liệu').first().json.executionId }) }}"
       },
       "position": [
-        1920,
-        900
-      ],
-      "id": "78dac20e-0ab5-5d9e-8b53-d340521fc3d0",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "name": "Emit Automation Metrics",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst context = read('Build Forensic Timeline');\nconst startedAt = read('Validate Webhook Payload').receivedAt;\nreturn [{ json: { executionId: read('Validate Webhook Payload').executionId, workflowId: 'phishing-triage', workflowName: 'Phishing Triage & Credential Reset', status: 'success', riskScore: context.riskScore, verified: context.verified, durationMs: Math.max(1, Date.now() - new Date(startedAt).getTime()), nodeCount: 40, metrics: { risk_score: context.riskScore, stages_completed: context.stages?.length || 6, case_opened: Boolean(context.caseRecord?.id), verified: context.verified, evidence_records: 3 }, message: 'n8n completed Phishing Triage & Credential Reset for execution ' + read('Validate Webhook Payload').executionId } }];"
-      },
-      "position": [
-        2240,
+        3300,
         0
       ],
-      "id": "dbbf1e57-4a2d-5b96-994f-ec596cf89ad4"
-    },
-    {
-      "name": "Finalize Execution",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "parameters": {
-        "method": "POST",
-        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('Validate Webhook Payload').first().json.executionId + '/complete' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: $json.workflowId, status: $json.status, durationMs: $json.durationMs, nodeCount: $json.nodeCount, metrics: $json.metrics, message: $json.message }) }}"
-      },
-      "position": [
-        2240,
-        180
-      ],
-      "id": "dd50225c-598a-56e3-abff-1b34a93e01a3",
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
       "onError": "continueRegularOutput"
     },
     {
-      "name": "Close Run",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "parameters": {},
-      "position": [
-        2240,
-        360
-      ],
-      "id": "428b3957-fc43-537d-9707-72794eb1633b"
-    },
-    {
-      "name": "Sticky Note — ① Detect",
+      "name": "Ghi chú — Tổng quan",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ① Detect\nReceive the webhook, validate the entity and freeze a correlation ID.",
-        "height": 160,
-        "width": 280,
+        "content": "# Phân tích & Xử lý Phishing\nDetonate sandbox · Dọn hộp thư · Đặt lại mật khẩu · Phản hồi người báo cáo\n\n**Kích hoạt:** webhook `mg-phishing` · **Node thực thi:** 17 · **Kênh:** 📱 node Telegram + 📧 Gmail (SMTP) · **Phụ trách:** SOC Automation",
+        "height": 180,
+        "width": 2100,
+        "color": 4
+      },
+      "position": [
+        0,
+        -440
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+    },
+    {
+      "name": "Ghi chú — Tiếp nhận & Đánh giá",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Tiếp nhận & Đánh giá\nKiểm tra dữ liệu, tải bản ghi, làm giàu ngữ cảnh và chấm điểm rủi ro theo mức độ nghiêm trọng và tầm quan trọng của tài sản.",
+        "height": 150,
+        "width": 1050,
         "color": 1
       },
       "position": [
         0,
-        -260
+        -240
       ],
-      "id": "42afc3bc-89b8-5230-a842-cfd387cb3849"
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
     },
     {
-      "name": "Sticky Note — ② Enrich",
+      "name": "Ghi chú — Phản hồi & Thông báo",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ② Enrich\nCollect endpoint, identity, mail, vulnerability and evidence context.",
-        "height": 160,
-        "width": 280,
-        "color": 2
-      },
-      "position": [
-        320,
-        -260
-      ],
-      "id": "b66b6382-918d-5975-90c1-41c7d359a028"
-    },
-    {
-      "name": "Sticky Note — ③ Assess",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ③ Assess\nCorrelate the estate, calculate business impact and start the SLA clock.",
-        "height": 160,
-        "width": 280,
+        "content": "## ② Phản hồi & Thông báo\nMở sự cố hoặc ticket, gửi 📱 node Telegram và 📧 Gmail (SMTP) độc lập, thực thi phản ứng, xác minh rồi ghi nhận kết quả.",
+        "height": 150,
+        "width": 1050,
         "color": 3
       },
       "position": [
-        640,
-        -260
+        1320,
+        -240
       ],
-      "id": "e56e8559-91d2-5efa-8db9-719acdc9f942"
-    },
-    {
-      "name": "Sticky Note — ④ Decide",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ④ Decide\nRoute the case, notify the SOC and create the response ticket.",
-        "height": 160,
-        "width": 280,
-        "color": 4
-      },
-      "position": [
-        960,
-        -260
-      ],
-      "id": "a54a3e63-8832-5560-9504-b6a9f5477781"
-    },
-    {
-      "name": "Sticky Note — ⑤ Respond",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑤ Respond\nExecute containment or remediation and wait for propagation.",
-        "height": 160,
-        "width": 280,
-        "color": 5
-      },
-      "position": [
-        1280,
-        -260
-      ],
-      "id": "68b74575-0080-54a4-9962-3973d98f833c"
-    },
-    {
-      "name": "Sticky Note — ⑥ Verify",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑥ Verify\nIndependently verify the action, escalate on failure and merge branches.",
-        "height": 160,
-        "width": 280,
-        "color": 6
-      },
-      "position": [
-        1600,
-        -260
-      ],
-      "id": "457bb7a0-6b68-50fc-b80d-49c6f2f5c4be"
-    },
-    {
-      "name": "Sticky Note — ⑦ Evidence",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑦ Evidence\nPersist the timeline, audit hash, evidence artifact and threat intel.",
-        "height": 160,
-        "width": 280,
-        "color": 7
-      },
-      "position": [
-        1920,
-        -260
-      ],
-      "id": "6d8453bf-1c17-501a-b64c-8ebca05cb19d"
-    },
-    {
-      "name": "Sticky Note — ⑧ Report",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "## ⑧ Report\nEmit metrics, finalise the run and close the execution cleanly.",
-        "height": 160,
-        "width": 280,
-        "color": 1
-      },
-      "position": [
-        2240,
-        -260
-      ],
-      "id": "5833c260-3ac6-5d13-aead-baddea0a6c51"
-    },
-    {
-      "name": "Sticky Note — Workflow Overview",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "parameters": {
-        "content": "# Phishing Triage & Credential Reset\nSandbox detonation · mailbox purge · credential reset · reporter closure\n\n**Trigger:** webhook `mg-phishing` · **Owner:** SOC Automation · **SLA:** production playbook",
-        "height": 200,
-        "width": 900,
-        "color": 4
-      },
-      "position": [
-        2240,
-        -520
-      ],
-      "id": "74a7d9f6-8fb7-5f41-a12d-2398114cd0d7"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     }
   ],
   "connections": {
-    "Webhook — Phish Report": {
+    "📥 Báo cáo Phishing": {
       "main": [
         [
           {
-            "node": "Validate Webhook Payload",
+            "node": "🔍 Kiểm tra dữ liệu",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Webhook Payload": {
+    "🔍 Kiểm tra dữ liệu": {
       "main": [
         [
           {
-            "node": "Deduplicate Active Run",
+            "node": "🗄️ Tải cảnh báo",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Deduplicate Active Run": {
+    "🗄️ Tải cảnh báo": {
       "main": [
         [
           {
-            "node": "Stamp Correlation Context",
+            "node": "🧪 Làm giàu – Sandbox",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Stamp Correlation Context": {
+    "🧪 Làm giàu – Sandbox": {
       "main": [
         [
           {
-            "node": "Load Alert Record",
+            "node": "🧮 Chấm điểm rủi ro",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Alert Record": {
+    "🧮 Chấm điểm rủi ro": {
       "main": [
         [
           {
-            "node": "Enrich — Sandbox Detonation",
+            "node": "⚠️ Rủi ro cao?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enrich — Sandbox Detonation": {
+    "⚠️ Rủi ro cao?": {
       "main": [
         [
           {
-            "node": "Enrich — Threat Reputation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enrich — Threat Reputation": {
-      "main": [
-        [
-          {
-            "node": "Enrich — Recipient Identity",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enrich — Recipient Identity": {
-      "main": [
-        [
-          {
-            "node": "Merge Enrichment Context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge Enrichment Context": {
-      "main": [
-        [
-          {
-            "node": "Correlate Threat Indicators",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Correlate Threat Indicators": {
-      "main": [
-        [
-          {
-            "node": "Load Asset Ownership",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Asset Ownership": {
-      "main": [
-        [
-          {
-            "node": "Load Related Activity",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Related Activity": {
-      "main": [
-        [
-          {
-            "node": "Compute Business Impact",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Compute Business Impact": {
-      "main": [
-        [
-          {
-            "node": "Check SLA Clock",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check SLA Clock": {
-      "main": [
-        [
-          {
-            "node": "Business Impact Gate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Business Impact Gate": {
-      "main": [
-        [
-          {
-            "node": "Open P1 Incident",
+            "node": "🚨 Mở sự cố P1",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Open Standard Ticket",
+            "node": "🎫 Mở ticket chuẩn",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Open P1 Incident": {
+    "🚨 Mở sự cố P1": {
       "main": [
         [
           {
-            "node": "Merge Case Handling",
+            "node": "📱 Telegram sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Open Standard Ticket": {
+    "🎫 Mở ticket chuẩn": {
       "main": [
         [
           {
-            "node": "Merge Case Handling",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Case Handling": {
-      "main": [
-        [
-          {
-            "node": "Load Notification Recipients",
+            "node": "📱 Telegram sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Notification Recipients": {
+    "📱 Telegram sẵn sàng?": {
       "main": [
         [
           {
-            "node": "Notify SOC Channel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Notify SOC Channel": {
-      "main": [
-        [
-          {
-            "node": "Create External Ticket",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create External Ticket": {
-      "main": [
-        [
-          {
-            "node": "Update Case Timeline",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Case Timeline": {
-      "main": [
-        [
-          {
-            "node": "Quarantine Matching Mail",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Quarantine Matching Mail": {
-      "main": [
-        [
-          {
-            "node": "Revoke Sessions & Reset",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Revoke Sessions & Reset": {
-      "main": [
-        [
-          {
-            "node": "Wait for Propagation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait for Propagation": {
-      "main": [
-        [
-          {
-            "node": "Verify Identity Containment",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Verify Identity Containment": {
-      "main": [
-        [
-          {
-            "node": "Response Verified?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Response Verified?": {
-      "main": [
-        [
-          {
-            "node": "Mark Record Responded",
+            "node": "📱 Gửi Telegram",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Escalate to IR Lead",
+            "node": "📧 Gmail sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mark Record Responded": {
+    "📱 Gửi Telegram": {
       "main": [
         [
           {
-            "node": "Merge Verification",
+            "node": "📧 Gmail sẵn sàng?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Escalate to IR Lead": {
+    "📧 Gmail sẵn sàng?": {
       "main": [
         [
           {
-            "node": "Merge Verification",
+            "node": "📧 Gửi Gmail (SMTP)",
             "type": "main",
-            "index": 1
+            "index": 0
           }
-        ]
-      ]
-    },
-    "Merge Verification": {
-      "main": [
+        ],
         [
           {
-            "node": "Build Forensic Timeline",
+            "node": "🧹 Cách ly thư khớp",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Forensic Timeline": {
+    "📧 Gửi Gmail (SMTP)": {
       "main": [
         [
           {
-            "node": "Persist Response Timeline",
+            "node": "🧹 Cách ly thư khớp",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Persist Response Timeline": {
+    "🧹 Cách ly thư khớp": {
       "main": [
         [
           {
-            "node": "Write Audit Evidence",
+            "node": "🔑 Thu hồi phiên & đặt lại mật khẩu",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Write Audit Evidence": {
+    "🔑 Thu hồi phiên & đặt lại mật khẩu": {
       "main": [
         [
           {
-            "node": "Attach Evidence Artifact",
+            "node": "✅ Xác minh thu hồi danh tính",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Attach Evidence Artifact": {
+    "✅ Xác minh thu hồi danh tính": {
       "main": [
         [
           {
-            "node": "Sync Threat Intelligence",
+            "node": "📝 Cập nhật bản ghi",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Sync Threat Intelligence": {
+    "📝 Cập nhật bản ghi": {
       "main": [
         [
           {
-            "node": "Update Asset Risk Posture",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Asset Risk Posture": {
-      "main": [
-        [
-          {
-            "node": "Generate Response Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generate Response Report": {
-      "main": [
-        [
-          {
-            "node": "Emit Automation Metrics",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Emit Automation Metrics": {
-      "main": [
-        [
-          {
-            "node": "Finalize Execution",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Finalize Execution": {
-      "main": [
-        [
-          {
-            "node": "Close Run",
+            "node": "🏁 Kết thúc phiên chạy",
             "type": "main",
             "index": 0
           }
@@ -1591,7 +720,7 @@
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
-    "workflowDescription": "Sandbox detonation · mailbox purge · credential reset · reporter closure"
+    "workflowDescription": "Detonate sandbox · Dọn hộp thư · Đặt lại mật khẩu · Phản hồi người báo cáo"
   },
   "tags": [
     {

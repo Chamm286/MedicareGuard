@@ -69,6 +69,7 @@ const run = async () => {
     ["GET", "/ai/conversations"],
     ["GET", "/_meta/resources"],
     ["GET", "/automation/workflows"],
+    ["GET", "/automation/runtime"],
     ["GET", "/automation/executions"],
     ["GET", "/reports/schedules"],
     ["GET", "/vulnerabilities?limit=5"],
@@ -95,6 +96,34 @@ const run = async () => {
     body: JSON.stringify({ message: "Summarise the current security posture and top attackers" }),
   });
   results.push({ name: "POST /ai/chat", status: chat.status, ok: chat.ok });
+
+  const suiteResponse = await request("/automation/workflows", { headers });
+  const suite = suiteResponse.body?.data || [];
+  const suiteSummary = suiteResponse.body?.summary || {};
+  const expectedNodes = {
+    "ransomware-containment": 17,
+    "phishing-triage": 17,
+    "vulnerability-sla": 19,
+    "compliance-evidence": 19,
+    "ecommerce-fraud-response": 13,
+    "live-attack-monitor": 18,
+  };
+  const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
+  results.push({
+    name: "automation suite exposes 6 workflows",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && suite.length === 6 && suiteSummary.active === 6,
+  });
+  results.push({
+    name: "automation suite totals 103 nodes",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && suiteSummary.nodes === 103,
+  });
+  results.push({
+    name: "automation node counts match the compact design",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && Object.entries(expectedNodes).every(([id, count]) => actualNodes[id] === count),
+  });
 
   const meta = await request("/_meta/endpoints", { headers });
   const total = meta.body.total;

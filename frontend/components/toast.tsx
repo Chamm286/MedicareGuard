@@ -61,7 +61,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <p className="text-sm font-medium">{item.title}</p>
                 {item.message && <p className="mt-0.5 text-xs opacity-70">{item.message}</p>}
               </div>
-              <button onClick={() => remove(item.id)} className="rounded p-0.5 opacity-60 transition hover:opacity-100" aria-label="Dismiss">
+              <button onClick={() => remove(item.id)} className="rounded p-0.5 opacity-60 transition hover:opacity-100" aria-label="Đóng">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>

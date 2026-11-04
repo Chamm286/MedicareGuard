@@ -1,37 +1,61 @@
 {
-  "nodeCount": 40,
+  "nodeCount": 108,
   "workflows": [
     {
       "id": "ransomware-containment",
-      "name": "Ransomware Containment & Recovery",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "name": "Cô lập & Phục hồi Ransomware",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/ransomware-containment.json"
     },
     {
       "id": "phishing-triage",
-      "name": "Phishing Triage & Credential Reset",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "name": "Phân tích & Xử lý Phishing",
+      "executable": 17,
+      "stickyNotes": 3,
+      "connections": 16,
       "file": "n8n/workflows/phishing-triage.json"
     },
     {
       "id": "vulnerability-sla",
-      "name": "Vulnerability SLA Escalation",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "name": "Leo thang SLA Lỗ hổng",
+      "executable": 19,
+      "stickyNotes": 3,
+      "connections": 18,
       "file": "n8n/workflows/vulnerability-sla.json"
     },
     {
       "id": "compliance-evidence",
-      "name": "Continuous Compliance Evidence",
-      "executable": 40,
-      "stickyNotes": 9,
-      "connections": 39,
+      "name": "Bằng chứng Tuân thủ Liên tục",
+      "executable": 19,
+      "stickyNotes": 3,
+      "connections": 18,
       "file": "n8n/workflows/compliance-evidence.json"
+    },
+    {
+      "id": "ecommerce-fraud-response",
+      "name": "Phản hồi Gian lận Thương mại điện tử",
+      "executable": 13,
+      "stickyNotes": 3,
+      "connections": 12,
+      "file": "n8n/workflows/ecommerce-fraud-response.json"
+    },
+    {
+      "id": "live-attack-monitor",
+      "name": "Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại",
+      "executable": 18,
+      "stickyNotes": 3,
+      "connections": 17,
+      "file": "n8n/workflows/live-attack-monitor.json"
+    },
+    {
+      "id": "ai-chat-analyst",
+      "name": "Chat AI phân tích SOC",
+      "executable": 5,
+      "stickyNotes": 1,
+      "connections": 4,
+      "file": "n8n/workflows/ai-chat-analyst.json"
     }
   ]
 }

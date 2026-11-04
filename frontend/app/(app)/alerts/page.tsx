@@ -13,7 +13,7 @@ import {
   Timer,
 } from "lucide-react";
 import { api, apiDownload, buildQuery, useApi, useDebounced } from "@/lib/api";
-import { cn, countryFlag, formatDate, formatNumber, relativeTime, titleCase } from "@/lib/utils";
+import { cn, countryFlag, countryName, formatDate, formatNumber, relativeTime, titleCase } from "@/lib/utils";
 import { DataTable, type Column } from "@/components/DataTable";
 import {
   Badge,
@@ -68,21 +68,21 @@ export default function AlertsPage() {
   const statusCount = (name: string) => byStatus.find((item: any) => item.status === name)?.total || 0;
 
   const tabs = [
-    { key: "", label: "All alerts", count: byStatus.reduce((sum: number, item: any) => sum + item.total, 0) },
-    { key: "open", label: "Open", count: statusCount("open") },
-    { key: "investigating", label: "Investigating", count: statusCount("investigating") },
-    { key: "contained", label: "Contained", count: statusCount("contained") },
-    { key: "resolved", label: "Resolved", count: statusCount("resolved") },
-    { key: "false_positive", label: "False positive", count: statusCount("false_positive") },
+    { key: "", label: "Tất cả cảnh báo", count: byStatus.reduce((sum: number, item: any) => sum + item.total, 0) },
+    { key: "open", label: "Mở", count: statusCount("open") },
+    { key: "investigating", label: "Đang điều tra", count: statusCount("investigating") },
+    { key: "contained", label: "Đã cô lập", count: statusCount("contained") },
+    { key: "resolved", label: "Đã xử lý", count: statusCount("resolved") },
+    { key: "false_positive", label: "Dương tính giả", count: statusCount("false_positive") },
   ];
 
   const exportCsv = async () => {
     setExporting(true);
     try {
       await apiDownload(`/alerts/export${buildQuery({ q: query || undefined, severity: severity || undefined, status: status || undefined })}`, `medicareguard-alerts-${Date.now()}.csv`);
-      success("Export ready", "The alert queue was exported as CSV.");
+      success("Xuất thành công", "Hàng đợi cảnh báo đã được xuất dưới dạng CSV.");
     } catch (err) {
-      toastError("Export failed", err instanceof Error ? err.message : "Unable to export alerts");
+      toastError("Xuất thất bại", err instanceof Error ? err.message : "Không thể xuất cảnh báo");
     } finally {
       setExporting(false);
     }
@@ -91,18 +91,18 @@ export default function AlertsPage() {
   const columns: Column[] = [
     {
       key: "severity",
-      header: "Severity",
+      header: "Mức độ",
       width: "85px",
       render: (row) => <SeverityBadge severity={row.severity} />,
     },
     {
       key: "title",
-      header: "Alert",
+      header: "Báo động",
       render: (row) => (
         <div className="min-w-0">
           <p className="max-w-[260px] truncate text-[12.5px] font-medium text-slate-200">{row.title}</p>
           <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-600">
-            <span>{row.source || "sensor"}</span>
+            <span>{titleCase(row.source || "sensor")}</span>
             {row.threat_name && <><span className="text-slate-800">·</span><span className="max-w-[110px] truncate">{row.threat_name}</span></>}
           </p>
         </div>
@@ -110,12 +110,12 @@ export default function AlertsPage() {
     },
     {
       key: "source_ip",
-      header: "Origin",
+      header: "Nguồn gốc",
       width: "120px",
       render: (row) => (
         <div>
-          <p className="font-mono text-[10.5px] text-slate-400">{row.source_ip || "internal"}</p>
-          <p className="mt-0.5 text-[9.5px] text-slate-600">{row.country ? `${countryFlag(row.country_code)} ${row.country}` : "—"}</p>
+          <p className="font-mono text-[10.5px] text-slate-400">{row.source_ip || "nội bộ"}</p>
+          <p className="mt-0.5 text-[9.5px] text-slate-600">{row.country ? `${countryFlag(row.country_code)} ${countryName(row.country)}` : "—"}</p>
         </div>
       ),
     },
@@ -126,19 +126,19 @@ export default function AlertsPage() {
       render: (row) => (
         <div>
           <p className="max-w-[150px] truncate text-[10.5px] text-slate-400">{row.mitre_tactic?.replace(/^T\d+\s/, "") || "—"}</p>
-          <p className="mt-0.5 max-w-[150px] truncate font-mono text-[9px] text-slate-600">{row.mitre_technique?.split(" ")[0] || "unmapped"}</p>
+          <p className="mt-0.5 max-w-[150px] truncate font-mono text-[9px] text-slate-600">{row.mitre_technique?.split(" ")[0] || "chưa ánh xạ"}</p>
         </div>
       ),
     },
     {
       key: "assignee",
-      header: "Assignee",
+      header: "Người phụ trách",
       width: "100px",
-      render: (row) => <span className="text-[11px] text-slate-500">{row.assignee_name || <span className="text-slate-700">Unassigned</span>}</span>,
+      render: (row) => <span className="text-[11px] text-slate-500">{row.assignee_name || <span className="text-slate-700">Chưa phân công</span>}</span>,
     },
     {
       key: "risk_score",
-      header: "Risk",
+      header: "Rủi ro",
       width: "75px",
       render: (row) => (
         <div className="flex items-center gap-2">
@@ -149,10 +149,10 @@ export default function AlertsPage() {
         </div>
       ),
     },
-    { key: "status", header: "Status", width: "100px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "status", header: "Trạng thái", width: "100px", render: (row) => <StatusBadge status={row.status} /> },
     {
       key: "detected_at",
-      header: "Detected",
+      header: "Phát hiện",
       width: "85px",
       render: (row) => <span title={formatDate(row.detected_at)} className="text-[10px] text-slate-600">{relativeTime(row.detected_at)}</span>,
     },
@@ -161,15 +161,15 @@ export default function AlertsPage() {
   return (
     <div>
       <PageHeader
-        title="Alert Queue"
-        subtitle="Triage, assign and resolve detections from every security sensor"
+        title="Hàng đợi cảnh báo"
+        subtitle="Phân loại, chỉ định và giải quyết các phát hiện từ mọi cảm biến bảo mật"
         icon={ShieldAlert}
-        badge={<Badge tone="critical" dot>{statusCount("open")} open</Badge>}
+        badge={<Badge tone="critical" dot>{statusCount("open")} đang mở</Badge>}
         actions={
           <>
-            <Button icon={RefreshCw} onClick={() => { refetch(); stats.refetch(); }} loading={refreshing}>Refresh</Button>
-            <Button icon={Download} onClick={exportCsv} loading={exporting}>Export</Button>
-            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>New alert</Button>
+            <Button icon={RefreshCw} onClick={() => { refetch(); stats.refetch(); }} loading={refreshing}>Làm mới</Button>
+            <Button icon={Download} onClick={exportCsv} loading={exporting}>Xuất</Button>
+            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Cảnh báo mới</Button>
           </>
         }
       />
@@ -179,10 +179,10 @@ export default function AlertsPage() {
           Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[112px] rounded-xl" />)
         ) : (
           <>
-            <StatCard label="Total detections" value={formatNumber(byStatus.reduce((sum: number, item: any) => sum + item.total, 0))} hint="All time" icon={Activity} tone="brand" />
-            <StatCard label="Critical severity" value={formatNumber(severityCount("critical"))} hint={`${severityCount("high")} high severity`} icon={ShieldAlert} tone="critical" />
-            <StatCard label="Investigating" value={formatNumber(statusCount("investigating"))} hint={`${statusCount("contained")} contained`} icon={Timer} tone="warning" />
-            <StatCard label="Resolved" value={formatNumber(statusCount("resolved"))} hint={`${statusCount("false_positive")} false positives`} icon={CheckCircle2} tone="success" />
+            <StatCard label="Tổng số phát hiện" value={formatNumber(byStatus.reduce((sum: number, item: any) => sum + item.total, 0))} hint="Mọi lúc" icon={Activity} tone="brand" />
+            <StatCard label="Cảnh báo nghiêm trọng" value={formatNumber(severityCount("critical"))} hint={`${severityCount("high")} mức cao`} icon={ShieldAlert} tone="critical" />
+            <StatCard label="Đang điều tra" value={formatNumber(statusCount("investigating"))} hint={`${statusCount("contained")} đã cô lập`} icon={Timer} tone="warning" />
+            <StatCard label="Đã xử lý" value={formatNumber(statusCount("resolved"))} hint={`${statusCount("false_positive")} dương tính giả`} icon={CheckCircle2} tone="success" />
           </>
         )}
       </div>
@@ -192,16 +192,16 @@ export default function AlertsPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Tabs tabs={tabs} value={status} onChange={setStatus} />
             <div className="flex items-center gap-2">
-              <SearchInput value={search} onChange={setSearch} placeholder="Search title, IP, country…" className="w-full sm:w-64" />
+              <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm tiêu đề, IP, quốc gia…" className="w-full sm:w-64" />
               <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-32">
-                <option value="">All severity</option>
+                <option value="">Mọi mức độ nghiêm trọng</option>
                 {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
               </Select>
               <Select value={sort} onChange={(event) => setSort(event.target.value)} className="w-36">
-                <option value="detected_at">Newest first</option>
-                <option value="risk_score">Highest risk</option>
-                <option value="severity">Severity</option>
-                <option value="status">Status</option>
+                <option value="detected_at">Mới nhất đầu tiên</option>
+                <option value="risk_score">Rủi ro cao nhất</option>
+                <option value="severity">Mức độ</option>
+                <option value="status">Trạng thái</option>
               </Select>
             </div>
           </div>
@@ -215,8 +215,8 @@ export default function AlertsPage() {
             columns={columns}
             loading={loading && !data}
             onRowClick={(row) => router.push(`/alerts/${row.id}`)}
-            emptyTitle="No alerts match this view"
-            emptyMessage="Try widening your filters or create a manual alert."
+            emptyTitle="Không có cảnh báo nào phù hợp với chế độ xem này"
+            emptyMessage="Hãy thử mở rộng bộ lọc của bạn hoặc tạo cảnh báo thủ công."
             footer={data?.pagination ? <Pagination page={data.pagination.page} pages={data.pagination.pages} total={data.pagination.total} limit={data.pagination.limit} onPage={setPage} /> : null}
           />
         )}
@@ -234,7 +234,7 @@ function CreateAlertModal({ open, onClose, onCreated }: { open: boolean; onClose
     title: "",
     description: "",
     severity: "medium",
-    source: "Manual",
+    source: "Thủ công",
     source_ip: "",
     country: "",
     mitre_tactic: "",
@@ -244,7 +244,7 @@ function CreateAlertModal({ open, onClose, onCreated }: { open: boolean; onClose
   });
 
   useEffect(() => {
-    if (open) setForm({ title: "", description: "", severity: "medium", source: "Manual", source_ip: "", country: "", mitre_tactic: "", mitre_technique: "", risk_score: 55, confidence: 70 });
+    if (open) setForm({ title: "", description: "", severity: "medium", source: "Thủ công", source_ip: "", country: "", mitre_tactic: "", mitre_technique: "", risk_score: 55, confidence: 70 });
   }, [open]);
 
   const set = (key: string, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
@@ -258,10 +258,10 @@ function CreateAlertModal({ open, onClose, onCreated }: { open: boolean; onClose
         method: "POST",
         body: { ...form, risk_score: Number(form.risk_score), confidence: Number(form.confidence) },
       });
-      success("Alert created", "The detection is now in the triage queue.");
+      success("Đã tạo cảnh báo", "Phát hiện đã được đưa vào hàng đợi phân loại.");
       onCreated();
     } catch (err) {
-      toastError("Could not create alert", err instanceof Error ? err.message : "Unknown error");
+      toastError("Không thể tạo cảnh báo", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setSaving(false);
     }
@@ -271,47 +271,47 @@ function CreateAlertModal({ open, onClose, onCreated }: { open: boolean; onClose
     <Modal
       open={open}
       onClose={onClose}
-      title="Create manual alert"
-      description="Record a detection that was not raised automatically by a sensor."
+      title="Tạo cảnh báo thủ công"
+      description="Ghi lại phát hiện không được cảm biến tự động đưa ra."
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={submit}>Create alert</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
+          <Button variant="primary" loading={saving} onClick={submit}>Tạo cảnh báo</Button>
         </>
       }
     >
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        <Field label="Alert title" className="md:col-span-2">
-          <Input value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="e.g. Suspicious OAuth consent grant to unknown app" required />
+        <Field label="Tiêu đề cảnh báo" className="md:col-span-2">
+          <Input value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="Ví dụ: Cấp quyền OAuth đáng ngờ cho ứng dụng không xác định" required />
         </Field>
-        <Field label="Description" className="md:col-span-2">
-          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="What was observed, on which asset and why it matters…" />
+        <Field label="Mô tả" className="md:col-span-2">
+          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="Những gì đã được quan sát, trên tài sản nào và tại sao nó lại quan trọng…" />
         </Field>
-        <Field label="Severity">
+        <Field label="Mức độ">
           <Select value={form.severity} onChange={(event) => set("severity", event.target.value)}>
             {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
           </Select>
         </Field>
-        <Field label="Detection source">
-          <Input value={form.source} onChange={(event) => set("source", event.target.value)} placeholder="EDR, SIEM, Cloud Trail…" />
+        <Field label="Nguồn phát hiện">
+          <Input value={form.source} onChange={(event) => set("source", event.target.value)} placeholder="EDR, SIEM, Đường mòn đám mây…" />
         </Field>
-        <Field label="Source IP">
+        <Field label="IP nguồn">
           <Input value={form.source_ip} onChange={(event) => set("source_ip", event.target.value)} placeholder="203.0.113.42" className="font-mono" />
         </Field>
-        <Field label="Country">
-          <Input value={form.country} onChange={(event) => set("country", event.target.value)} placeholder="Country of origin" />
+        <Field label="Quốc gia">
+          <Input value={form.country} onChange={(event) => set("country", event.target.value)} placeholder="Nước xuất xứ" />
         </Field>
-        <Field label="MITRE tactic">
-          <Input value={form.mitre_tactic} onChange={(event) => set("mitre_tactic", event.target.value)} placeholder="TA0001 Initial Access" />
+        <Field label="Chiến thuật MITRE">
+          <Input value={form.mitre_tactic} onChange={(event) => set("mitre_tactic", event.target.value)} placeholder="TA0001 Truy cập ban đầu" />
         </Field>
-        <Field label="MITRE technique">
-          <Input value={form.mitre_technique} onChange={(event) => set("mitre_technique", event.target.value)} placeholder="T1566 Phishing" />
+        <Field label="Kỹ thuật MITRE">
+          <Input value={form.mitre_technique} onChange={(event) => set("mitre_technique", event.target.value)} placeholder="Lừa đảo T1566" />
         </Field>
-        <Field label={`Risk score — ${form.risk_score}`}>
+        <Field label={`Điểm rủi ro — ${form.risk_score}`}>
           <input type="range" min={0} max={100} value={form.risk_score} onChange={(event) => set("risk_score", Number(event.target.value))} className="input h-9 cursor-pointer accent-brand-500" />
         </Field>
-        <Field label={`Confidence — ${form.confidence}%`}>
+        <Field label={`Độ tin cậy — ${form.confidence}%`}>
           <input type="range" min={0} max={100} value={form.confidence} onChange={(event) => set("confidence", Number(event.target.value))} className="input h-9 cursor-pointer accent-brand-500" />
         </Field>
       </form>

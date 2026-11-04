@@ -1,0 +1,715 @@
+{
+  "id": "live-attack-monitor",
+  "name": "Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Webhook — Nhịp giám sát",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mg-attack-monitor",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "position": [
+        0,
+        0
+      ],
+      "id": "5ca3c280-ddaa-5b6c-9686-ededda1d1efd",
+      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
+    },
+    {
+      "name": "⏰ Lịch mỗi 5 phút",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        180
+      ],
+      "id": "6549e602-81b9-5bf5-a8d7-1d599bb95789"
+    },
+    {
+      "name": "🧭 Chuẩn hóa dữ liệu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst executionId = String(body.executionId || ('monitor-' + Date.now()));\nreturn [{ json: { ...body, executionId, workflowId: 'live-attack-monitor', workflowName: 'Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại', mode: body.mode || 'scheduled', startedAt: body.startedAt || new Date().toISOString() } }];"
+      },
+      "position": [
+        220,
+        90
+      ],
+      "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
+    },
+    {
+      "name": "🗄️ Tải tấn công gần đây",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS attacks, count(*)::int AS count\nFROM (\n  SELECT id, title, severity, source_ip, risk_score, detected_at\n  FROM alerts\n  WHERE severity IN ('critical','high')\n    AND detected_at > now() - interval '24 hours'\n    AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\n  ORDER BY detected_at DESC LIMIT 5\n) t;",
+        "options": {}
+      },
+      "position": [
+        440,
+        90
+      ],
+      "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "✉️ Soạn tin cảnh báo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const attacks = Array.isArray($json.attacks) ? $json.attacks : [];\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH', low: '🟢 THẤP' };\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#16a34a' };\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst lines = attacks.map(function (a) { return '• <b>[' + esc((sevLabel[a.severity] || a.severity || 'CAO')) + ']</b> ' + esc(a.title) + ' — <code>' + esc(a.source_ip || 'không rõ') + '</code> (' + (a.risk_score || 0) + '/100)'; });\nconst telegramText = [\n  '🚨 <b>GIÁM SÁT TẤN CÔNG MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>' + attacks.length + '</b> tấn công rủi ro cao mới trong 24 giờ qua',\n  '',\n  lines.join('\\n') || '• Không có tấn công mới',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(consoleUrl + '/alerts') + '\">Mở danh sách cảnh báo</a>',\n].join('\\n');\nconst rows = attacks.map(function (a) {\n  const color = sevColor[a.severity] || '#64748b';\n  return '<tr><td style=\"padding:10px 8px;border-bottom:1px solid #e2e8f0\"><span style=\"display:inline-block;background:' + color + ';color:#fff;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700\">' + esc(sevLabel[a.severity] || a.severity || 'CAO') + '</span></td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #e2e8f0;font-weight:600\">' + esc(a.title) + '</td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #e2e8f0;color:#475569\"><code>' + esc(a.source_ip || 'không rõ') + '</code></td>'\n    + '<td style=\"padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700\">' + (a.risk_score || 0) + '/100</td></tr>';\n}).join('');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Giám sát tấn công trực tiếp</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<p style=\"margin:0 0 18px;color:#475569;line-height:1.6\"><b>' + attacks.length + '</b> tấn công rủi ro cao mới được phát hiện trong 24 giờ qua.</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:13px\">'\n  + '<thead><tr><th style=\"text-align:left;padding:8px;color:#64748b;font-size:11px;text-transform:uppercase\">Mức độ</th><th style=\"text-align:left;padding:8px;color:#64748b;font-size:11px;text-transform:uppercase\">Sự kiện</th><th style=\"text-align:left;padding:8px;color:#64748b;font-size:11px;text-transform:uppercase\">Nguồn</th><th style=\"text-align:right;padding:8px;color:#64748b;font-size:11px;text-transform:uppercase\">Rủi ro</th></tr></thead>'\n  + '<tbody>' + (rows || '<tr><td colspan=\"4\" style=\"padding:16px;text-align:center;color:#94a3b8\">Không có tấn công mới</td></tr>') + '</tbody>'\n  + '</table>'\n  + '<a href=\"' + esc(consoleUrl + '/alerts') + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở danh sách cảnh báo</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nconst base = $('🧭 Chuẩn hóa dữ liệu').first().json;\nreturn [{ json: { ...base, count: attacks.length, attacks, summary: lines.join(' | '), telegramText, emailHtml, emailText } }];"
+      },
+      "position": [
+        660,
+        90
+      ],
+      "id": "fb3262c1-f6cb-513a-b5a3-96b1f395d83e"
+    },
+    {
+      "name": "❓ Có tấn công mới?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1d86e6be-62a1-5f5f-8b98-d174a635f897",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        880,
+        90
+      ],
+      "id": "3781867b-9ba7-530c-ba92-305f00776b3e"
+    },
+    {
+      "name": "👥 Tải người nhận",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;",
+        "options": {}
+      },
+      "position": [
+        1100,
+        -80
+      ],
+      "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "name": "📱 Telegram sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1320,
+        90
+      ],
+      "id": "cfdc8197-371b-55be-8a9a-f30467289ba1"
+    },
+    {
+      "name": "📧 Gmail sẵn sàng?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "36b91229-3aaa-5950-98b2-27822433b566",
+              "leftValue": "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1760,
+        90
+      ],
+      "id": "41b52431-8f3f-542c-92b8-f69d5301a22f"
+    },
+    {
+      "name": "📱 Gửi Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "={{ $('✉️ Soạn tin cảnh báo').first().json.telegramText }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true,
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        1540,
+        -80
+      ],
+      "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
+      "credentials": {
+        "telegramApi": {
+          "id": "mg-telegram-credential",
+          "name": "MedicareGuard Telegram"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "📧 Gửi Gmail (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "fromEmail": "={{ $env.MG_SMTP_FROM || $env.MG_SMTP_USER || 'alerts@medicareguard.io' }}",
+        "toEmail": "={{ $env.MG_ALERT_EMAIL || $('👥 Tải người nhận').first().json.email || 'soc@medicareguard.io' }}",
+        "subject": "=🚨 Giám sát tấn công MedicareGuard — {{ $('✉️ Soạn tin cảnh báo').first().json.count }} tấn công mới",
+        "emailFormat": "html",
+        "html": "={{ $('✉️ Soạn tin cảnh báo').first().json.emailHtml }}",
+        "text": "={{ $('✉️ Soạn tin cảnh báo').first().json.emailText }}",
+        "options": {}
+      },
+      "position": [
+        1980,
+        -80
+      ],
+      "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b",
+      "credentials": {
+        "smtp": {
+          "id": "mg-smtp-credential",
+          "name": "MedicareGuard SMTP"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🔔 Thông báo trong ứng dụng",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/simulate/notify' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('🧭 Chuẩn hóa dữ liệu').first().json.executionId, title: 'Giám sát tấn công: ' + $('✉️ Soạn tin cảnh báo').first().json.count + ' tấn công mới', message: $('✉️ Soạn tin cảnh báo').first().json.summary, severity: 'critical', channel: 'phone' }) }}"
+      },
+      "position": [
+        2200,
+        90
+      ],
+      "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "🧾 Kiểm tra Telegram đã gửi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const sent = (name) => { try { return !$(name).first().json.error; } catch (error) { return false; } };\nconst telegramSent = Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) && sent('📱 Gửi Telegram');\nreturn [{ json: { telegramSent } }];"
+      },
+      "position": [
+        2200,
+        270
+      ],
+      "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262"
+    },
+    {
+      "name": "✅ Telegram đã gửi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+              "leftValue": "={{ $json.telegramSent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2310,
+        270
+      ],
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+    },
+    {
+      "name": "📝 Đánh dấu đã gửi",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()\nWHERE severity IN ('critical','high')\n  AND detected_at > now() - interval '24 hours'\n  AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\nRETURNING id;",
+        "options": {}
+      },
+      "position": [
+        2420,
+        90
+      ],
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
+      "credentials": {
+        "postgres": {
+          "id": "mg-postgres-credential",
+          "name": "MedicareGuard PostgreSQL"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "📈 Tổng hợp số liệu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const base = $('🧭 Chuẩn hóa dữ liệu').first().json;\nconst built = $('✉️ Soạn tin cảnh báo').first().json;\nconst count = Number(built.count || 0);\nreturn [{ json: { workflowId: 'live-attack-monitor', status: 'success', durationMs: Math.max(1, Date.now() - new Date(base.startedAt).getTime()), nodeCount: 18, metrics: { attack_count: count, channels: ['telegram','gmail'], lookback_hours: 24 }, message: 'Giám sát tấn công phát hiện ' + count + ' tấn công mới' } }];"
+      },
+      "position": [
+        2640,
+        90
+      ],
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
+    },
+    {
+      "name": "🏁 Kết thúc phiên chạy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('🧭 Chuẩn hóa dữ liệu').first().json.executionId + '/complete' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message }) }}"
+      },
+      "position": [
+        2860,
+        90
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "😴 Không có tấn công mới",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1320,
+        270
+      ],
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+    },
+    {
+      "name": "Ghi chú — Tổng quan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "# Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại\nQuét mỗi 5 phút · 18 node · 📱 node Telegram + 📧 Gmail (SMTP) · không cần ngồi trước máy tính\n\n**Kích hoạt:** webhook `mg-attack-monitor` + lịch `*/5 * * * *` · **Phụ trách:** SOC Automation",
+        "height": 160,
+        "width": 1800,
+        "color": 4
+      },
+      "position": [
+        0,
+        -360
+      ],
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+    },
+    {
+      "name": "Ghi chú — Quét & Tổng hợp",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ① Quét & Tổng hợp\nMỗi 5 phút, quét cảnh báo critical/high trong 24 giờ chưa gửi cho trực ban và gộp thành một tin nhắn dễ đọc.",
+        "height": 130,
+        "width": 1000,
+        "color": 1
+      },
+      "position": [
+        0,
+        -170
+      ],
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
+    },
+    {
+      "name": "Ghi chú — Cảnh báo & Ghi nhận",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## ② Cảnh báo & Ghi nhận\n📱 Telegram: đẩy ngay về điện thoại.\n📧 Gmail: bản lưu cho kiểm toán.\nHai kênh hoạt động độc lập, sau đó đánh dấu đã gửi.",
+        "height": 130,
+        "width": 1000,
+        "color": 3
+      },
+      "position": [
+        1100,
+        -170
+      ],
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
+    }
+  ],
+  "connections": {
+    "Webhook — Nhịp giám sát": {
+      "main": [
+        [
+          {
+            "node": "🧭 Chuẩn hóa dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ Lịch mỗi 5 phút": {
+      "main": [
+        [
+          {
+            "node": "🧭 Chuẩn hóa dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧭 Chuẩn hóa dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "🗄️ Tải tấn công gần đây",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗄️ Tải tấn công gần đây": {
+      "main": [
+        [
+          {
+            "node": "✉️ Soạn tin cảnh báo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✉️ Soạn tin cảnh báo": {
+      "main": [
+        [
+          {
+            "node": "❓ Có tấn công mới?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "❓ Có tấn công mới?": {
+      "main": [
+        [
+          {
+            "node": "👥 Tải người nhận",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "😴 Không có tấn công mới",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👥 Tải người nhận": {
+      "main": [
+        [
+          {
+            "node": "📱 Telegram sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Telegram sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "📱 Gửi Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📧 Gmail sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Gửi Telegram": {
+      "main": [
+        [
+          {
+            "node": "📧 Gmail sẵn sàng?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 Gmail sẵn sàng?": {
+      "main": [
+        [
+          {
+            "node": "📧 Gửi Gmail (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔔 Thông báo trong ứng dụng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 Gửi Gmail (SMTP)": {
+      "main": [
+        [
+          {
+            "node": "🔔 Thông báo trong ứng dụng",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔔 Thông báo trong ứng dụng": {
+      "main": [
+        [
+          {
+            "node": "🧾 Kiểm tra Telegram đã gửi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧾 Kiểm tra Telegram đã gửi": {
+      "main": [
+        [
+          {
+            "node": "✅ Telegram đã gửi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ Telegram đã gửi?": {
+      "main": [
+        [
+          {
+            "node": "📝 Đánh dấu đã gửi",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📈 Tổng hợp số liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Đánh dấu đã gửi": {
+      "main": [
+        [
+          {
+            "node": "📈 Tổng hợp số liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📈 Tổng hợp số liệu": {
+      "main": [
+        [
+          {
+            "node": "🏁 Kết thúc phiên chạy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "😴 Không có tấn công mới": {
+      "main": [
+        [
+          {
+            "node": "📈 Tổng hợp số liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "workflowDescription": "Quét tấn công mỗi 5 phút · Telegram + Gmail · Hiển thị cho trực ban"
+  },
+  "tags": [
+    {
+      "name": "MedicareGuard"
+    },
+    {
+      "name": "live-attack-monitor"
+    }
+  ]
+}
