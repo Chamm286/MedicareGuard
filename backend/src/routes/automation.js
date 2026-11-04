@@ -70,6 +70,15 @@ const sampleEntity = async (workflowId) => {
     const result = await query("SELECT id FROM store_orders WHERE status = 'on_hold' OR risk_score >= 50 ORDER BY risk_score DESC, created_at DESC LIMIT 1");
     return result.rows[0]?.id || null;
   }
+  if (workflowId === "identity-attack") {
+    const result = await query(
+      `SELECT u.email FROM users u LEFT JOIN roles r ON r.id = u.role_id
+       WHERE u.status = 'active' AND COALESCE(r.name, '') <> 'admin'
+       ORDER BY CASE WHEN u.email = 'viewer@medicareguard.io' THEN 0 ELSE 1 END, u.email
+       LIMIT 1`,
+    );
+    return result.rows[0]?.email || null;
+  }
   return null;
 };
 

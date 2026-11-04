@@ -152,6 +152,31 @@ const workflows = [
       { name: "Ghi nhận", detail: "Đánh dấu đã gửi và lưu bằng chứng" },
     ],
   },
+  {
+    id: "identity-attack",
+    name: "Phát hiện tấn công danh tính",
+    description: "Tương quan đăng nhập sai, đăng nhập thành công từ IP lạ và truy cập vượt quyền; Gemini AI đánh giá bằng chứng, ánh xạ MITRE ATT&CK, tạo cảnh báo và chờ quản trị viên duyệt trước khi ghi nhận kiểm toán.",
+    category: "Bảo mật danh tính",
+    trigger: "Webhook · chuỗi sự kiện đăng nhập",
+    webhook: "/webhook/mg-identity-attack",
+    schedule: "Hướng sự kiện",
+    status: "active",
+    enabled: true,
+    version: "1.0.0",
+    owner: "Tự động hóa SOC",
+    targetSla: "5 phút",
+    nodeCount: 19,
+    tags: ["danh tính", "dò mật khẩu", "leo thang đặc quyền", "MITRE ATT&CK", "Gemini AI"],
+    integrations: ["PostgreSQL", "Gemini AI", "MITRE ATT&CK", "Telegram", "n8n phê duyệt"],
+    stages: [
+      { name: "Tiếp nhận", detail: "Kiểm tra dữ liệu đầu vào và chuẩn hóa sự kiện đăng nhập, xác thực" },
+      { name: "Tương quan", detail: "Đối chiếu lịch sử đăng nhập, dò mật khẩu, IP/thiết bị lạ và truy cập vượt quyền" },
+      { name: "Đánh giá", detail: "Tính điểm rủi ro, dùng Gemini AI phân tích chuỗi sự kiện và ánh xạ MITRE ATT&CK" },
+      { name: "Cảnh báo", detail: "Lưu bằng chứng, tạo cảnh báo SOC và gửi Telegram nếu đã cấu hình" },
+      { name: "Duyệt", detail: "Tạm dừng lần chạy có rủi ro cao để quản trị viên kiểm tra và phê duyệt trong n8n" },
+      { name: "Kiểm toán", detail: "Ghi quyết định và hoàn tất lần chạy sau khi được duyệt" },
+    ],
+  },
 ];
 
 const byId = (id) => workflows.find((workflow) => workflow.id === id);

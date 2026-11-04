@@ -1,5 +1,5 @@
 {
-  "nodeCount": 108,
+  "nodeCount": 127,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -56,6 +56,14 @@
       "stickyNotes": 1,
       "connections": 4,
       "file": "n8n/workflows/ai-chat-analyst.json"
+    },
+    {
+      "id": "identity-attack",
+      "name": "Phát hiện tấn công danh tính",
+      "executable": 19,
+      "stickyNotes": 3,
+      "connections": 18,
+      "file": "n8n/workflows/identity-attrack.json"
     }
   ]
 }

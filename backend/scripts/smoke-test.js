@@ -100,6 +100,7 @@ const run = async () => {
   const suiteResponse = await request("/automation/workflows", { headers });
   const suite = suiteResponse.body?.data || [];
   const suiteSummary = suiteResponse.body?.summary || {};
+  const enabledWorkflowCount = suite.filter((workflow) => workflow.enabled).length;
   const expectedNodes = {
     "ransomware-containment": 17,
     "phishing-triage": 17,
@@ -107,17 +108,24 @@ const run = async () => {
     "compliance-evidence": 19,
     "ecommerce-fraud-response": 13,
     "live-attack-monitor": 18,
+    "identity-attack": 19,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
-    name: "automation suite exposes 6 workflows",
+    name: "automation suite exposes 7 workflows",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suite.length === 6 && suiteSummary.active === 6,
+    ok: suiteResponse.ok && suite.length === 7 && suiteSummary.active === enabledWorkflowCount,
+  });
+  const identityWorkflow = suite.find((workflow) => workflow.id === "identity-attack");
+  results.push({
+    name: "identity workflow is localized and uses Gemini",
+    status: suiteResponse.status,
+    ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Gemini AI")),
   });
   results.push({
-    name: "automation suite totals 103 nodes",
+    name: "automation suite totals 122 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 103,
+    ok: suiteResponse.ok && suiteSummary.nodes === 122,
   });
   results.push({
     name: "automation node counts match the compact design",
