@@ -117,7 +117,7 @@ services:
       - key: N8N_EDITOR_BASE_URL
         value: https://medicareguard-n8n.onrender.com/
       - key: N8N_ENCRYPTION_KEY
-        generateValue: true
+        sync: false
       - key: N8N_SECURE_COOKIE
         value: "true"
       - key: N8N_BLOCK_ENV_ACCESS_IN_NODE
