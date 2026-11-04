@@ -1,0 +1,172 @@
+# MedicareGuard SOC — Render Blueprint
+# Branch triển khai: develop
+#
+# LƯU Ý:
+# - Các URL *.onrender.com dưới đây là URL dự kiến theo tên service.
+#   Nếu Render cấp hậu tố khác, cập nhật lại URL trong Dashboard rồi redeploy.
+# - Không đưa mật khẩu/token vào file này. Các giá trị bí mật dùng
+#   generateValue hoặc sync: false (Render sẽ hỏi khi tạo Blueprint).
+
+databases:
+  - name: medicareguard-db
+    databaseName: medicareguard
+    user: medicare
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+
+services:
+  # ── Backend (Express) ─────────────────────────────────────────
+  - type: web
+    name: medicareguard-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: develop
+    autoDeployTrigger: commit
+    # Dockerfile backend dùng context là repo root vì có:
+    #   COPY backend/... và COPY database/...
+    # Vì vậy KHÔNG đặt Root Directory = backend.
+    rootDir: .
+    dockerContext: .
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - backend/**
+        - database/**
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: TZ
+        value: Asia/Ho_Chi_Minh
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medicareguard-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: CORS_ORIGINS
+        value: https://medicareguard-frontend.onrender.com
+      - key: SEED_ON_START
+        value: "true"
+      - key: N8N_BASE_URL
+        value: https://medicareguard-n8n.onrender.com
+      - key: N8N_AI_CHAT_URL
+        value: https://medicareguard-n8n.onrender.com/webhook/mg-ai-chat
+      - key: N8N_AI_CHAT_TIMEOUT_MS
+        value: "60000"
+
+  # ── Frontend (Next.js) ────────────────────────────────────────
+  - type: web
+    name: medicareguard-frontend
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: develop
+    autoDeployTrigger: commit
+    # Dockerfile frontend nằm trong frontend/ và dùng context frontend/.
+    rootDir: frontend
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    buildFilter:
+      paths:
+        - frontend/**
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Biến NEXT_PUBLIC_* được nhúng vào bundle lúc BUILD.
+      # Đổi giá trị phải chọn "Save, rebuild, and deploy".
+      - key: NEXT_PUBLIC_API_URL
+        value: https://medicareguard-backend.onrender.com/api
+      - key: NEXT_PUBLIC_APP_NAME
+        value: MedicareGuard SOC
+      # Dùng cho Next.js rewrites phía server nếu NEXT_PUBLIC_API_URL không được set.
+      - key: BACKEND_INTERNAL_URL
+        value: https://medicareguard-backend.onrender.com
+
+  # ── n8n (Docker image chính thức) ─────────────────────────────
+  - type: web
+    name: medicareguard-n8n
+    runtime: image
+    plan: free
+    region: singapore
+    image:
+      url: docker.io/n8nio/n8n:2.41.5
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "5678"
+      - key: N8N_PORT
+        value: "5678"
+      - key: N8N_HOST
+        value: medicareguard-n8n.onrender.com
+      - key: N8N_PROTOCOL
+        value: https
+      - key: WEBHOOK_URL
+        value: https://medicareguard-n8n.onrender.com/
+      - key: N8N_EDITOR_BASE_URL
+        value: https://medicareguard-n8n.onrender.com/
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: N8N_SECURE_COOKIE
+        value: "true"
+      - key: N8N_BLOCK_ENV_ACCESS_IN_NODE
+        value: "false"
+      - key: N8N_RUNNERS_ENABLED
+        value: "true"
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: N8N_PERSONALIZATION_ENABLED
+        value: "false"
+      - key: GENERIC_TIMEZONE
+        value: Asia/Ho_Chi_Minh
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: medicareguard-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: medicareguard-db
+          property: port
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: medicareguard-db
+          property: database
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: medicareguard-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: medicareguard-db
+          property: password
+      - key: DB_POSTGRESDB_SCHEMA
+        value: n8n
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true"
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      - key: DB_POSTGRESDB_POOL_SIZE
+        value: "2"
+      - key: MG_API_URL
+        value: https://medicareguard-backend.onrender.com/api
+      - key: MG_CONSOLE_URL
+        value: https://medicareguard-frontend.onrender.com
+      - key: MG_API_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
