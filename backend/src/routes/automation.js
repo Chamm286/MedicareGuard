@@ -124,7 +124,12 @@ router.get(
       `SELECT id, level, actor_email, resource_id, action, message, metadata, created_at
        FROM activity_logs
        WHERE event_type = 'automation' AND action = 'run'
-       ORDER BY created_at DESC LIMIT $1`,
+       ORDER BY CASE
+         WHEN metadata->>'status' = 'awaiting_approval'
+           AND metadata->>'approvalDecision' = 'pending' THEN 0
+         ELSE 1
+       END, created_at DESC
+       LIMIT $1`,
       [limit],
     );
     res.json({

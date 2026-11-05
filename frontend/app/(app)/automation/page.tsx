@@ -249,37 +249,41 @@ export default function AutomationPage() {
       )}
 
       <Card className="mt-4">
-        {pendingApprovals.length > 0 && (
-          <div className="border-b border-high/15 bg-high/[0.03] p-3.5">
+        <div className="border-b border-high/15 bg-high/[0.03] p-3.5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
-                <h2 className="font-display text-sm font-semibold text-slate-100">Chờ quản trị viên duyệt</h2>
+                <h2 className="font-display text-sm font-semibold text-slate-100">Hàng đợi phê duyệt</h2>
                 <p className="mt-0.5 text-[10px] text-slate-500">Quyết định được ghi vào nhật ký kiểm toán; n8n kiểm tra tối đa mỗi 70 giây để tiếp tục workflow.</p>
               </div>
               <Badge tone="warning" dot>{pendingApprovals.length} chờ duyệt</Badge>
             </div>
-            <div className="space-y-2">
-              {pendingApprovals.map((run: any) => (
-                <div key={run.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium text-slate-200">{run.approvalUserEmail || "Tài khoản không rõ"}</p>
-                    <p className="mt-1 text-[9px] text-slate-500">
-                      Rủi ro {run.approvalRiskScore ?? "—"}/100 · execution {String(run.id).slice(0, 8)} · {relativeTime(run.created_at)}
-                    </p>
-                  </div>
-                  {canApprove ? (
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="danger" icon={XCircle} onClick={() => setApprovalTarget({ run, decision: "rejected" })}>Từ chối</Button>
-                      <Button size="sm" variant="primary" icon={CheckCircle2} onClick={() => setApprovalTarget({ run, decision: "approved" })}>Duyệt</Button>
+            {pendingApprovals.length > 0 ? (
+              <div className="space-y-2">
+                {pendingApprovals.map((run: any) => (
+                  <div key={run.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[11px] font-medium text-slate-200">{run.approvalUserEmail || "Tài khoản không rõ"}</p>
+                      <p className="mt-1 text-[9px] text-slate-500">
+                        Rủi ro {run.approvalRiskScore ?? "—"}/100 · execution {String(run.id).slice(0, 8)} · {relativeTime(run.created_at)}
+                      </p>
                     </div>
-                  ) : (
-                    <span className="text-[9px] text-slate-600">Chỉ quản trị viên mới có thể quyết định</span>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {canApprove ? (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="danger" icon={XCircle} onClick={() => setApprovalTarget({ run, decision: "rejected" })}>Từ chối</Button>
+                        <Button size="sm" variant="primary" icon={CheckCircle2} onClick={() => setApprovalTarget({ run, decision: "approved" })}>Duyệt</Button>
+                      </div>
+                    ) : (
+                      <span className="text-[9px] text-slate-600">Chỉ quản trị viên mới có thể quyết định</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-white/[0.06] bg-black/20 p-3 text-[10px] text-slate-500">
+                Chưa có yêu cầu chờ duyệt. Chạy demo “Phát hiện tấn công danh tính”; khi điểm rủi ro từ 70 trở lên, yêu cầu sẽ xuất hiện tại đây.
+              </p>
+            )}
           </div>
-        )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] p-3.5">
           <div className="flex items-center gap-2">
             <h2 className="font-display text-sm font-semibold text-slate-200">Lịch sử thực hiện</h2>
