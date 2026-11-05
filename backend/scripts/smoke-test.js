@@ -118,9 +118,9 @@ const run = async () => {
   });
   const identityWorkflow = suite.find((workflow) => workflow.id === "identity-attack");
   results.push({
-    name: "identity workflow is localized and uses Gemini",
+    name: "identity workflow is localized and uses Groq",
     status: suiteResponse.status,
-    ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Gemini AI")),
+    ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Groq AI")),
   });
   results.push({
     name: "automation suite totals 122 nodes",

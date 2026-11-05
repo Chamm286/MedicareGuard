@@ -167,7 +167,7 @@
       "id": "36b91229-3aaa-5950-98b2-27822433b566"
     },
     {
-      "name": "11 · Gemini AI — Phân tích danh tính",
+      "name": "11 · Groq AI — Phân tích danh tính",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
       "parameters": {
@@ -188,11 +188,11 @@
       "waitBetweenTries": 5000
     },
     {
-      "name": "Mô hình Gemini",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1.2,
+      "name": "Mô hình Groq",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
       "parameters": {
-        "modelName": "models/gemini-3.8-flash",
+        "model": "openai/gpt-oss-120b",
         "options": {
           "temperature": 0.2
         }
@@ -203,9 +203,9 @@
       ],
       "id": "afa8fa0b-eadf-5c6f-b8d2-3eb808c3222b",
       "credentials": {
-        "googlePalmApi": {
-          "id": "mg-gemini-credential",
-          "name": "MedicareGuard Gemini"
+        "groqApi": {
+          "id": "mg-groq-credential",
+          "name": "MedicareGuard Groq"
         }
       }
     },
@@ -214,7 +214,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Gemini AI — Phân tích danh tính').first().json.output || $('11 · Gemini AI — Phân tích danh tính').first().json.text || '';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst sqlText = (value) => String(value == null ? '' : value).replace(/'/g, \"''\");\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Gemini AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, mitre: mappings, alertTitle, alertDescription, alertTitleSql: sqlText(alertTitle), alertDescriptionSql: sqlText(alertDescription), userEmailSql: sqlText(risk.userEmail), executionIdSql: sqlText(risk.executionId), suspiciousIpSql: sqlText(risk.suspiciousIp), evidenceJsonSql: sqlText(JSON.stringify(evidence)), mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
+        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Groq AI — Phân tích danh tính').first().json.output || $('11 · Groq AI — Phân tích danh tính').first().json.text || '';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst sqlText = (value) => String(value == null ? '' : value).replace(/'/g, \"''\");\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, mitre: mappings, alertTitle, alertDescription, alertTitleSql: sqlText(alertTitle), alertDescriptionSql: sqlText(alertDescription), userEmailSql: sqlText(risk.userEmail), executionIdSql: sqlText(risk.executionId), suspiciousIpSql: sqlText(risk.suspiciousIp), evidenceJsonSql: sqlText(JSON.stringify(evidence)), mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
       },
       "position": [
         2420,
@@ -250,7 +250,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO alerts (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique, risk_score, confidence, tags, metadata)\nVALUES ('{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertTitleSql }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertDescriptionSql }}',\n  '{{ $('09 · Tính điểm rủi ro').first().json.severity }}', 'open', 'Phát hiện tấn công danh tính bằng Gemini AI', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIpSql }}',\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTactic }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique }}', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }}, 85,\n  ARRAY['identity','brute_force','privilege_escalation'],\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.evidenceJsonSql }}'::jsonb)\nRETURNING id, title, severity, risk_score, source_ip;",
+        "query": "INSERT INTO alerts (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique, risk_score, confidence, tags, metadata)\nVALUES ('{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertTitleSql }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertDescriptionSql }}',\n  '{{ $('09 · Tính điểm rủi ro').first().json.severity }}', 'open', 'Phát hiện tấn công danh tính bằng Groq AI', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIpSql }}',\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTactic }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique }}', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }}, 85,\n  ARRAY['identity','brute_force','privilege_escalation'],\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.evidenceJsonSql }}'::jsonb)\nRETURNING id, title, severity, risk_score, source_ip;",
         "options": {}
       },
       "position": [
@@ -358,7 +358,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 19 node thực thi, dùng Gemini AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
+        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 19 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
         "height": 170,
         "width": 1900,
         "color": 4
@@ -506,7 +506,7 @@
       "main": [
         [
           {
-            "node": "11 · Gemini AI — Phân tích danh tính",
+            "node": "11 · Groq AI — Phân tích danh tính",
             "type": "main",
             "index": 0
           }
@@ -520,7 +520,7 @@
         ]
       ]
     },
-    "11 · Gemini AI — Phân tích danh tính": {
+    "11 · Groq AI — Phân tích danh tính": {
       "main": [
         [
           {
@@ -531,11 +531,11 @@
         ]
       ]
     },
-    "Mô hình Gemini": {
+    "Mô hình Groq": {
       "ai_languageModel": [
         [
           {
-            "node": "11 · Gemini AI — Phân tích danh tính",
+            "node": "11 · Groq AI — Phân tích danh tính",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -619,7 +619,7 @@
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
-    "workflowDescription": "Phát hiện dò mật khẩu · đăng nhập IP lạ · truy cập vượt quyền · Gemini AI + MITRE ATT&CK · duyệt SOC"
+    "workflowDescription": "Phát hiện dò mật khẩu · đăng nhập IP lạ · truy cập vượt quyền · Groq AI + MITRE ATT&CK · duyệt SOC"
   },
   "tags": [
     {

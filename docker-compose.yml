@@ -104,7 +104,7 @@ services:
       N8N_RUNNERS_ENABLED: "true"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       N8N_SECURE_COOKIE: "false"
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       MG_API_URL: http://backend:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
       MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}

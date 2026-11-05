@@ -61,7 +61,7 @@ if [[ "$N8N_TARGET" == "docker" ]]; then
   PG_DB="${MG_PG_DATABASE:-$(docker exec "$N8N_DB_CONTAINER" printenv POSTGRES_DB 2>/dev/null || echo medicareguard)}"
   PG_USER="${MG_PG_USER:-$(docker exec "$N8N_DB_CONTAINER" printenv POSTGRES_USER 2>/dev/null || echo medicare)}"
   PG_PASSWORD="${MG_PG_PASSWORD:-$(docker exec "$N8N_DB_CONTAINER" printenv POSTGRES_PASSWORD 2>/dev/null || echo medicare)}"
-  GEMINI_API_KEY="${GEMINI_API_KEY:-$(docker exec "$N8N_CONTAINER" printenv GEMINI_API_KEY 2>/dev/null || true)}"
+  GROQ_API_KEY="${GROQ_API_KEY:-$(docker exec "$N8N_CONTAINER" printenv GROQ_API_KEY 2>/dev/null || true)}"
   MG_SMTP_HOST="${MG_SMTP_HOST:-$(docker exec "$N8N_CONTAINER" printenv MG_SMTP_HOST 2>/dev/null || true)}"
   MG_SMTP_PORT="${MG_SMTP_PORT:-$(docker exec "$N8N_CONTAINER" printenv MG_SMTP_PORT 2>/dev/null || true)}"
   MG_SMTP_SECURE="${MG_SMTP_SECURE:-$(docker exec "$N8N_CONTAINER" printenv MG_SMTP_SECURE 2>/dev/null || true)}"
@@ -78,8 +78,8 @@ else
   PG_PASSWORD="${MG_PG_PASSWORD:-medicare}"
 fi
 
-if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-  echo "GEMINI_API_KEY is required to publish the identity-detection workflow. Set it in the environment or .env, then recreate the n8n container." >&2
+if [[ -z "${GROQ_API_KEY:-}" ]]; then
+  echo "GROQ_API_KEY is required to publish the identity-detection workflow. Set it in the environment or .env, then recreate the n8n container." >&2
   exit 1
 fi
 
@@ -141,20 +141,20 @@ PY
 echo "Importing MedicareGuard PostgreSQL credential..."
 import_credentials "$TMP_DIR/credential.json"
 
-python3 - "$TMP_DIR/gemini.json" "${GEMINI_API_KEY}" <<'PYCRED'
+python3 - "$TMP_DIR/groq.json" "${GROQ_API_KEY}" <<'PYCRED'
 import json
 import sys
 path, api_key = sys.argv[1:]
 credential = {
-    "id": "mg-gemini-credential",
-    "name": "MedicareGuard Gemini",
-    "type": "googlePalmApi",
+    "id": "mg-groq-credential",
+    "name": "MedicareGuard Groq",
+    "type": "groqApi",
     "data": {"apiKey": api_key},
 }
 json.dump([credential], open(path, "w"), indent=2)
 PYCRED
-echo "Importing MedicareGuard Gemini credential..."
-import_credentials "$TMP_DIR/gemini.json"
+echo "Importing MedicareGuard Groq credential..."
+import_credentials "$TMP_DIR/groq.json"
 
 if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD:-}" ]]; then
   python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "${MG_SMTP_DISABLE_STARTTLS:-false}" <<'PYCRED'

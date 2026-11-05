@@ -1,6 +1,6 @@
 # n8n response workflows
 
-MedicareGuard ships focused n8n playbooks. Workflows stay at **13–19 executable nodes** (the identity playbook has 18 numbered stages plus its Gemini model node; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
+MedicareGuard ships focused n8n playbooks. Workflows stay at **13–19 executable nodes** (the identity playbook has 18 numbered stages plus its Groq model node; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
@@ -11,7 +11,7 @@ MedicareGuard ships focused n8n playbooks. Workflows stay at **13–19 executabl
 | Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 18 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
 | Phản hồi Gian lận Thương mại điện tử | 13 | `POST /webhook/mg-ecommerce-fraud` | Giữ đơn, mở điều tra, cảnh báo SOC |
 | Chat AI phân tích SOC | 5 | `POST /webhook/mg-ai-chat` | Trả lời câu hỏi SOC từ PostgreSQL |
-| Phát hiện tấn công danh tính | 18 giai đoạn + Gemini AI | `POST /webhook/mg-identity-attack` | Phát hiện tấn công tài khoản và leo thang đặc quyền bằng Gemini AI + MITRE ATT&CK; cảnh báo Telegram và chờ quản trị viên duyệt |
+| Phát hiện tấn công danh tính | 18 giai đoạn + Groq AI | `POST /webhook/mg-identity-attack` | Phát hiện tấn công tài khoản và leo thang đặc quyền bằng Groq + MITRE ATT&CK; cảnh báo Telegram và chờ quản trị viên duyệt |
 
 ## Integration flow
 
@@ -48,7 +48,7 @@ export MG_API_URL=http://localhost:4000/api
 export MG_API_TOKEN="$(cat /tmp/mg-n8n-token)"
 export MG_CONSOLE_URL=http://localhost:3000
 export N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-export GEMINI_API_KEY="<Gemini API key>"
+export GROQ_API_KEY="<Groq API key from https://console.groq.com/keys>"
 
 # Telegram phone alerts
 export TELEGRAM_BOT_TOKEN="<bot token from @BotFather>"
@@ -66,13 +66,13 @@ export MG_ALERT_EMAIL="<inbox that should receive the alert>"
 cd ..
 ```
 
-3. Import the PostgreSQL, Gemini and optional SMTP/Telegram credentials, then publish the workflows:
+3. Import the PostgreSQL, Groq and optional SMTP/Telegram credentials, then publish the workflows:
 
 ```bash
 bash scripts/setup-n8n.sh
 ```
 
-The setup script requires `GEMINI_API_KEY`, imports `mg-postgres-credential` and `mg-gemini-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all nine shipped workflows. It stops before importing anything if the Gemini key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized. It runs the CLI from `/tmp` so a project `.env` cannot override the encryption key used by the running instance.
+The setup script requires `GROQ_API_KEY`, imports `mg-postgres-credential` and `mg-groq-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all nine shipped workflows. It stops before importing anything if the Groq key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized.
 
 To explicitly select Docker (for example, when a local n8n CLI is also installed), run:
 
@@ -82,7 +82,7 @@ N8N_TARGET=docker bash scripts/setup-n8n.sh
 docker compose restart n8n
 ```
 
-The recreate loads `GEMINI_API_KEY` from `.env` into n8n so the setup script can import it as a credential. The Docker setup reads PostgreSQL settings from the running Compose container and uses the `postgres:5432` network address for the imported PostgreSQL credential. Override the target container names with `N8N_CONTAINER` or `N8N_DB_CONTAINER` if needed. For a local instance, set `N8N_TARGET=local` and `N8N_DB` if its SQLite database is not at `~/.n8n/database.sqlite`.
+The recreate loads `GROQ_API_KEY` from `.env` into n8n so the setup script can import it as a credential. The Docker setup reads PostgreSQL settings from the running Compose container and uses the `postgres:5432` network address for the imported PostgreSQL credential. Override the target container names with `N8N_CONTAINER` or `N8N_DB_CONTAINER` if needed. For a local instance, set `N8N_TARGET=local` and `N8N_DB` if its SQLite database is not at `~/.n8n/database.sqlite`.
 
 ### Rebuild the workflow definitions
 
@@ -154,7 +154,7 @@ The check never prints the token or app password. A successful run reports the T
 | `MG_API_TOKEN` | MedicareGuard JWT used by workflow callbacks; mint with `npm run token:n8n` |
 | `MG_CONSOLE_URL` | Console URL embedded in alert messages, default `http://localhost:3000` |
 | `MG_N8N_UI_URL` | URL giao diện n8n được liên kết trong cảnh báo chờ duyệt, mặc định `http://localhost:5678` |
-| `GEMINI_API_KEY` | Tạo credential Gemini cần cho bước AI phân tích danh tính |
+| `GROQ_API_KEY` | Tạo credential Groq cần cho bước AI phân tích danh tính |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from `@BotFather` |
 | `TELEGRAM_CHAT_ID` | Personal chat or SOC group that receives the phone push |
 | `MG_SMTP_HOST` / `MG_SMTP_PORT` / `MG_SMTP_SECURE` | SMTP server, default Gmail `smtp.gmail.com:465` with SSL |
