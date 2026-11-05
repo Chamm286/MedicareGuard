@@ -10,10 +10,13 @@ const router = express.Router();
 const ALERT_SELECT = `
   SELECT a.*, t.name AS threat_name, t.category AS threat_category,
          ast.name AS asset_name, ast.ip_address AS asset_ip, ast.criticality AS asset_criticality,
+         ast.risk_score AS asset_risk_score,
+         ou.full_name AS asset_owner_name, ou.email AS asset_owner_email,
          u.full_name AS assignee_name, u.email AS assignee_email
   FROM alerts a
   LEFT JOIN threats t ON t.id = a.threat_id
   LEFT JOIN assets ast ON ast.id = a.asset_id
+  LEFT JOIN users ou ON ou.id = ast.owner_id
   LEFT JOIN users u ON u.id = a.assignee_id
 `;
 
@@ -82,6 +85,35 @@ router.get(
     );
     const total = count.rows[0].total;
     res.json({ data: dataResult.rows, pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 } });
+  }),
+);
+
+router.get(
+  "/monitor/unnotified",
+  asyncHandler(async (_req, res) => {
+    const result = await query(
+      `SELECT id, title, severity, source_ip, risk_score, detected_at
+       FROM alerts
+       WHERE severity IN ('critical','high')
+         AND detected_at > now() - interval '24 hours'
+         AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
+       ORDER BY detected_at DESC LIMIT 5`,
+    );
+    res.json({ attacks: result.rows, count: result.rows.length });
+  }),
+);
+
+router.post(
+  "/monitor/mark-notified",
+  asyncHandler(async (_req, res) => {
+    const result = await query(
+      `UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()
+       WHERE severity IN ('critical','high')
+         AND detected_at > now() - interval '24 hours'
+         AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
+       RETURNING id`,
+    );
+    res.json({ ids: result.rows.map((row) => row.id) });
   }),
 );
 
@@ -195,7 +227,7 @@ const updateAlert = asyncHandler(async (req, res) => {
   if (req.body.status === "resolved" || req.body.status === "false_positive") extra.push("resolved_at = now()");
   if (req.body.status && !["resolved", "false_positive"].includes(req.body.status)) extra.push("resolved_at = NULL");
   values.push(req.params.id);
-  const sets = [...fields.map((field, index) => `${field} = $${index + 1}`), ...extra];
+  const sets = [...fields.map((field, index) => (field === "metadata" ? `${field} = ${field} || $${index + 1}::jsonb` : `${field} = $${index + 1}`)), ...extra];
   const result = await query(`UPDATE alerts SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`, values);
   if (!result.rows.length) throw new HttpError(404, "Không tìm thấy cảnh báo");
   await recordAudit({ req, action: "update", resource: "alerts", resourceId: req.params.id, details: { fields } });

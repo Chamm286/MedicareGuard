@@ -93,37 +93,37 @@ export default function CheckoutPage() {
     const risky = result.risk.riskScore >= 50;
     return (
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className={cn("panel overflow-hidden p-0", risky ? "border-high/25" : "border-low/25")}>
-          <div className={cn("border-b px-6 py-8 text-center", held ? "border-high/15 bg-high/[0.06]" : "border-low/15 bg-low/[0.05]")}>
-            <span className={cn("mx-auto flex h-14 w-14 items-center justify-center rounded-2xl", held ? "bg-high/10 text-high" : "bg-low/10 text-low")}>
+        <div className={cn("overflow-hidden rounded-3xl border bg-white shadow-sm", risky ? "border-amber-200" : "border-emerald-200")}>
+          <div className={cn("border-b px-6 py-8 text-center", held ? "border-amber-100 bg-amber-50" : "border-emerald-100 bg-emerald-50")}>
+            <span className={cn("mx-auto flex h-14 w-14 items-center justify-center rounded-2xl", held ? "bg-amber-100 text-amber-600" : "bg-emerald-100 text-emerald-600")}>
               {held ? <ShieldAlert className="h-7 w-7" /> : <CheckCircle2 className="h-7 w-7" />}
             </span>
-            <h1 className="mt-4 font-display text-2xl font-semibold text-white">{held ? "Đơn hàng đang được kiểm tra" : "Đặt hàng thành công"}</h1>
-            <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-slate-400">{result.message}</p>
+            <h1 className="mt-4 font-display text-2xl font-bold text-slate-900">{held ? "Đơn hàng đang được kiểm tra" : "Đặt hàng thành công"}</h1>
+            <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-slate-600">{result.message}</p>
           </div>
           <div className="grid gap-4 p-6 sm:grid-cols-2">
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Mã đơn hàng</p>
-              <p className="mt-1 font-mono text-sm text-white">{order.order_number}</p>
-              <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-slate-500">Tổng thanh toán</p>
-              <p className="mt-1 font-display text-xl font-semibold text-white">{formatVnd(order.total)}</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Mã đơn hàng</p>
+              <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{order.order_number}</p>
+              <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tổng thanh toán</p>
+              <p className="mt-1 font-display text-2xl font-bold text-slate-900">{formatVnd(order.total)}</p>
             </div>
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Điểm rủi ro</p>
-              <p className={cn("mt-1 font-display text-xl font-semibold", risky ? "text-high" : "text-low")}>{result.risk.riskScore}/100</p>
-              <p className="mt-1 text-[10px] text-slate-500">IP {result.client.ip} · {result.client.country} · nguồn {result.client.ipSource}</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Điểm rủi ro</p>
+              <p className={cn("mt-1 font-display text-2xl font-bold", risky ? "text-amber-600" : "text-emerald-600")}>{result.risk.riskScore}/100</p>
+              <p className="mt-1 text-[11px] text-slate-500">IP {result.client.ip} · {result.client.country} · nguồn {result.client.ipSource}</p>
             </div>
             {risky && (
-              <div className="sm:col-span-2 rounded-xl border border-high/20 bg-high/[0.04] p-4">
-                <p className="flex items-center gap-2 text-xs font-medium text-high"><AlertTriangle className="h-3.5 w-3.5" /> Tín hiệu gian lận</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">{result.risk.flags.map((flag) => <span key={flag} className="chip border-high/20 bg-high/10 text-high">{flag}</span>)}</div>
-                {result.fraud && <p className="mt-2 text-[10px] text-slate-500">Cảnh báo SOC đã tạo · n8n: {result.fraud.dispatch.dispatched ? "đã nhận workflow" : result.fraud.dispatch.status}</p>}
+              <div className="sm:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-amber-700"><AlertTriangle className="h-4 w-4" /> Tín hiệu gian lận</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">{result.risk.flags.map((flag) => <span key={flag} className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700">{flag}</span>)}</div>
+                {result.fraud && <p className="mt-2 text-[11px] text-slate-500">Cảnh báo SOC đã tạo · n8n: {result.fraud.dispatch.dispatched ? "đã nhận workflow" : result.fraud.dispatch.status}</p>}
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 border-t border-white/[0.06] px-6 py-4">
-            <Link href={`/store/order/${order.id}?email=${encodeURIComponent(order.shipping_email)}`} className="btn btn-primary h-10 px-4 text-xs">Theo dõi đơn hàng</Link>
-            <Link href="/store" className="btn btn-secondary h-10 px-4 text-xs">Tiếp tục mua sắm</Link>
+          <div className="flex flex-wrap gap-2 border-t border-slate-100 px-6 py-4">
+            <Link href={`/store/order/${order.id}?email=${encodeURIComponent(order.shipping_email)}`} className="inline-flex h-10 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 text-xs font-semibold text-white shadow-lg shadow-blue-500/25">Theo dõi đơn hàng</Link>
+            <Link href="/store" className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">Tiếp tục mua sắm</Link>
           </div>
         </div>
       </div>
@@ -131,14 +131,14 @@ export default function CheckoutPage() {
   }
 
   if (loading) {
-    return <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"><div className="skeleton h-96 rounded-2xl" /></div>;
+    return <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"><div className="h-96 animate-pulse rounded-3xl bg-slate-100" /></div>;
   }
 
   if (!cart?.items.length) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 px-4 py-24 text-center">
-        <p className="text-sm text-slate-400">Giỏ hàng đang trống, không thể thanh toán.</p>
-        <Link href="/store" className="btn btn-primary h-10 px-5 text-xs">Về cửa hàng</Link>
+        <p className="text-sm text-slate-600">Giỏ hàng đang trống, không thể thanh toán.</p>
+        <Link href="/store" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 text-xs font-semibold text-white shadow-lg shadow-blue-500/25">Về cửa hàng</Link>
       </div>
     );
   }
@@ -149,68 +149,68 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <Link href="/store/cart" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-300"><ArrowLeft className="h-3.5 w-3.5" /> Quay lại giỏ hàng</Link>
+      <Link href="/store/cart" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-blue-700"><ArrowLeft className="h-4 w-4" /> Quay lại giỏ hàng</Link>
       <div className="mt-4 grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <form onSubmit={submit} className="space-y-4">
-          <div className="panel p-5">
-            <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-white"><MapPin className="h-4 w-4 text-brand-300" /> Thông tin giao hàng</h2>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 font-display text-base font-bold text-slate-900"><MapPin className="h-4 w-4 text-blue-600" /> Thông tin giao hàng</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div><label className="label">Họ và tên</label><input required value={form.name} onChange={(event) => set("name", event.target.value)} className="input" placeholder="Nguyễn Văn An" /></div>
-              <div><label className="label">Email</label><input required type="email" value={form.email} onChange={(event) => set("email", event.target.value)} className="input" placeholder="ban@example.com" /></div>
-              <div><label className="label">Số điện thoại</label><input required value={form.phone} onChange={(event) => set("phone", event.target.value)} className="input" placeholder="0901 234 567" /></div>
-              <div><label className="label">Tỉnh / Thành phố</label><input required value={form.city} onChange={(event) => set("city", event.target.value)} className="input" placeholder="TP. Hồ Chí Minh" /></div>
-              <div className="sm:col-span-2"><label className="label">Địa chỉ</label><input required value={form.address} onChange={(event) => set("address", event.target.value)} className="input" placeholder="Số nhà, đường, phường, quận" /></div>
-              <div><label className="label">Quốc gia giao hàng</label><select value={form.countryCode} onChange={(event) => set("countryCode", event.target.value)} className="select">{countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></div>
-              <div><label className="label">Ghi chú</label><input value={form.notes} onChange={(event) => set("notes", event.target.value)} className="input" placeholder="Không bắt buộc" /></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Họ và tên</label><input required value={form.name} onChange={(event) => set("name", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="Nguyễn Văn An" /></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Email</label><input required type="email" value={form.email} onChange={(event) => set("email", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="ban@example.com" /></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Số điện thoại</label><input required value={form.phone} onChange={(event) => set("phone", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="0901 234 567" /></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Tỉnh / Thành phố</label><input required value={form.city} onChange={(event) => set("city", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="TP. Hồ Chí Minh" /></div>
+              <div className="sm:col-span-2"><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Địa chỉ</label><input required value={form.address} onChange={(event) => set("address", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="Số nhà, đường, phường, quận" /></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Quốc gia giao hàng</label><select value={form.countryCode} onChange={(event) => set("countryCode", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">{countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Ghi chú</label><input value={form.notes} onChange={(event) => set("notes", event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" placeholder="Không bắt buộc" /></div>
             </div>
-            <p className="mt-3 text-[10px] text-slate-600">Mẹo demo gian lận tại Việt Nam: chọn thanh toán thẻ, đặt từ 20 món và đơn từ 3.000.000 ₫. Hệ thống vẫn tạm giữ đơn nếu tổng hợp các dấu hiệu vượt ngưỡng, không cần IP nước ngoài.</p>
+            <p className="mt-3 text-[11px] text-slate-500">Mẹo demo gian lận tại Việt Nam: chọn thanh toán thẻ, đặt từ 20 món và đơn từ 3.000.000 ₫. Hệ thống vẫn tạm giữ đơn nếu tổng hợp các dấu hiệu vượt ngưỡng, không cần IP nước ngoài.</p>
           </div>
 
-          <div className="panel p-5">
-            <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-white"><CreditCard className="h-4 w-4 text-cyan-300" /> Phương thức thanh toán</h2>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 font-display text-base font-bold text-slate-900"><CreditCard className="h-4 w-4 text-cyan-600" /> Phương thức thanh toán</h2>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { value: "cod", label: "Khi nhận hàng", hint: "Thanh toán COD" },
                 { value: "bank_transfer", label: "Chuyển khoản", hint: "Xác nhận thủ công" },
                 { value: "card", label: "Thẻ tín dụng", hint: "Mô phỏng an toàn" },
                 { value: "sepay", label: "SePay QR", hint: "Thanh toán tự động" },
               ].map((method) => (
-                <button type="button" key={method.value} onClick={() => set("paymentMethod", method.value)} className={cn("rounded-xl border p-3 text-left transition", form.paymentMethod === method.value ? "border-brand-400/50 bg-brand-500/10" : "border-white/10 bg-white/[0.02] hover:border-white/20")}>
-                  <p className="text-xs font-medium text-white">{method.label}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-500">{method.hint}</p>
+                <button type="button" key={method.value} onClick={() => set("paymentMethod", method.value)} className={cn("rounded-2xl border p-3 text-left transition", form.paymentMethod === method.value ? "border-blue-500 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-200")}>
+                  <p className={cn("text-sm font-semibold", form.paymentMethod === method.value ? "text-blue-700" : "text-slate-900")}>{method.label}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{method.hint}</p>
                 </button>
               ))}
             </div>
-            <div className="mt-4 flex items-start gap-2 rounded-lg border border-cyan-400/15 bg-cyan-500/[0.04] p-3 text-[10px] text-slate-400">
-              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
+            <div className="mt-4 flex items-start gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-[11px] text-slate-600">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" />
               Hệ thống ghi nhận IP thực từ Cloudflare, chấm điểm rủi ro và gửi cảnh báo tới SOC + n8n nếu phát hiện bất thường. Không có giao dịch thật nào được thực hiện.
             </div>
           </div>
 
-          <button type="submit" disabled={submitting} className="btn btn-primary h-11 w-full text-sm">{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Đặt hàng · {formatVnd(total)}</button>
+          <button type="submit" disabled={submitting} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:from-blue-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-60">{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Đặt hàng · {formatVnd(total)}</button>
         </form>
 
         <aside className="space-y-4">
-          <div className="panel p-5">
-            <h2 className="font-display text-sm font-semibold text-white">Đơn hàng của bạn</h2>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="font-display text-base font-bold text-slate-900">Đơn hàng của bạn</h2>
             <div className="mt-4 space-y-3">
               {cart.items.map((item) => (
                 <div key={item.id} className="flex gap-3">
-                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface-900">{item.image_url ? <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" /> : null}</div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-xs text-slate-200">{item.name}</p><p className="text-[10px] text-slate-600">{item.quantity} × {formatVnd(item.unit_price)}</p></div>
-                  <p className="text-xs text-slate-300">{formatVnd(item.line_total)}</p>
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-slate-100">{item.image_url ? <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" /> : null}</div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-900">{item.name}</p><p className="text-[11px] text-slate-500">{item.quantity} × {formatVnd(item.unit_price)}</p></div>
+                  <p className="text-sm font-semibold text-slate-900">{formatVnd(item.line_total)}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-4 space-y-2 border-t border-white/[0.06] pt-4 text-xs">
-              <div className="flex justify-between text-slate-400"><span>Tạm tính</span><span>{formatVnd(cart.subtotal)}</span></div>
-              <div className="flex justify-between text-slate-400"><span>Giảm giá</span><span className="text-low">-{formatVnd(cart.discount)}</span></div>
-              <div className="flex justify-between text-slate-400"><span>Giao hàng</span><span>{shipping ? formatVnd(shipping) : "Miễn phí"}</span></div>
-              <div className="flex justify-between text-slate-400"><span>VAT 8%</span><span>{formatVnd(tax)}</span></div>
-              <div className="flex justify-between border-t border-white/[0.06] pt-3 text-base font-semibold text-white"><span>Tổng</span><span>{formatVnd(total)}</span></div>
+            <div className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-sm">
+              <div className="flex justify-between text-slate-600"><span>Tạm tính</span><span className="font-medium">{formatVnd(cart.subtotal)}</span></div>
+              <div className="flex justify-between text-slate-600"><span>Giảm giá</span><span className="font-semibold text-emerald-600">-{formatVnd(cart.discount)}</span></div>
+              <div className="flex justify-between text-slate-600"><span>Giao hàng</span><span>{shipping ? formatVnd(shipping) : <span className="font-semibold text-emerald-600">Miễn phí</span>}</span></div>
+              <div className="flex justify-between text-slate-600"><span>VAT 8%</span><span className="font-medium">{formatVnd(tax)}</span></div>
+              <div className="flex justify-between border-t border-slate-100 pt-3 text-lg font-bold text-slate-900"><span>Tổng</span><span>{formatVnd(total)}</span></div>
             </div>
           </div>
-          <div className="panel flex items-center gap-3 p-4"><Truck className="h-5 w-5 text-brand-300" /><div><p className="text-xs text-slate-200">Giao hàng 2–4 ngày</p><p className="text-[10px] text-slate-500">Miễn phí cho đơn từ 500.000 ₫</p></div></div>
+          <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><Truck className="h-5 w-5 text-blue-600" /><div><p className="text-sm font-semibold text-slate-900">Giao hàng 2–4 ngày</p><p className="text-[11px] text-slate-500">Miễn phí cho đơn từ 500.000 ₫</p></div></div>
         </aside>
       </div>
     </div>

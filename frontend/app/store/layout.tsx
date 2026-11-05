@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function StoreLayout({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900">
         <StoreHeader />
         <main className="flex-1">{children}</main>
         <StoreFooter />

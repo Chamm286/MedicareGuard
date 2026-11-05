@@ -35,24 +35,33 @@
     },
     {
       "name": "🗄️ Tải ngữ cảnh SOC",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT json_build_object(\n  'overview', (SELECT json_build_object(\n    'total_alerts', (SELECT count(*)::int FROM alerts),\n    'open_alerts', (SELECT count(*)::int FROM alerts WHERE status IN ('open','investigating')),\n    'critical_alerts', (SELECT count(*)::int FROM alerts WHERE severity = 'critical' AND status NOT IN ('resolved','false_positive')),\n    'active_threats', (SELECT count(*)::int FROM threats WHERE status = 'active'),\n    'open_incidents', (SELECT count(*)::int FROM incidents WHERE status NOT IN ('resolved','closed')),\n    'total_assets', (SELECT count(*)::int FROM assets),\n    'high_risk_assets', (SELECT count(*)::int FROM assets WHERE risk_score >= 70),\n    'open_vulnerabilities', (SELECT count(*)::int FROM vulnerabilities WHERE status = 'open'),\n    'enabled_rules', (SELECT count(*)::int FROM firewall_rules WHERE enabled),\n    'avg_asset_risk', (SELECT COALESCE(round(avg(risk_score))::int, 0) FROM assets),\n    'compliance_score', (SELECT COALESCE(round(avg(score))::int, 0) FROM compliance_controls),\n    'alerts_24h', (SELECT count(*)::int FROM alerts WHERE detected_at > now() - interval '24 hours')\n  )),\n  'alerts', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, title, severity, status, source_ip, country, detected_at FROM alerts ORDER BY detected_at DESC LIMIT 6) t),\n  'incidents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, incident_key, title, severity, status, priority, detected_at FROM incidents WHERE status NOT IN ('resolved','closed') ORDER BY detected_at DESC LIMIT 6) t),\n  'attackers', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_top_attackers LIMIT 5) t),\n  'countries', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT * FROM v_attacks_by_country LIMIT 6) t),\n  'assets', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, name, type, criticality, risk_score, ip_address FROM assets ORDER BY risk_score DESC LIMIT 6) t),\n  'compliance', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT framework, round(avg(score))::int AS score FROM compliance_controls GROUP BY framework ORDER BY score DESC) t),\n  'firewall', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT action, count(*)::int AS total, COALESCE(sum(hit_count), 0)::bigint AS hits FROM firewall_rules GROUP BY action) t),\n  'storeOrders', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, fraud_flags, ip_address, ip_country, created_at FROM store_orders ORDER BY risk_score DESC, created_at DESC LIMIT 8) t),\n  'storeFraudEvents', (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (SELECT id, event_type, severity, ip_address, country, risk_score, created_at FROM store_security_events ORDER BY created_at DESC LIMIT 8) t)\n) AS context;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/ai/context' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         440,
         0
       ],
       "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {

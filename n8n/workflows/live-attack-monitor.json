@@ -55,24 +55,33 @@
     },
     {
       "name": "🗄️ Tải tấn công gần đây",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS attacks, count(*)::int AS count\nFROM (\n  SELECT id, title, severity, source_ip, risk_score, detected_at\n  FROM alerts\n  WHERE severity IN ('critical','high')\n    AND detected_at > now() - interval '24 hours'\n    AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\n  ORDER BY detected_at DESC LIMIT 5\n) t;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/alerts/monitor/unnotified' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         440,
         90
       ],
       "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -123,24 +132,33 @@
     },
     {
       "name": "👥 Tải người nhận",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/users/recipients' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         1100,
         -80
       ],
       "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     },
@@ -347,24 +365,33 @@
     },
     {
       "name": "📝 Đánh dấu đã gửi",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()\nWHERE severity IN ('critical','high')\n  AND detected_at > now() - interval '24 hours'\n  AND COALESCE(metadata->>'phoneNotifiedAt','') = ''\nRETURNING id;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/alerts/monitor/mark-notified' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         2420,
         90
       ],
       "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {

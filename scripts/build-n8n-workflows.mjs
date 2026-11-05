@@ -182,13 +182,13 @@ jsonb_build_object('automation', 'ransomware-containment', 'executionId', '${sql
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}')
 RETURNING id;`,
     enrichA: ["🧪 Làm giàu – Telemetry EDR", "edr-telemetry", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
-    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải cảnh báo", "source_ip")} || ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
+    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải cảnh báo", "data.source_ip")} || ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
     enrichC: ["Enrich — Identity Context", "identity-context", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: 'soc@medicareguard.io'`],
     notifyTitle: "Ransomware containment started",
     notifyMessage: "Automated containment is running for a critical ransomware alert.",
-    actionA: ["🔒 Cô lập máy trạm (EDR)", "edr-isolate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải cảnh báo", "asset_id")}`],
-    actionB: ["🚫 Chặn máy chủ C2", "network-contain", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, sourceIp: ${ref("🗄️ Tải cảnh báo", "source_ip")}`],
-    verifyAction: ["✅ Xác minh cô lập", "edr-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải cảnh báo", "asset_id")}`],
+    actionA: ["🔒 Cô lập máy trạm (EDR)", "edr-isolate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải cảnh báo", "data.asset_id")}`],
+    actionB: ["🚫 Chặn máy chủ C2", "network-contain", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, sourceIp: ${ref("🗄️ Tải cảnh báo", "data.source_ip")}`],
+    verifyAction: ["✅ Xác minh cô lập", "edr-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải cảnh báo", "data.asset_id")}`],
     markQuery: `UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('containedBy', 'n8n', 'containedAt', now()::text), updated_at = now()
 WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, status;`,
     reportType: "incident",
@@ -222,14 +222,14 @@ SELECT 'Automated phishing triage', 'open', 'high', 'Reported message routed for
 jsonb_build_object('automation', 'phishing-triage', 'executionId', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}')
 RETURNING id;`,
-    enrichA: ["🧪 Làm giàu – Sandbox", "sandbox-detonate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, url: ${ref("🗄️ Tải cảnh báo", "metadata")}?.url || ${ref("🗄️ Tải cảnh báo", "title")}`],
-    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải cảnh báo", "metadata")}?.file_hash || ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
-    enrichC: ["Enrich — Recipient Identity", "identity-context", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "metadata")}?.recipient || 'analyst@medicareguard.io'`],
+    enrichA: ["🧪 Làm giàu – Sandbox", "sandbox-detonate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, url: ${ref("🗄️ Tải cảnh báo", "data.metadata")}?.url || ${ref("🗄️ Tải cảnh báo", "data.title")}`],
+    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải cảnh báo", "data.metadata")}?.file_hash || ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
+    enrichC: ["Enrich — Recipient Identity", "identity-context", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "data.metadata")}?.recipient || 'analyst@medicareguard.io'`],
     notifyTitle: "Phishing triage started",
     notifyMessage: "Automated phishing triage is detonating the payload and resetting credentials.",
     actionA: ["🧹 Cách ly thư khớp", "email-quarantine", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, alertId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
-    actionB: ["🔑 Thu hồi phiên & đặt lại mật khẩu", "identity-revoke", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "metadata")}?.recipient || 'analyst@medicareguard.io'`],
-    verifyAction: ["✅ Xác minh thu hồi danh tính", "identity-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "metadata")}?.recipient || 'analyst@medicareguard.io'`],
+    actionB: ["🔑 Thu hồi phiên & đặt lại mật khẩu", "identity-revoke", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "data.metadata")}?.recipient || 'analyst@medicareguard.io'`],
+    verifyAction: ["✅ Xác minh thu hồi danh tính", "identity-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, email: ${ref("🗄️ Tải cảnh báo", "data.metadata")}?.recipient || 'analyst@medicareguard.io'`],
     markQuery: `UPDATE alerts SET status = 'investigating', metadata = metadata || jsonb_build_object('quarantinedBy', 'n8n', 'quarantinedAt', now()::text), updated_at = now()
 WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, status;`,
     reportType: "incident",
@@ -265,13 +265,13 @@ jsonb_build_object('automation', 'vulnerability-sla', 'executionId', '${sqlRef("
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}')
 RETURNING id;`,
     enrichA: ["📊 Làm giàu – EPSS/KEV", "vuln-intel", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, vulnerabilityId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}`],
-    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải lỗ hổng", "cve_id")}`],
-    enrichC: ["Enrich — Patch Catalog", "patch-catalog", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, cveId: ${ref("🗄️ Tải lỗ hổng", "cve_id")}`],
+    enrichB: ["Enrich — Threat Reputation", "intel-reputation", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, indicator: ${ref("🗄️ Tải lỗ hổng", "data.cve_id")}`],
+    enrichC: ["Enrich — Patch Catalog", "patch-catalog", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, cveId: ${ref("🗄️ Tải lỗ hổng", "data.cve_id")}`],
     notifyTitle: "Vulnerability SLA escalation",
     notifyMessage: "A critical CVE is being remediated by the automated SLA workflow.",
-    actionA: ["📋 Tạo yêu cầu thay đổi", "change-request", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, vulnerabilityId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "asset_id")}`],
-    actionB: ["🛠️ Điều phối vá lỗi", "patch-orchestrate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "asset_id")}, cveId: ${ref("🗄️ Tải lỗ hổng", "cve_id")}`],
-    verifyAction: ["✅ Xác minh bản vá", "patch-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "asset_id")}`],
+    actionA: ["📋 Tạo yêu cầu thay đổi", "change-request", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, vulnerabilityId: ${ref("🔍 Kiểm tra dữ liệu", "entityId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "data.asset_id")}`],
+    actionB: ["🛠️ Điều phối vá lỗi", "patch-orchestrate", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "data.asset_id")}, cveId: ${ref("🗄️ Tải lỗ hổng", "data.cve_id")}`],
+    verifyAction: ["✅ Xác minh bản vá", "patch-verify", `executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, assetId: ${ref("🗄️ Tải lỗ hổng", "data.asset_id")}`],
     markQuery: `UPDATE vulnerabilities SET status = 'in_progress', metadata = metadata || jsonb_build_object('remediationStartedBy', 'n8n', 'remediationStartedAt', now()::text), updated_at = now()
 WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "entityId")}' RETURNING id, status;`,
     reportType: "vulnerability",
@@ -476,7 +476,7 @@ return [{ json: { reply, intent, language: vi ? 'vi' : 'en', insights, suggestio
   const nodes = [
     node('💬 Webhook Chat AI', 'n8n-nodes-base.webhook', 2, { httpMethod: 'POST', path: spec.webhookPath, responseMode: 'responseNode', options: {} }, [0, 0], { webhookId: id() }),
     code('🔍 Kiểm tra câu hỏi', validateCode, [220, 0]),
-    postgres('🗄️ Tải ngữ cảnh SOC', contextQuery, [440, 0]),
+    http('🗄️ Tải ngữ cảnh SOC', "GET", apiUrl("/ai/context"), [440, 0]),
     code('🧠 Soạn câu trả lời từ Database', composeCode, [660, 0]),
     node('📤 Trả lời Chat', 'n8n-nodes-base.respondToWebhook', 1.1, { respondWith: 'json', responseBody: '={{ JSON.stringify($json) }}', options: {} }, [880, 0]),
     sticky('Ghi chú — Chat AI dữ liệu thật', '# Chat AI phân tích SOC\nWebhook `mg-ai-chat` · đọc trực tiếp PostgreSQL (alerts, incidents, attackers, assets, compliance, firewall) · trả lời JSON cho backend.\n\nKhông dùng câu trả lời mẫu: mọi số liệu lấy từ truy vấn SQL tại thời điểm hỏi.', [0, -240], 1000, 160, 4),
@@ -510,7 +510,7 @@ const buildWorkflow = (spec) => {
   if (spec.id === "ecommerce-fraud-response") return buildEcommerceWorkflow(spec);
 
   const validateCode = `const body = $json.body ?? $json;
-const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;
+const raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id || (Array.isArray(body.data) ? body.data[0]?.id : body.data?.id);
 const entityId = String(raw || '').trim();
 if (!entityId) { throw new Error('entityId is required'); }
 const executionId = String(body.executionId || ('ext-' + Date.now()));
@@ -518,7 +518,7 @@ return [{ json: { ...body, entityId, executionId, workflowId: '${spec.id}', work
 
   const scoreCode = `const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };
 const base = read('${L.validate}');
-const record = read('${spec.loadName}');
+const record = (read('${spec.loadName}').data || read('${spec.loadName}'));
 const asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };
 const primary = read('${spec.enrichA[0]}');
 const severity = String(record.severity || (record.status === 'compliant' ? 'low' : record.status) || 'medium').toLowerCase();
@@ -581,12 +581,12 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
   const nodes = [
     node("📥 " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.webhook, { webhookId: id() }),
     code(L.validate, validateCode, positions.validate),
-    postgres(spec.loadName, spec.loadQuery, positions.load),
+    http(spec.loadName, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/${spec.entityType === 'alert' ? 'alerts' : spec.entityType === 'vulnerability' ? 'vulnerabilities' : 'compliance-controls'}/' + ${ref(L.validate, "entityId")} }}`, positions.load),
     simulate(spec.enrichA[0], spec.enrichA[1], positions.enrich, spec.enrichA[2]),
     code(L.score, scoreCode, positions.score),
     ifNode(L.gate, `={{ $json.riskScore }}`, 70, positions.gate),
-    postgres(spec.criticalCaseName, spec.criticalCaseQuery, positions.criticalCase),
-    postgres(spec.standardCaseName, spec.standardCaseQuery, positions.standardCase),
+    http(spec.criticalCaseName, "POST", apiUrl("/incidents"), positions.criticalCase, jsonBody(`title: '${spec.name} — automated P1', description: 'Automated containment by n8n.', severity: 'critical', status: 'open', priority: 'P1', category: '${spec.id.split('-')[0]}', metadata: { automation: '${spec.id}', executionId: ${ref(L.validate, "executionId")}, entityId: ${ref(L.validate, "entityId")} }`)),
+    http(spec.standardCaseName, "POST", apiUrl("/tickets"), positions.standardCase, jsonBody(`subject: 'Automated ${spec.name} review', status: 'open', priority: 'medium', description: 'Routed for analyst review by n8n.', metadata: { automation: '${spec.id}', executionId: ${ref(L.validate, "executionId")}, entityId: ${ref(L.validate, "entityId")} }`)),
     ifNode(L.tgGate, "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.notifyGate),
     telegramNode(spec, positions.telegram),
     ifNode(L.gmailGate, "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.gmailGate),
@@ -594,14 +594,14 @@ return [{ json: { ...base, record, asset, primary, riskScore, severity: severity
     simulate(spec.actionA[0], spec.actionA[1], positions.actionA, spec.actionA[2]),
     simulate(spec.actionB[0], spec.actionB[1], positions.actionB, spec.actionB[2]),
     simulate(spec.verifyAction[0], spec.verifyAction[1], positions.verify, spec.verifyAction[2]),
-    postgres(L.mark, spec.markQuery, positions.mark),
+    http(L.mark, "PATCH", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/${spec.entityType === 'alert' ? 'alerts' : spec.entityType === 'vulnerability' ? 'vulnerabilities' : 'compliance-controls'}/' + ${ref(L.validate, "entityId")} }}`, positions.mark, jsonBody(spec.entityType === 'alert' ? `status: 'investigating', metadata: { updatedBy: 'n8n', updatedAt: new Date().toISOString() }` : spec.entityType === 'vulnerability' ? `status: 'in_progress', metadata: { updatedBy: 'n8n', updatedAt: new Date().toISOString() }` : `metadata: { updatedBy: 'n8n', updatedAt: new Date().toISOString() }`)),
     http(L.finalize, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref(L.validate, "executionId")} + '/complete' }}`, positions.finalize, jsonBody(finalizeFields)),
   ];
 
   if (spec.schedule) {
     nodes.push(
       node(spec.schedule.label, "n8n-nodes-base.scheduleTrigger", 1.2, { rule: { interval: [{ field: "cronExpression", expression: spec.schedule.cron }] } }, [0, 180]),
-      postgres(spec.schedule.pickName, spec.schedule.pickQuery, [220, 180]),
+      http(spec.schedule.pickName, "GET", spec.id === 'vulnerability-sla' ? apiUrl("/vulnerabilities?status=open&sort=cvss_score&order=desc&limit=1") : apiUrl("/compliance-controls?sort=score&order=asc&limit=1"), [220, 180]),
     );
   }
 
@@ -673,7 +673,7 @@ const executionId = String(body.executionId || ('ecom-' + Date.now()));
 return [{ json: { ...body, orderId, executionId, workflowId: 'ecommerce-fraud-response', workflowName: 'Phản hồi Gian lận Thương mại điện tử', mode: body.mode || 'realtime', receivedAt: new Date().toISOString() } }];`;
 
   const scoreCode = `const base = $('🔍 Kiểm tra dữ liệu').first().json;
-const order = $('🗄️ Tải đơn hàng').first().json || {};
+const order = $('🗄️ Tải đơn hàng').first().json?.data || $('🗄️ Tải đơn hàng').first().json || {};
 if (!order.id) { throw new Error('Store order not found: ' + base.orderId); }
 const esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const parseFlags = (value) => {
@@ -747,19 +747,10 @@ SELECT (SELECT count(*) FROM alert)::int AS alerts_updated, (SELECT count(*) FRO
   const nodes = [
     node("📥 " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, [0, 0], { webhookId: id() }),
     code("🔍 Kiểm tra dữ liệu", validateCode, [220, 0]),
-    postgres("🗄️ Tải đơn hàng", `SELECT o.id, o.order_number, o.status, o.payment_status, o.payment_method, o.total, o.risk_score, o.fraud_flags,
-  o.ip_address, o.ip_country, o.ip_country_code, o.ip_source, o.shipping_name, o.shipping_email,
-  o.shipping_city, o.shipping_country, o.shipping_country_code, o.created_at,
-  c.full_name AS customer_name, c.email AS customer_email,
-  (SELECT count(*)::int FROM store_orders x WHERE x.ip_address = o.ip_address AND x.created_at > now() - interval '24 hours') AS ip_order_count
-FROM store_orders o LEFT JOIN store_customers c ON c.id = o.customer_id
-WHERE o.id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' LIMIT 1;`, [440, 0]),
+    http("🗄️ Tải đơn hàng", "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/store/admin/orders/' + ${ref("🔍 Kiểm tra dữ liệu", "orderId")} }}`, [440, 0]),
     code("🧮 Chấm điểm & Soạn cảnh báo", scoreCode, [660, 0]),
     ifNode("⚠️ Rủi ro cao?", "={{ $json.riskScore }}", 50, [880, 0]),
-    postgres("🔒 Tạm giữ đơn hàng", `UPDATE store_orders SET status = 'on_hold',
-  metadata = metadata || jsonb_build_object('fraudWorkflowAt', now()::text, 'fraudWorkflowExecution', '${sqlRef("🔍 Kiểm tra dữ liệu", "executionId")}', 'fraudWorkflowRisk', '${sqlRef("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}'),
-  updated_at = now()
-WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' RETURNING id, order_number, status;`, [1100, -140]),
+    http("🔒 Tạm giữ đơn hàng", "PATCH", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/store/admin/orders/' + ${ref("🔍 Kiểm tra dữ liệu", "orderId")} }}`, [1100, -140], jsonBody(`status: 'on_hold', metadata: { fraudWorkflowAt: new Date().toISOString(), fraudWorkflowExecution: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}, fraudWorkflowRisk: ${ref("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")} }`)),
     node("✅ Đơn trong ngưỡng", "n8n-nodes-base.noOp", 1, {}, [1100, 140]),
     ifNode("📱 Telegram sẵn sàng?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, [1320, 0]),
     node("📱 Gửi Telegram", "n8n-nodes-base.telegram", 1.2, {
@@ -779,7 +770,7 @@ WHERE id = '${sqlRef("🔍 Kiểm tra dữ liệu", "orderId")}' RETURNING id, o
       text: "={{ $('🧮 Chấm điểm & Soạn cảnh báo').first().json.emailText }}",
       options: {},
     }, [1980, -120], { credentials: { smtp: { id: "mg-smtp-credential", name: "MedicareGuard SMTP" } }, onError: "continueRegularOutput" }),
-    postgres("📝 Ghi nhận phản hồi", recordQuery, [2200, 0]),
+    http("📝 Ghi nhận phản hồi", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/store/admin/orders/' + ${ref("🔍 Kiểm tra dữ liệu", "orderId")} + '/record-fraud-response' }}`, [2200, 0], jsonBody(`alertId: ${ref("🔍 Kiểm tra dữ liệu", "alertId")}, riskScore: ${ref("🧮 Chấm điểm & Soạn cảnh báo", "riskScore")}, executionId: ${ref("🔍 Kiểm tra dữ liệu", "executionId")}`)),
     http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🔍 Kiểm tra dữ liệu", "executionId")} + '/complete' }}`, [2420, 0], jsonBody(`workflowId: 'ecommerce-fraud-response', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('🔍 Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 13, metrics: { risk_score: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore, order_number: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number, held: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.riskScore >= 50, flags: $('🧮 Chấm điểm & Soạn cảnh báo').first().json.flags.length, telegram_alert: Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID), email_alert: Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }, message: 'n8n đã xử lý gian lận đơn ' + $('🧮 Chấm điểm & Soạn cảnh báo').first().json.order.order_number`)),
   ];
 
@@ -887,18 +878,10 @@ return [{ json: { telegramSent } }];`;
     node("Webhook — " + spec.triggerLabel, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, positions.monitorWebhook, { webhookId: id() }),
     node("⏰ Lịch mỗi 5 phút", "n8n-nodes-base.scheduleTrigger", 1.2, { rule: { interval: [{ field: "minutes", minutesInterval: 5 }] } }, positions.monitorSchedule),
     code("🧭 Chuẩn hóa dữ liệu", normalizeCode, positions.monitorNormalize),
-    postgres("🗄️ Tải tấn công gần đây", `SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS attacks, count(*)::int AS count
-FROM (
-  SELECT id, title, severity, source_ip, risk_score, detected_at
-  FROM alerts
-  WHERE severity IN ('critical','high')
-    AND detected_at > now() - interval '24 hours'
-    AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
-  ORDER BY detected_at DESC LIMIT 5
-) t;`, positions.monitorLoad),
+    http("🗄️ Tải tấn công gần đây", "GET", apiUrl("/alerts/monitor/unnotified"), positions.monitorLoad),
     code("✉️ Soạn tin cảnh báo", buildMessageCode, positions.monitorBuild),
     ifNode("❓ Có tấn công mới?", `={{ $json.count }}`, 1, positions.monitorGate),
-    postgres("👥 Tải người nhận", "SELECT u.id, u.email, u.full_name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name IN ('admin','analyst') ORDER BY r.level DESC LIMIT 1;", positions.monitorRecipients, { alwaysOutputData: true }),
+    http("👥 Tải người nhận", "GET", apiUrl("/users/recipients"), positions.monitorRecipients, null, { alwaysOutputData: true }),
     ifNode("📱 Telegram sẵn sàng?", "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, positions.monitorNotifyGate),
     ifNode("📧 Gmail sẵn sàng?", "={{ Boolean($env.MG_SMTP_HOST && $env.MG_SMTP_USER && $env.MG_SMTP_PASSWORD) }}", true, positions.monitorGmailGate),
     node("📱 Gửi Telegram", "n8n-nodes-base.telegram", 1.2, {
@@ -920,11 +903,7 @@ FROM (
     simulate("🔔 Thông báo trong ứng dụng", "notify", positions.monitorInApp, `executionId: ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")}, title: 'Giám sát tấn công: ' + $('✉️ Soạn tin cảnh báo').first().json.count + ' tấn công mới', message: $('✉️ Soạn tin cảnh báo').first().json.summary, severity: 'critical', channel: 'phone'`),
     code("🧾 Kiểm tra Telegram đã gửi", channelCheckCode, [2200, 270]),
     ifNode("✅ Telegram đã gửi?", "={{ $json.telegramSent }}", true, [2310, 270]),
-    postgres("📝 Đánh dấu đã gửi", `UPDATE alerts SET metadata = metadata || jsonb_build_object('phoneNotifiedAt', now()::text), updated_at = now()
-WHERE severity IN ('critical','high')
-  AND detected_at > now() - interval '24 hours'
-  AND COALESCE(metadata->>'phoneNotifiedAt','') = ''
-RETURNING id;`, positions.monitorUpdate),
+    http("📝 Đánh dấu đã gửi", "POST", apiUrl("/alerts/monitor/mark-notified"), positions.monitorUpdate),
     code("📈 Tổng hợp số liệu", metricsCode, positions.monitorMetrics),
     http("🏁 Kết thúc phiên chạy", "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + ${ref("🧭 Chuẩn hóa dữ liệu", "executionId")} + '/complete' }}`, positions.monitorFinalize, jsonBody(`workflowId: 'live-attack-monitor', status: 'success', durationMs: $json.durationMs, nodeCount: 18, metrics: $json.metrics, message: $json.message`)),
     node("😴 Không có tấn công mới", "n8n-nodes-base.noOp", 1, {}, positions.monitorNoAttacks),

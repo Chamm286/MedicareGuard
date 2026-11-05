@@ -407,8 +407,15 @@ const orderPayload = async (orderId) => {
   if (!order.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
   const items = await query("SELECT * FROM store_order_items WHERE order_id = $1 ORDER BY created_at", [orderId]);
   const payments = await query("SELECT provider, status, amount, transaction_ref, created_at FROM store_payments WHERE order_id = $1 ORDER BY created_at", [orderId]);
+  const customer = order.rows[0].customer_id
+    ? await query("SELECT full_name, email FROM store_customers WHERE id = $1", [order.rows[0].customer_id])
+    : { rows: [] };
+  const velocity = await query("SELECT count(*)::int AS c FROM store_orders WHERE ip_address = $1 AND created_at > now() - interval '24 hours'", [order.rows[0].ip_address]);
   const payload = {
     ...order.rows[0],
+    customer_name: customer.rows[0]?.full_name || null,
+    customer_email: customer.rows[0]?.email || null,
+    ip_order_count: velocity.rows[0]?.c || 1,
     subtotal: money(order.rows[0].subtotal),
     discount: money(order.rows[0].discount),
     shipping_fee: money(order.rows[0].shipping_fee),
@@ -1010,10 +1017,13 @@ router.patch(
     if (!existing.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
     const alreadyConfirmed = existing.rows[0].status === "cancelled" && Boolean(existing.rows[0].metadata?.fraudConfirmed);
 
+    const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : null;
     const result = await query(
-      `UPDATE store_orders SET status = COALESCE($2, status), payment_status = COALESCE($3, payment_status), updated_at = now()
+      `UPDATE store_orders SET status = COALESCE($2, status), payment_status = COALESCE($3, payment_status),
+         metadata = CASE WHEN $4::jsonb IS NULL THEN metadata ELSE metadata || $4::jsonb END,
+         updated_at = now()
        WHERE id::text = $1 RETURNING *`,
-      [req.params.id, status, paymentStatus],
+      [req.params.id, status, paymentStatus, metadata ? JSON.stringify(metadata) : null],
     );
     if (!result.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
     if (paymentStatus) {
@@ -1174,6 +1184,50 @@ router.post(
       [order.id, String(body.referenceCode || body.id || ""), JSON.stringify({ sepay: body })],
     );
     res.json({ ok: true, matched: true, orderId: order.id, orderNumber });
+  }),
+);
+
+
+router.post(
+  "/admin/orders/:id/record-fraud-response",
+  authenticate,
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const { alertId, riskScore, executionId } = req.body || {};
+    const existing = await query("SELECT * FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!existing.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    const metadata = { ecommerceFraudWorkflow: "completed", ecommerceRiskScore: riskScore || null, ecommerceWorkflowAt: new Date().toISOString(), n8nExecutionId: executionId || null };
+    if (alertId) {
+      await query(
+        `UPDATE alerts SET status = 'investigating', metadata = metadata || $2::jsonb, updated_at = now() WHERE id::text = $1`,
+        [alertId, JSON.stringify(metadata)],
+      );
+    }
+    await query(
+      `UPDATE store_security_events SET metadata = metadata || $2::jsonb WHERE order_id = $1::uuid`,
+      [req.params.id, JSON.stringify({ n8nWorkflowAt: new Date().toISOString(), n8nExecutionId: executionId || null, n8nRiskScore: riskScore || null })],
+    );
+    res.json({ data: { orderId: req.params.id, alertId: alertId || null, updated: true } });
+  }),
+);
+
+
+router.post(
+  "/admin/orders/:id/fraud-confirmed",
+  authenticate,
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const existing = await query("SELECT * FROM store_orders WHERE id::text = $1 LIMIT 1", [req.params.id]);
+    if (!existing.rows[0]) throw new HttpError(404, "Không tìm thấy đơn hàng");
+    await query(
+      `UPDATE store_security_events SET metadata = metadata || $2::jsonb WHERE order_id = $1::uuid`,
+      [req.params.id, JSON.stringify({ fraudConfirmedAt: new Date().toISOString(), adminConfirmed: true })],
+    );
+    await query(
+      `UPDATE alerts SET status = 'resolved', metadata = metadata || $2::jsonb, updated_at = now() WHERE metadata->>'orderId' = $1`,
+      [req.params.id, JSON.stringify({ fraudConfirmed: true, confirmedAt: new Date().toISOString() })],
+    );
+    res.json({ data: { orderId: req.params.id, updated: true } });
   }),
 );
 

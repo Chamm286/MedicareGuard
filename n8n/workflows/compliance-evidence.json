@@ -25,7 +25,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id;\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'compliance-evidence', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityType: 'compliance_control', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst raw = body.entityId || body.alertId || body.findingId || body.vulnerabilityId || body.controlId || body.framework || body.id || (Array.isArray(body.data) ? body.data[0]?.id : body.data?.id);\nconst entityId = String(raw || '').trim();\nif (!entityId) { throw new Error('entityId is required'); }\nconst executionId = String(body.executionId || ('ext-' + Date.now()));\nreturn [{ json: { ...body, entityId, executionId, workflowId: 'compliance-evidence', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityType: 'compliance_control', mode: body.mode || 'manual', triggeredBy: body.triggeredBy || 'n8n-webhook', receivedAt: body.startedAt || new Date().toISOString() } }];"
       },
       "position": [
         220,
@@ -35,24 +35,33 @@
     },
     {
       "name": "🗄️ Tải kiểm soát",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT c.id, c.framework, c.control_id, c.title, c.status, c.score, c.owner_id, c.description, c.metadata,\n  u.full_name AS asset_owner_name, u.email AS asset_owner_email\nFROM compliance_controls c LEFT JOIN users u ON u.id = c.owner_id\nWHERE c.id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' LIMIT 1;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/compliance-controls/' + $('🔍 Kiểm tra dữ liệu').first().json.entityId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         440,
         0
       ],
       "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -95,7 +104,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('🔍 Kiểm tra dữ liệu');\nconst record = read('🗄️ Tải kiểm soát');\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('🗂️ Làm giàu – Bằng chứng danh tính');\nconst severity = String(record.severity || (record.status === 'compliant' ? 'low' : record.status) || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH', low: '🟢 THẤP' }[severity] || severity;\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#16a34a' }[severity] || '#64748b';\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst detailPath = 'compliance_control' === 'vulnerability' ? '/vulnerabilities/' : 'compliance_control' === 'compliance_control' ? '/reports' : '/alerts/';\nconst consoleLink = 'compliance_control' === 'compliance_control' ? consoleUrl + '/reports' : consoleUrl + detailPath + base.entityId;\nconst recordTitle = record.title || record.control_name || record.name || 'Bằng chứng Tuân thủ Liên tục';\nconst recordDescription = record.description || record.summary || 'Hệ thống tự động phát hiện sự kiện an ninh cần được xử lý.';\nconst sourceIp = record.source_ip || record.source || record.ip_address || 'Không xác định';\nconst telegramText = [\n  '🚨 <b>CẢNH BÁO AN NINH MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Luồng</b>  ' + esc('Bằng chứng Tuân thủ Liên tục'),\n  '<b>Mức độ</b>  ' + sevLabel,\n  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',\n  '<b>Đối tượng</b>  <code>' + esc(base.entityId) + '</code>',\n  '<b>Nguồn</b>  ' + esc(sourceIp),\n  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(consoleLink) + '\">Mở bảng điều khiển SOC</a>',\n].join('\\n');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Cảnh báo an ninh mới</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<div style=\"display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700\">' + esc(sevLabel) + '</div>'\n  + '<h2 style=\"font-size:18px;margin:16px 0 8px\">' + esc(recordTitle) + '</h2>'\n  + '<p style=\"color:#475569;line-height:1.6;margin:0 0 18px\">' + esc(recordDescription) + '</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:14px\">'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Luồng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc('Bằng chứng Tuân thủ Liên tục') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Điểm rủi ro</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + riskScore + '/100</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Đối tượng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(base.entityId) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Tài sản</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(asset.name || 'Không xác định') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Nguồn</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(sourceIp) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Thời gian</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(new Date().toLocaleString('vi-VN')) + '</td></tr>'\n  + '</table>'\n  + '<a href=\"' + esc(consoleLink) + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở bảng điều khiển SOC</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nreturn [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];"
+        "jsCode": "const read = (name) => { try { return $(name).first().json || {}; } catch (error) { return {}; } };\nconst base = read('🔍 Kiểm tra dữ liệu');\nconst record = (read('🗄️ Tải kiểm soát').data || read('🗄️ Tải kiểm soát'));\nconst asset = { name: record.asset_name, criticality: record.asset_criticality, risk_score: record.asset_risk_score, owner_name: record.asset_owner_name, owner_email: record.asset_owner_email };\nconst primary = read('🗂️ Làm giàu – Bằng chứng danh tính');\nconst severity = String(record.severity || (record.status === 'compliant' ? 'low' : record.status) || 'medium').toLowerCase();\nconst severityWeight = { critical: 55, high: 38, medium: 20, low: 8 }[severity] || 15;\nconst criticalityWeight = { critical: 22, high: 15, medium: 8, low: 3 }[String(asset.criticality || '').toLowerCase()] || 5;\nconst cvss = Number(record.cvss_score || 0);\nconst vulnWeight = cvss ? Math.round(cvss * 3) : 0;\nlet riskScore = severityWeight + criticalityWeight + vulnWeight;\nif (record.score !== undefined && record.cvss_score === undefined) riskScore = 100 - Number(record.score);\nriskScore = Math.max(1, Math.min(100, riskScore || 50));\nconst esc = (value) => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst sevLabel = { critical: '🔴 NGHIÊM TRỌNG', high: '🟠 CAO', medium: '🟡 TRUNG BÌNH', low: '🟢 THẤP' }[severity] || severity;\nconst sevColor = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#16a34a' }[severity] || '#64748b';\nconst consoleUrl = (typeof $env !== 'undefined' && $env.MG_CONSOLE_URL) ? $env.MG_CONSOLE_URL : 'http://localhost:3000';\nconst detailPath = 'compliance_control' === 'vulnerability' ? '/vulnerabilities/' : 'compliance_control' === 'compliance_control' ? '/reports' : '/alerts/';\nconst consoleLink = 'compliance_control' === 'compliance_control' ? consoleUrl + '/reports' : consoleUrl + detailPath + base.entityId;\nconst recordTitle = record.title || record.control_name || record.name || 'Bằng chứng Tuân thủ Liên tục';\nconst recordDescription = record.description || record.summary || 'Hệ thống tự động phát hiện sự kiện an ninh cần được xử lý.';\nconst sourceIp = record.source_ip || record.source || record.ip_address || 'Không xác định';\nconst telegramText = [\n  '🚨 <b>CẢNH BÁO AN NINH MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Luồng</b>  ' + esc('Bằng chứng Tuân thủ Liên tục'),\n  '<b>Mức độ</b>  ' + sevLabel,\n  '<b>Điểm rủi ro</b>  <b>' + riskScore + '/100</b>',\n  '<b>Đối tượng</b>  <code>' + esc(base.entityId) + '</code>',\n  '<b>Nguồn</b>  ' + esc(sourceIp),\n  '<b>Thời gian</b>  ' + esc(new Date().toLocaleString('vi-VN')),\n  '━━━━━━━━━━━━━━━━━━━━',\n  '🔗 <a href=\"' + esc(consoleLink) + '\">Mở bảng điều khiển SOC</a>',\n].join('\\n');\nconst emailHtml = '<div style=\"background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">'\n  + '<div style=\"max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden\">'\n  + '<div style=\"background:#0b1220;padding:22px 24px;color:#ffffff\">'\n  + '<div style=\"font-size:11px;letter-spacing:2px;color:#93c5fd;font-weight:700\">MEDICAREGUARD · SOC</div>'\n  + '<div style=\"font-size:22px;font-weight:700;margin-top:6px\">Cảnh báo an ninh mới</div>'\n  + '</div>'\n  + '<div style=\"padding:24px\">'\n  + '<div style=\"display:inline-block;background:' + sevColor + ';color:#ffffff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700\">' + esc(sevLabel) + '</div>'\n  + '<h2 style=\"font-size:18px;margin:16px 0 8px\">' + esc(recordTitle) + '</h2>'\n  + '<p style=\"color:#475569;line-height:1.6;margin:0 0 18px\">' + esc(recordDescription) + '</p>'\n  + '<table style=\"width:100%;border-collapse:collapse;font-size:14px\">'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Luồng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc('Bằng chứng Tuân thủ Liên tục') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Điểm rủi ro</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + riskScore + '/100</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Đối tượng</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(base.entityId) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Tài sản</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(asset.name || 'Không xác định') + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Nguồn</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(sourceIp) + '</td></tr>'\n  + '<tr><td style=\"padding:8px 0;color:#64748b\">Thời gian</td><td style=\"padding:8px 0;text-align:right;font-weight:600\">' + esc(new Date().toLocaleString('vi-VN')) + '</td></tr>'\n  + '</table>'\n  + '<a href=\"' + esc(consoleLink) + '\" style=\"display:inline-block;margin-top:22px;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700\">Mở bảng điều khiển SOC</a>'\n  + '</div>'\n  + '<div style=\"padding:14px 24px;background:#f8fafc;color:#94a3b8;font-size:11px\">Tự động gửi bởi MedicareGuard SOAR · ' + esc(new Date().toLocaleString('vi-VN')) + '</div>'\n  + '</div></div>';\nconst emailText = telegramText.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"');\nreturn [{ json: { ...base, record, asset, primary, riskScore, severity: severity || 'medium', workflowName: 'Bằng chứng Tuân thủ Liên tục', entityId: base.entityId, entityType: 'compliance_control', correlationId: base.executionId.slice(0, 8), consoleLink, telegramText, emailHtml, emailText } }];"
       },
       "position": [
         880,
@@ -138,46 +147,72 @@
     },
     {
       "name": "🚨 Mở sự cố thiếu kiểm soát",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO incidents (title, description, severity, status, priority, category, detected_at, sla_due_at, incident_key, metadata)\nVALUES ('Compliance control gap — automated escalation', 'n8n detected a control gap while assembling immutable evidence.',\n'high', 'open', 'P2', 'compliance', now(), now() + interval '72 hours',\n'AUTO-' || upper(substr(md5('{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}'), 1, 10)),\njsonb_build_object('automation', 'compliance-evidence', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}', 'entityId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}'))\nON CONFLICT (incident_key) DO UPDATE SET updated_at = now() RETURNING id, incident_key;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/incidents' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: 'Bằng chứng Tuân thủ Liên tục — automated P1', description: 'Automated containment by n8n.', severity: 'critical', status: 'open', priority: 'P1', category: 'compliance', metadata: { automation: 'compliance-evidence', executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, entityId: $('🔍 Kiểm tra dữ liệu').first().json.entityId } }) }}"
       },
       "position": [
         1320,
         -150
       ],
       "id": "4b7f7ff8-02f7-5bc2-9518-59cf2e88a7c9",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
       "name": "🎫 Mở nhiệm vụ bằng chứng",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO tickets (subject, status, priority, description, metadata)\nSELECT 'Automated compliance evidence refresh', 'open', 'medium', 'Evidence pack assembled for the selected control and framework.',\njsonb_build_object('automation', 'compliance-evidence', 'executionId', '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nWHERE NOT EXISTS (SELECT 1 FROM tickets WHERE metadata->>'executionId' = '{{ $('🔍 Kiểm tra dữ liệu').first().json.executionId }}')\nRETURNING id;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/tickets' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ subject: 'Automated Bằng chứng Tuân thủ Liên tục review', status: 'open', priority: 'medium', description: 'Routed for analyst review by n8n.', metadata: { automation: 'compliance-evidence', executionId: $('🔍 Kiểm tra dữ liệu').first().json.executionId, entityId: $('🔍 Kiểm tra dữ liệu').first().json.entityId } }) }}"
       },
       "position": [
         1320,
         150
       ],
       "id": "593ad56b-b5cd-5910-9485-ddd8b4ce933e",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -407,24 +442,37 @@
     },
     {
       "name": "📝 Cập nhật bản ghi",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE compliance_controls SET metadata = metadata || jsonb_build_object('lastEvidenceAt', now()::text, 'evidenceBy', 'n8n'), updated_at = now()\nWHERE id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.entityId }}' RETURNING id, status;",
-        "options": {}
+        "method": "PATCH",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/compliance-controls/' + $('🔍 Kiểm tra dữ liệu').first().json.entityId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ metadata: { updatedBy: 'n8n', updatedAt: new Date().toISOString() } }) }}"
       },
       "position": [
         3080,
         0
       ],
       "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -484,24 +532,33 @@
     },
     {
       "name": "🔎 Chọn kiểm soát ưu tiên",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id FROM compliance_controls ORDER BY score ASC NULLS LAST LIMIT 1;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/compliance-controls?sort=score&order=asc&limit=1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         220,
         180
       ],
       "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {

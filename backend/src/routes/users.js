@@ -80,6 +80,19 @@ router.get(
 );
 
 router.get(
+  "/recipients",
+  asyncHandler(async (_req, res) => {
+    const result = await query(
+      `SELECT u.id, u.email, u.full_name
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE r.name IN ('admin','analyst')
+       ORDER BY r.level DESC LIMIT 1`,
+    );
+    res.json(result.rows[0] || { id: null, email: "soc@medicareguard.io", full_name: "SOC" });
+  }),
+);
+
+router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query(`SELECT ${USER_FIELDS} FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [req.params.id]);
