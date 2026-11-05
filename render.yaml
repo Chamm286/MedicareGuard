@@ -104,10 +104,8 @@ services:
       url: docker.io/n8nio/n8n:2.41.5
     healthCheckPath: /healthz
     envVars:
-      - key: PORT
-        value: "5678"
       - key: N8N_PORT
-        value: "5678"
+        value: "10000"
       - key: N8N_HOST
         value: medicareguard-n8n.onrender.com
       - key: N8N_PROTOCOL
