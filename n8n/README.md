@@ -1,6 +1,6 @@
 # n8n response workflows
 
-MedicareGuard ships focused n8n playbooks. Workflows stay at **13–19 executable nodes** (the identity playbook has 18 numbered stages plus its Groq model node; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
+MedicareGuard ships focused n8n playbooks. Workflows stay at **5–20 executable nodes** (the identity playbook has 18 numbered stages plus its Groq model node and optional Telegram gate; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |

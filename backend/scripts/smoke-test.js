@@ -108,7 +108,7 @@ const run = async () => {
     "compliance-evidence": 19,
     "ecommerce-fraud-response": 13,
     "live-attack-monitor": 18,
-    "identity-attack": 19,
+    "identity-attack": 20,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
@@ -123,9 +123,9 @@ const run = async () => {
     ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Groq AI")),
   });
   results.push({
-    name: "automation suite totals 122 nodes",
+    name: "automation suite totals 123 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 122,
+    ok: suiteResponse.ok && suiteSummary.nodes === 123,
   });
   results.push({
     name: "automation node counts match the compact design",

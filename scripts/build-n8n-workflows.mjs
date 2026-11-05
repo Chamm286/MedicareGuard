@@ -531,6 +531,7 @@ const buildIdentityWorkflow = (spec) => {
     evidence: "13 · PostgreSQL — Lưu bằng chứng",
     alert: "14 · Tạo cảnh báo SOC",
     telegram: "15 · Gửi thông báo Telegram",
+    telegramGate: "Telegram đã cấu hình?",
     approval: "16 · Chờ quản trị viên duyệt",
     audit: "17 · Ghi nhật ký kiểm toán",
     complete: "18 · Hoàn tất thực thi",
@@ -638,27 +639,6 @@ VALUES ('${sqlRef(N.mitre, "alertTitleSql")}', '${sqlRef(N.mitre, "alertDescript
   '${sqlRef(N.mitre, "evidenceJsonSql")}'::jsonb)
 RETURNING id, title, severity, risk_score, source_ip;`;
 
-  const telegramCode = `const alert = $('${N.alert}').first().json;
-const risk = $('${N.score}').first().json;
-const token = $env.TELEGRAM_BOT_TOKEN;
-const chatId = $env.TELEGRAM_CHAT_ID;
-if (!token || !chatId) return [{ json: { telegramStatus: 'skipped_missing_configuration', alertId: alert.id } }];
-const consoleUrl = $env.MG_CONSOLE_URL || 'http://localhost:3000';
-const n8nUrl = $env.MG_N8N_UI_URL || 'http://localhost:5678';
-const text = [
-  'MEDICAREGUARD — Phát hiện tấn công danh tính',
-  'Mức độ: ' + alert.severity + ' · Điểm rủi ro: ' + alert.risk_score + '/100',
-  'Tài khoản: ' + risk.userEmail + ' (' + (risk.history.role_name || 'không rõ') + ')',
-  'Địa chỉ IP nguồn: ' + risk.suspiciousIp,
-  'Dấu hiệu: ' + risk.detections.join(', '),
-  'MITRE ATT&CK: ' + $('${N.mitre}').first().json.mitreTechnique,
-  'Cảnh báo: ' + consoleUrl + '/alerts/' + alert.id,
-  'Xem xét / tiếp tục phê duyệt trong n8n: ' + n8nUrl + '/execution/' + $execution.id,
-].join('\\n');
-const result = await $helpers.httpRequest({ method: 'POST', url: 'https://api.telegram.org/bot' + token + '/sendMessage', body: { chat_id: chatId, text }, json: true });
-if (!result || result.ok !== true) throw new Error('Telegram notification was rejected');
-return [{ json: { telegramStatus: 'sent', alertId: alert.id, messageId: result.result?.message_id || null } }];`;
-
   const approvalQuery = `INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)
 VALUES ('${sqlRef(N.validate, "userEmail")}', 'identity_detection_review', 'alerts',
   (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '${sqlRef(N.validate, "executionId")}' ORDER BY created_at DESC LIMIT 1),
@@ -672,7 +652,7 @@ VALUES ('${sqlRef(N.validate, "userEmail")}', 'identity_detection_review', 'aler
       ELSE 'not_required' END))
 RETURNING id;`;
 
-  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 19, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
+  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
 
   const nodes = [
     node(N.webhook, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, pos(0), { webhookId: id() }),
@@ -697,9 +677,25 @@ RETURNING id;`;
     code(N.mitre, mitreCode, pos(11)),
     postgres(N.evidence, evidenceQuery, pos(12), { onError: "stopWorkflow" }),
     postgres(N.alert, alertQuery, pos(13), { onError: "stopWorkflow" }),
-    code(N.telegram, telegramCode, pos(14), { onError: "stopWorkflow" }),
-    node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "webhook", httpMethod: "POST", responseMode: "onReceived", options: {} }, pos(15)),
-    postgres(N.audit, approvalQuery, pos(16), { onError: "stopWorkflow" }),
+    ifNode(N.telegramGate, "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, pos(14)),
+    node(N.telegram, "n8n-nodes-base.telegram", 1.2, {
+      resource: "message",
+      operation: "sendMessage",
+      chatId: "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+      text: `={{ [
+  'MEDICAREGUARD — Phát hiện tấn công danh tính',
+  'Mức độ: ' + $('${N.alert}').first().json.severity + ' · Điểm rủi ro: ' + $('${N.alert}').first().json.risk_score + '/100',
+  'Tài khoản: ' + $('${N.score}').first().json.userEmail + ' (' + ($('${N.score}').first().json.history.role_name || 'không rõ') + ')',
+  'Địa chỉ IP nguồn: ' + $('${N.score}').first().json.suspiciousIp,
+  'Dấu hiệu: ' + $('${N.score}').first().json.detections.join(', '),
+  'MITRE ATT&CK: ' + $('${N.mitre}').first().json.mitreTechnique,
+  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('${N.alert}').first().json.id,
+  'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,
+].join('\\n') }}`,
+      additionalFields: { appendAttribution: false },
+    }, pos(15), { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "stopWorkflow" }),
+    node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "webhook", httpMethod: "POST", responseMode: "onReceived", options: {} }, pos(16)),
+    postgres(N.audit, approvalQuery, pos(17), { onError: "stopWorkflow" }),
     node(N.complete, "n8n-nodes-base.httpRequest", 4.2, {
       method: "POST",
       url: `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/complete' }}`,
@@ -713,8 +709,8 @@ RETURNING id;`;
       specifyBody: "json",
       jsonBody: completionBody,
       options: { timeout: 15000 },
-    }, pos(17), { onError: "stopWorkflow" }),
-    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 19 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
+    }, pos(18), { onError: "stopWorkflow" }),
+    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 20 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
     sticky("Ghi chú — Phát hiện & Chấm điểm", "## ① Tương quan danh tính\nĐếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với lịch sử PostgreSQL, phát hiện truy cập tài nguyên quản trị và tính risk score.", [0, -220], 1450, 145, 1),
     sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quản trị viên duyệt trong execution của n8n trước khi ghi audit log.", [1500, -220], 1550, 145, 3),
   ];
@@ -735,7 +731,8 @@ RETURNING id;`;
     [N.model]: { ai_languageModel: [[{ node: N.agent, type: "ai_languageModel", index: 0 }]] },
     [N.mitre]: { main: [main(N.evidence)] },
     [N.evidence]: { main: [main(N.alert)] },
-    [N.alert]: { main: [main(N.telegram)] },
+    [N.alert]: { main: [main(N.telegramGate)] },
+    [N.telegramGate]: { main: [main(N.telegram), main(N.approval)] },
     [N.telegram]: { main: [main(N.approval)] },
     [N.approval]: { main: [main(N.audit)] },
     [N.audit]: { main: [main(N.complete)] },

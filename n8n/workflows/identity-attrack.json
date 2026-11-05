@@ -267,17 +267,62 @@
       "onError": "stopWorkflow"
     },
     {
-      "name": "15 · Gửi thông báo Telegram",
-      "type": "n8n-nodes-base.code",
+      "name": "Telegram đã cấu hình?",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const alert = $('14 · Tạo cảnh báo SOC').first().json;\nconst risk = $('09 · Tính điểm rủi ro').first().json;\nconst token = $env.TELEGRAM_BOT_TOKEN;\nconst chatId = $env.TELEGRAM_CHAT_ID;\nif (!token || !chatId) return [{ json: { telegramStatus: 'skipped_missing_configuration', alertId: alert.id } }];\nconst consoleUrl = $env.MG_CONSOLE_URL || 'http://localhost:3000';\nconst n8nUrl = $env.MG_N8N_UI_URL || 'http://localhost:5678';\nconst text = [\n  'MEDICAREGUARD — Phát hiện tấn công danh tính',\n  'Mức độ: ' + alert.severity + ' · Điểm rủi ro: ' + alert.risk_score + '/100',\n  'Tài khoản: ' + risk.userEmail + ' (' + (risk.history.role_name || 'không rõ') + ')',\n  'Địa chỉ IP nguồn: ' + risk.suspiciousIp,\n  'Dấu hiệu: ' + risk.detections.join(', '),\n  'MITRE ATT&CK: ' + $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique,\n  'Cảnh báo: ' + consoleUrl + '/alerts/' + alert.id,\n  'Xem xét / tiếp tục phê duyệt trong n8n: ' + n8nUrl + '/execution/' + $execution.id,\n].join('\\n');\nconst result = await $helpers.httpRequest({ method: 'POST', url: 'https://api.telegram.org/bot' + token + '/sendMessage', body: { chat_id: chatId, text }, json: true });\nif (!result || result.ok !== true) throw new Error('Telegram notification was rejected');\nreturn [{ json: { telegramStatus: 'sent', alertId: alert.id, messageId: result.result?.message_id || null } }];"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+              "leftValue": "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "position": [
         3080,
         0
       ],
-      "id": "9f0efcdb-bd93-519a-9e78-b692c2a5af8d",
+      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+    },
+    {
+      "name": "15 · Gửi thông báo Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "={{ [\n  'MEDICAREGUARD — Phát hiện tấn công danh tính',\n  'Mức độ: ' + $('14 · Tạo cảnh báo SOC').first().json.severity + ' · Điểm rủi ro: ' + $('14 · Tạo cảnh báo SOC').first().json.risk_score + '/100',\n  'Tài khoản: ' + $('09 · Tính điểm rủi ro').first().json.userEmail + ' (' + ($('09 · Tính điểm rủi ro').first().json.history.role_name || 'không rõ') + ')',\n  'Địa chỉ IP nguồn: ' + $('09 · Tính điểm rủi ro').first().json.suspiciousIp,\n  'Dấu hiệu: ' + $('09 · Tính điểm rủi ro').first().json.detections.join(', '),\n  'MITRE ATT&CK: ' + $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique,\n  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('14 · Tạo cảnh báo SOC').first().json.id,\n  'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,\n].join('\\n') }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        3300,
+        0
+      ],
+      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
+      "credentials": {
+        "telegramApi": {
+          "id": "mg-telegram-credential",
+          "name": "MedicareGuard Telegram"
+        }
+      },
       "onError": "stopWorkflow"
     },
     {
@@ -291,10 +336,10 @@
         "options": {}
       },
       "position": [
-        3300,
+        3520,
         0
       ],
-      "id": "1c686689-0223-5ef0-b42a-7885fd251667"
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
     },
     {
       "name": "17 · Ghi nhật ký kiểm toán",
@@ -306,10 +351,10 @@
         "options": {}
       },
       "position": [
-        3520,
+        3740,
         0
       ],
-      "id": "e4bbc74d-f859-5e03-aa2a-e92c3d18a4db",
+      "id": "00943841-e411-5de0-aba8-96add37ffb49",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -341,16 +386,16 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 19, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
         "options": {
           "timeout": 15000
         }
       },
       "position": [
-        3740,
+        3960,
         0
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
       "onError": "stopWorkflow"
     },
     {
@@ -358,7 +403,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 19 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
+        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 20 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
         "height": 170,
         "width": 1900,
         "color": 4
@@ -367,7 +412,7 @@
         0,
         -420
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
     },
     {
       "name": "Ghi chú — Phát hiện & Chấm điểm",
@@ -383,7 +428,7 @@
         0,
         -220
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3"
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
       "name": "Ghi chú — AI, Cảnh báo & Duyệt",
@@ -399,7 +444,7 @@
         1500,
         -220
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
     }
   ],
   "connections": {
@@ -568,7 +613,25 @@
       "main": [
         [
           {
+            "node": "Telegram đã cấu hình?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram đã cấu hình?": {
+      "main": [
+        [
+          {
             "node": "15 · Gửi thông báo Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16 · Chờ quản trị viên duyệt",
             "type": "main",
             "index": 0
           }

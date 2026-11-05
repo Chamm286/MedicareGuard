@@ -165,7 +165,7 @@ const workflows = [
     version: "1.0.0",
     owner: "Tự động hóa SOC",
     targetSla: "5 phút",
-    nodeCount: 19,
+    nodeCount: 20,
     tags: ["danh tính", "dò mật khẩu", "leo thang đặc quyền", "MITRE ATT&CK", "Groq AI"],
     integrations: ["PostgreSQL", "Groq AI", "MITRE ATT&CK", "Telegram", "n8n phê duyệt"],
     stages: [
