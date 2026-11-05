@@ -1,14 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Activity, ArrowRight, Bell, CheckCircle2, Clock, Cpu, ExternalLink, GitBranch, Loader2, Play, Power, RefreshCw, RotateCcw, Server, Settings2, ShieldCheck, Timer, Workflow, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, ArrowRight, Bell, CheckCircle2, Clock, Cpu, ExternalLink, GitBranch, Loader2, Play, Power, RefreshCw, RotateCcw, Server, Settings2, ShieldCheck, Timer, Workflow, XCircle, Zap } from "lucide-react";
 import { api, useApi } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import { cn, formatDate, formatNumber, relativeTime, titleCase } from "@/lib/utils";
 import { DataTable, type Column } from "@/components/DataTable";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, PageHeader, Skeleton, StatCard, Toggle } from "@/components/ui";
 
-const STATUS_TONE: Record<string, string> = { success: "low", dispatched: "low", queued: "warning", failed: "critical", running: "info" };
+const STATUS_TONE: Record<string, string> = { success: "low", dispatched: "low", queued: "warning", failed: "critical", running: "info", awaiting_approval: "warning", approval_approved: "low", approval_rejected: "neutral" };
+const statusLabel = (status: string) => ({
+  awaiting_approval: "Chờ duyệt",
+  approval_approved: "Đã duyệt · chờ n8n",
+  approval_rejected: "Đã từ chối · chờ n8n",
+}[status] || titleCase(status));
 
 export default function AutomationPage() {
   const { success, error: toastError, toast } = useToast();
@@ -18,11 +24,19 @@ export default function AutomationPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<any>(null);
+  const [canApprove, setCanApprove] = useState(false);
+  const [approvalTarget, setApprovalTarget] = useState<{ run: any; decision: "approved" | "rejected" } | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+
+  useEffect(() => {
+    setCanApprove(getUser()?.role === "admin");
+  }, []);
 
   const list = data?.data || [];
   const summary = data?.summary;
   const runtime = summary?.runtime;
   const runs = executions.data?.data || [];
+  const pendingApprovals = runs.filter((run: any) => run.workflowId === "identity-attack" && run.status === "awaiting_approval" && run.approvalDecision === "pending");
   const selected = list.find((item: any) => item.id === selectedId);
   const selectedRuns = useMemo(() => runs.filter((run: any) => run.workflowId === selectedId), [runs, selectedId]);
 
@@ -63,6 +77,28 @@ export default function AutomationPage() {
     }
   };
 
+  const submitApproval = async () => {
+    if (!approvalTarget) return;
+    setApprovalBusy(true);
+    try {
+      await api(`/automation/executions/${encodeURIComponent(approvalTarget.run.id)}/approval`, {
+        method: "POST",
+        body: { decision: approvalTarget.decision },
+      });
+      success(
+        approvalTarget.decision === "approved" ? "Đã duyệt yêu cầu" : "Đã từ chối yêu cầu",
+        `Thực thi ${String(approvalTarget.run.id).slice(0, 8)} · ${approvalTarget.run.approvalUserEmail || "tài khoản không rõ"}`,
+      );
+      setApprovalTarget(null);
+      await executions.refetch();
+    } catch (err) {
+      toastError("Không thể ghi nhận quyết định", err instanceof Error ? err.message : "Lỗi không xác định");
+      executions.refetch();
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
   const columns: Column[] = [
     {
       key: "id",
@@ -75,7 +111,7 @@ export default function AutomationPage() {
       ),
     },
     { key: "workflowName", header: "Quy trình", width: "210px", render: (row) => <span className="text-[10.5px] text-slate-400">{row.workflowName}</span> },
-    { key: "status", header: "Trạng thái", width: "100px", render: (row) => <Badge tone={STATUS_TONE[row.status] || "neutral"} dot>{titleCase(row.status)}</Badge> },
+    { key: "status", header: "Trạng thái", width: "100px", render: (row) => <Badge tone={STATUS_TONE[row.status] || "neutral"} dot>{statusLabel(row.status)}</Badge> },
     { key: "mode", header: "Kích hoạt", width: "150px", render: (row) => <div><p className="text-[9.5px] text-slate-500">{titleCase(row.mode)}</p><p className="text-[8.5px] text-slate-700">{row.triggeredBy}</p></div> },
     { key: "nodeCount", header: "Nút", width: "70px", render: (row) => <span className="font-mono text-[9.5px] text-slate-500">{row.nodeCount || "—"}</span> },
     { key: "durationMs", header: "Thời lượng", width: "90px", render: (row) => <span className="font-mono text-[9.5px] text-slate-500">{row.durationMs ? `${row.durationMs}ms` : "—"}</span> },
@@ -213,6 +249,37 @@ export default function AutomationPage() {
       )}
 
       <Card className="mt-4">
+        {pendingApprovals.length > 0 && (
+          <div className="border-b border-high/15 bg-high/[0.03] p-3.5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-display text-sm font-semibold text-slate-100">Chờ quản trị viên duyệt</h2>
+                <p className="mt-0.5 text-[10px] text-slate-500">Quyết định được ghi vào nhật ký kiểm toán; n8n kiểm tra tối đa mỗi 70 giây để tiếp tục workflow.</p>
+              </div>
+              <Badge tone="warning" dot>{pendingApprovals.length} chờ duyệt</Badge>
+            </div>
+            <div className="space-y-2">
+              {pendingApprovals.map((run: any) => (
+                <div key={run.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium text-slate-200">{run.approvalUserEmail || "Tài khoản không rõ"}</p>
+                    <p className="mt-1 text-[9px] text-slate-500">
+                      Rủi ro {run.approvalRiskScore ?? "—"}/100 · execution {String(run.id).slice(0, 8)} · {relativeTime(run.created_at)}
+                    </p>
+                  </div>
+                  {canApprove ? (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="danger" icon={XCircle} onClick={() => setApprovalTarget({ run, decision: "rejected" })}>Từ chối</Button>
+                      <Button size="sm" variant="primary" icon={CheckCircle2} onClick={() => setApprovalTarget({ run, decision: "approved" })}>Duyệt</Button>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] text-slate-600">Chỉ quản trị viên mới có thể quyết định</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] p-3.5">
           <div className="flex items-center gap-2">
             <h2 className="font-display text-sm font-semibold text-slate-200">Lịch sử thực hiện</h2>
@@ -279,7 +346,7 @@ export default function AutomationPage() {
                   {selectedRuns.slice(0, 5).map((run: any) => (
                     <div key={run.id} className="flex items-center justify-between rounded-lg border border-white/[0.04] px-2.5 py-1.5">
                       <div className="flex items-center gap-2">
-                        {run.status === "failed" ? <RotateCcw className="h-3 w-3 text-critical" /> : <CheckCircle2 className="h-3 w-3 text-low" />}
+                        {run.status === "failed" ? <RotateCcw className="h-3 w-3 text-critical" /> : run.status === "awaiting_approval" ? <Clock className="h-3 w-3 text-high" /> : <CheckCircle2 className="h-3 w-3 text-low" />}
                         <span className="font-mono text-[9px] text-slate-500">{String(run.id).slice(0, 8)}</span>
                         <span className="text-[9px] text-slate-600">{run.triggeredBy}</span>
                       </div>
@@ -291,6 +358,35 @@ export default function AutomationPage() {
                 <p className="rounded-lg border border-dashed border-white/[0.05] px-3 py-4 text-center text-[9px] text-slate-700">Không có lần thực thi nào được ghi lại cho quy trình công việc này.</p>
               )}
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(approvalTarget)}
+        onClose={() => { if (!approvalBusy) setApprovalTarget(null); }}
+        title={approvalTarget?.decision === "approved" ? "Xác nhận duyệt" : "Xác nhận từ chối"}
+        description="Quyết định sẽ được ghi vào audit log và workflow sẽ tiếp tục xử lý."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" disabled={approvalBusy} onClick={() => setApprovalTarget(null)}>Hủy</Button>
+            <Button
+              variant={approvalTarget?.decision === "approved" ? "primary" : "danger"}
+              icon={approvalTarget?.decision === "approved" ? CheckCircle2 : XCircle}
+              loading={approvalBusy}
+              onClick={submitApproval}
+            >
+              {approvalTarget?.decision === "approved" ? "Duyệt yêu cầu" : "Từ chối yêu cầu"}
+            </Button>
+          </>
+        }
+      >
+        {approvalTarget && (
+          <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3 text-[11px]">
+            <p className="text-slate-400">Tài khoản: <span className="text-slate-200">{approvalTarget.run.approvalUserEmail || "Không rõ"}</span></p>
+            <p className="mt-1 text-slate-400">Điểm rủi ro: <span className="font-mono text-high">{approvalTarget.run.approvalRiskScore ?? "—"}/100</span></p>
+            <p className="mt-1 text-slate-400">Execution: <span className="font-mono text-slate-300">{approvalTarget.run.id}</span></p>
           </div>
         )}
       </Modal>

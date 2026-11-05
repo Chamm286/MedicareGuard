@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const base = process.env.API_URL || "http://localhost:4000/api";
 
 const request = async (path, options = {}) => {
@@ -97,6 +98,61 @@ const run = async () => {
   });
   results.push({ name: "POST /ai/chat", status: chat.status, ok: chat.ok });
 
+  const approvalExecutionId = `smoke-approval-${crypto.randomUUID()}`;
+  const approvalPath = `/automation/executions/${approvalExecutionId}/approval`;
+  const approvalRequest = await request(`${approvalPath}-request`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ workflowId: "identity-attack", userEmail: "viewer@medicareguard.io", riskScore: 85 }),
+  });
+  results.push({
+    name: "identity workflow records a pending frontend approval",
+    status: approvalRequest.status,
+    ok: approvalRequest.status === 202 && approvalRequest.body?.data?.decision === "pending",
+  });
+  const approvalPending = await request(approvalPath, { headers });
+  results.push({
+    name: "identity workflow exposes the pending approval state",
+    status: approvalPending.status,
+    ok: approvalPending.ok && approvalPending.body?.data?.decision === "pending",
+  });
+  const approvalDecision = await request(approvalPath, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ decision: "approved" }),
+  });
+  results.push({
+    name: "admin can approve an identity workflow from the frontend API",
+    status: approvalDecision.status,
+    ok: approvalDecision.ok && approvalDecision.body?.data?.decision === "approved",
+  });
+  const approvalResolved = await request(approvalPath, { headers });
+  results.push({
+    name: "n8n polling endpoint returns the admin decision",
+    status: approvalResolved.status,
+    ok: approvalResolved.ok && approvalResolved.body?.data?.decision === "approved",
+  });
+  const duplicateApproval = await request(approvalPath, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ decision: "rejected" }),
+  });
+  results.push({
+    name: "identity approval decision is one-time",
+    status: duplicateApproval.status,
+    ok: duplicateApproval.status === 409,
+  });
+  const approvalComplete = await request(`/automation/executions/${approvalExecutionId}/complete`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ workflowId: "identity-attack", status: "success", message: "Approval API smoke test completed" }),
+  });
+  results.push({
+    name: "identity approval smoke execution is finalized",
+    status: approvalComplete.status,
+    ok: approvalComplete.ok && approvalComplete.body?.data?.status === "success",
+  });
+
   const suiteResponse = await request("/automation/workflows", { headers });
   const suite = suiteResponse.body?.data || [];
   const suiteSummary = suiteResponse.body?.summary || {};
@@ -108,7 +164,7 @@ const run = async () => {
     "compliance-evidence": 19,
     "ecommerce-fraud-response": 13,
     "live-attack-monitor": 18,
-    "identity-attack": 20,
+    "identity-attack": 23,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
@@ -123,9 +179,9 @@ const run = async () => {
     ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Groq AI")),
   });
   results.push({
-    name: "automation suite totals 123 nodes",
+    name: "automation suite totals 126 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 123,
+    ok: suiteResponse.ok && suiteSummary.nodes === 126,
   });
   results.push({
     name: "automation node counts match the compact design",

@@ -1,6 +1,6 @@
 # n8n response workflows
 
-MedicareGuard ships focused n8n playbooks. Workflows stay at **5–20 executable nodes** (the identity playbook has 18 numbered stages plus its Groq model node and optional Telegram gate; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
+MedicareGuard ships focused n8n playbooks. Workflows stay at **5–23 executable nodes** (the identity playbook has 18 numbered stages plus supporting AI, Telegram, and frontend approval nodes; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
@@ -111,7 +111,7 @@ Giao diện SOC có thể chạy demo bằng tài khoản không phải quản t
 }
 ```
 
-Workflow chỉ phân tích dữ liệu sự kiện được gửi vào; không thử đăng nhập và không thay đổi quyền tài khoản. Khi điểm rủi ro từ 70 trở lên, workflow tạo cảnh báo rồi tạm dừng tại **Chờ quản trị viên duyệt**. Tin nhắn Telegram dẫn tới execution đang chờ trong n8n; quản trị viên xem xét và tiếp tục execution để hoàn tất bước kiểm toán.
+Workflow chỉ phân tích dữ liệu sự kiện được gửi vào; không thử đăng nhập và không thay đổi quyền tài khoản. Khi điểm rủi ro từ 70 trở lên, workflow tạo cảnh báo rồi tạm dừng tại **Chờ quản trị viên duyệt**. Quản trị viên duyệt/từ chối trong bảng **Tự động hóa SOAR** trên frontend; n8n kiểm tra quyết định định kỳ, ghi audit log rồi hoàn tất execution.
 
 ## Phone alerts
 

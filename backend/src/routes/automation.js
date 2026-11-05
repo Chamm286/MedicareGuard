@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 const express = require("express");
 const { query } = require("../config/db");
 const { asyncHandler, HttpError } = require("../utils/http");
-const { requirePermission } = require("../middleware/auth");
+const { authorize, requirePermission } = require("../middleware/auth");
 const { recordActivity, recordAudit } = require("../services/audit");
 const { workflows, byId } = require("../config/automation");
 const { n8nBaseUrl, probeN8n, simulateAction, finalizeExecution } = require("../services/automationRuntime");
@@ -136,11 +136,127 @@ router.get(
         mode: row.metadata?.mode || "manual",
         durationMs: row.metadata?.durationMs || null,
         nodeCount: row.metadata?.nodeCount || null,
+        approvalDecision: row.metadata?.approvalDecision || null,
+        approvalUserEmail: row.metadata?.approvalUserEmail || null,
+        approvalRiskScore: row.metadata?.approvalRiskScore ?? null,
         triggeredBy: row.actor_email || "system",
         message: row.message,
         created_at: row.created_at,
       })),
     });
+  }),
+);
+
+router.post(
+  "/executions/:executionId/approval-request",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const executionId = String(req.params.executionId);
+    const { workflowId, userEmail, riskScore, alertId } = req.body || {};
+    if (workflowId !== "identity-attack") throw new HttpError(400, "Yêu cầu duyệt không hợp lệ");
+    if (typeof userEmail !== "string" || userEmail.length > 254) throw new HttpError(400, "Tài khoản cần duyệt không hợp lệ");
+    if (!Number.isFinite(Number(riskScore)) || Number(riskScore) < 70 || Number(riskScore) > 100) {
+      throw new HttpError(400, "Điểm rủi ro phải từ 70 đến 100");
+    }
+
+    const approvalMetadata = {
+      workflowId,
+      workflowName: byId(workflowId).name,
+      status: "awaiting_approval",
+      approvalDecision: "pending",
+      approvalRequestedAt: new Date().toISOString(),
+      approvalUserEmail: userEmail,
+      approvalRiskScore: Number(riskScore),
+      approvalAlertId: alertId ? String(alertId).slice(0, 64) : null,
+    };
+    const updated = await query(
+      `UPDATE activity_logs
+       SET level = 'warn', message = 'Đang chờ quản trị viên duyệt phát hiện tấn công danh tính',
+           metadata = metadata || $1::jsonb, updated_at = now()
+       WHERE event_type = 'automation' AND action = 'run' AND metadata->>'executionId' = $2
+       RETURNING id`,
+      [JSON.stringify(approvalMetadata), executionId],
+    );
+    if (!updated.rows.length) {
+      await query(
+        `INSERT INTO activity_logs
+          (level, event_type, actor_email, resource, resource_id, action, message, metadata)
+         VALUES ('warn', 'automation', 'n8n@medicareguard.io', 'automation_workflow', $1, 'run', $2, $3)`,
+        [
+          workflowId,
+          "Đang chờ quản trị viên duyệt phát hiện tấn công danh tính",
+          JSON.stringify({ executionId, ...approvalMetadata, mode: "webhook", nodeCount: byId(workflowId).nodeCount }),
+        ],
+      );
+    }
+
+    res.status(202).json({ data: { executionId, status: "awaiting_approval", decision: "pending" } });
+  }),
+);
+
+router.get(
+  "/executions/:executionId/approval",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `SELECT metadata
+       FROM activity_logs
+       WHERE event_type = 'automation' AND action = 'run'
+         AND resource_id = 'identity-attack'
+         AND metadata->>'executionId' = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.params.executionId],
+    );
+    const metadata = result.rows[0]?.metadata;
+    if (!metadata?.approvalDecision) throw new HttpError(404, "Không tìm thấy yêu cầu duyệt");
+    res.json({
+      data: {
+        executionId: req.params.executionId,
+        decision: metadata.approvalDecision,
+        reviewer: metadata.approvalReviewer || null,
+        decidedAt: metadata.approvalDecidedAt || null,
+      },
+    });
+  }),
+);
+
+router.post(
+  "/executions/:executionId/approval",
+  authorize("admin"),
+  asyncHandler(async (req, res) => {
+    const decision = String(req.body?.decision || "").toLowerCase();
+    if (!["approved", "rejected"].includes(decision)) throw new HttpError(400, "decision phải là approved hoặc rejected");
+    const metadata = {
+      status: decision === "approved" ? "approval_approved" : "approval_rejected",
+      approvalDecision: decision,
+      approvalReviewer: req.user?.email,
+      approvalDecidedAt: new Date().toISOString(),
+    };
+    const updated = await query(
+      `UPDATE activity_logs
+       SET level = $1, message = $2, metadata = metadata || $3::jsonb, updated_at = now()
+       WHERE event_type = 'automation' AND action = 'run'
+         AND resource_id = 'identity-attack'
+         AND metadata->>'executionId' = $4
+         AND metadata->>'status' = 'awaiting_approval'
+         AND metadata->>'approvalDecision' = 'pending'
+       RETURNING metadata`,
+      [
+        decision === "approved" ? "info" : "warn",
+        decision === "approved" ? "Quản trị viên đã duyệt phát hiện tấn công danh tính" : "Quản trị viên đã từ chối phát hiện tấn công danh tính",
+        JSON.stringify(metadata),
+        req.params.executionId,
+      ],
+    );
+    if (!updated.rows.length) throw new HttpError(409, "Yêu cầu duyệt không còn chờ xử lý");
+    await recordAudit({
+      req,
+      action: decision === "approved" ? "approve_identity_detection" : "reject_identity_detection",
+      resource: "automation",
+      resourceId: req.params.executionId,
+      details: { workflowId: "identity-attack", decision, riskScore: updated.rows[0].metadata.approvalRiskScore },
+    });
+    res.json({ data: { executionId: req.params.executionId, decision, reviewer: req.user?.email, decidedAt: metadata.approvalDecidedAt } });
   }),
 );
 

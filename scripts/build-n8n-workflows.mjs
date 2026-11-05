@@ -140,7 +140,7 @@ const ifNode = (name, left, right, position) =>
             id: id(),
             leftValue: left,
             rightValue: right,
-            operator: { type: typeof right === "number" ? "number" : "boolean", operation: typeof right === "number" ? "gte" : "equals" },
+            operator: { type: typeof right === "number" ? "number" : typeof right === "boolean" ? "boolean" : "string", operation: typeof right === "number" ? "gte" : "equals" },
           },
         ],
         combinator: "and",
@@ -533,6 +533,9 @@ const buildIdentityWorkflow = (spec) => {
     telegram: "15 · Gửi thông báo Telegram",
     telegramGate: "Telegram đã cấu hình?",
     approval: "16 · Chờ quản trị viên duyệt",
+    approvalRequest: "Ghi nhận yêu cầu duyệt",
+    approvalCheck: "Kiểm tra quyết định duyệt",
+    approvalPending: "Chưa có quyết định?",
     audit: "17 · Ghi nhật ký kiểm toán",
     complete: "18 · Hoàn tất thực thi",
   };
@@ -639,20 +642,19 @@ VALUES ('${sqlRef(N.mitre, "alertTitleSql")}', '${sqlRef(N.mitre, "alertDescript
   '${sqlRef(N.mitre, "evidenceJsonSql")}'::jsonb)
 RETURNING id, title, severity, risk_score, source_ip;`;
 
+  const approvalDecision = `{{ $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required' }}`;
+  const approvalReviewer = `{{ $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.reviewer : '' }}`;
   const approvalQuery = `INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)
-VALUES ('${sqlRef(N.validate, "userEmail")}', 'identity_detection_review', 'alerts',
-  (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '${sqlRef(N.validate, "executionId")}' ORDER BY created_at DESC LIMIT 1),
-  '${sqlRef(N.unusual, "suspiciousIpSql")}',
-  jsonb_build_object('workflowId', '${spec.id}', 'executionId', '${sqlRef(N.validate, "executionId")}',
-    'riskScore', ${sqlRef(N.score, "riskScore")},
-    'adminDecision', CASE
-      WHEN lower(NULLIF('{{ String($json.body?.decision || $json.decision || "").replace(/'/g, "''") }}', '')) IN ('approve','approved') THEN 'approved'
-      WHEN lower(NULLIF('{{ String($json.body?.decision || $json.decision || "").replace(/'/g, "''") }}', '')) IN ('reject','rejected') THEN 'rejected'
-      WHEN ${sqlRef(N.score, "riskScore")} >= 70 THEN 'resumed'
-      ELSE 'not_required' END))
-RETURNING id;`;
+  VALUES ('${sqlRef(N.validate, "userEmail")}', 'identity_detection_review', 'alerts',
+    (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '${sqlRef(N.validate, "executionId")}' ORDER BY created_at DESC LIMIT 1),
+    '${sqlRef(N.unusual, "suspiciousIpSql")}',
+    jsonb_build_object('workflowId', '${spec.id}', 'executionId', '${sqlRef(N.validate, "executionId")}',
+      'riskScore', ${sqlRef(N.score, "riskScore")},
+      'adminDecision', '${approvalDecision}',
+      'reviewer', '${approvalReviewer}'))
+  RETURNING id;`;
 
-  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
+    const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70, admin_decision: $('${N.approvalCheck}').first().json.data.decision }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
 
   const nodes = [
     node(N.webhook, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, pos(0), { webhookId: id() }),
@@ -694,8 +696,11 @@ RETURNING id;`;
 ].join('\\n') }}`,
       additionalFields: { appendAttribution: false },
     }, pos(15), { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "stopWorkflow" }),
-    node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "webhook", httpMethod: "POST", responseMode: "onReceived", options: {} }, pos(16)),
-    postgres(N.audit, approvalQuery, pos(17), { onError: "stopWorkflow" }),
+    http(N.approvalRequest, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval-request' }}`, pos(16), jsonBody(`workflowId: '${spec.id}', userEmail: $('${N.score}').first().json.userEmail, riskScore: $('${N.score}').first().json.riskScore, alertId: $('${N.alert}').first().json.id`), { onError: "stopWorkflow" }),
+    node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "timeInterval", amount: 70, unit: "seconds", options: {} }, pos(17)),
+    http(N.approvalCheck, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval' }}`, pos(18), null, { onError: "stopWorkflow" }),
+    ifNode(N.approvalPending, `={{ $json.data.decision }}`, "pending", pos(19)),
+    postgres(N.audit, approvalQuery, pos(20), { onError: "stopWorkflow" }),
     node(N.complete, "n8n-nodes-base.httpRequest", 4.2, {
       method: "POST",
       url: `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/complete' }}`,
@@ -709,10 +714,10 @@ RETURNING id;`;
       specifyBody: "json",
       jsonBody: completionBody,
       options: { timeout: 15000 },
-    }, pos(18), { onError: "stopWorkflow" }),
-    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 20 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
+    }, pos(21), { onError: "stopWorkflow" }),
+    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
     sticky("Ghi chú — Phát hiện & Chấm điểm", "## ① Tương quan danh tính\nĐếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với lịch sử PostgreSQL, phát hiện truy cập tài nguyên quản trị và tính risk score.", [0, -220], 1450, 145, 1),
-    sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quản trị viên duyệt trong execution của n8n trước khi ghi audit log.", [1500, -220], 1550, 145, 3),
+    sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ trước khi ghi audit log.", [1500, -220], 1550, 145, 3),
   ];
 
   const main = (target) => [{ node: target, type: "main", index: 0 }];
@@ -732,9 +737,12 @@ RETURNING id;`;
     [N.mitre]: { main: [main(N.evidence)] },
     [N.evidence]: { main: [main(N.alert)] },
     [N.alert]: { main: [main(N.telegramGate)] },
-    [N.telegramGate]: { main: [main(N.telegram), main(N.approval)] },
-    [N.telegram]: { main: [main(N.approval)] },
-    [N.approval]: { main: [main(N.audit)] },
+    [N.telegramGate]: { main: [main(N.telegram), main(N.approvalRequest)] },
+    [N.telegram]: { main: [main(N.approvalRequest)] },
+    [N.approvalRequest]: { main: [main(N.approval)] },
+    [N.approval]: { main: [main(N.approvalCheck)] },
+    [N.approvalCheck]: { main: [main(N.approvalPending)] },
+    [N.approvalPending]: { main: [main(N.approval), main(N.audit)] },
     [N.audit]: { main: [main(N.complete)] },
   };
 

@@ -326,20 +326,119 @@
       "onError": "stopWorkflow"
     },
     {
-      "name": "16 · Chờ quản trị viên duyệt",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
+      "name": "Ghi nhận yêu cầu duyệt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "resume": "webhook",
-        "httpMethod": "POST",
-        "responseMode": "onReceived",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('02 · Kiểm tra dữ liệu').first().json.executionId + '/approval-request' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', userEmail: $('09 · Tính điểm rủi ro').first().json.userEmail, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, alertId: $('14 · Tạo cảnh báo SOC').first().json.id }) }}"
       },
       "position": [
         3520,
         0
       ],
-      "id": "c7c3bc73-d523-5143-8032-5ce983461790"
+      "id": "c7c3bc73-d523-5143-8032-5ce983461790",
+      "onError": "stopWorkflow"
+    },
+    {
+      "name": "16 · Chờ quản trị viên duyệt",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 70,
+        "unit": "seconds",
+        "options": {}
+      },
+      "position": [
+        3740,
+        0
+      ],
+      "id": "00943841-e411-5de0-aba8-96add37ffb49"
+    },
+    {
+      "name": "Kiểm tra quyết định duyệt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('02 · Kiểm tra dữ liệu').first().json.executionId + '/approval' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "position": [
+        3960,
+        0
+      ],
+      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
+      "onError": "stopWorkflow"
+    },
+    {
+      "name": "Chưa có quyết định?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
+              "leftValue": "={{ $json.data.decision }}",
+              "rightValue": "pending",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        4180,
+        0
+      ],
+      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
       "name": "17 · Ghi nhật ký kiểm toán",
@@ -347,14 +446,14 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)\nVALUES ('{{ $('02 · Kiểm tra dữ liệu').first().json.userEmail }}', 'identity_detection_review', 'alerts',\n  (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}' ORDER BY created_at DESC LIMIT 1),\n  '{{ $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIpSql }}',\n  jsonb_build_object('workflowId', 'identity-attack', 'executionId', '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}',\n    'riskScore', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }},\n    'adminDecision', CASE\n      WHEN lower(NULLIF('{{ String($json.body?.decision || $json.decision || \"\").replace(/'/g, \"''\") }}', '')) IN ('approve','approved') THEN 'approved'\n      WHEN lower(NULLIF('{{ String($json.body?.decision || $json.decision || \"\").replace(/'/g, \"''\") }}', '')) IN ('reject','rejected') THEN 'rejected'\n      WHEN {{ $('09 · Tính điểm rủi ro').first().json.riskScore }} >= 70 THEN 'resumed'\n      ELSE 'not_required' END))\nRETURNING id;",
+        "query": "INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)\n  VALUES ('{{ $('02 · Kiểm tra dữ liệu').first().json.userEmail }}', 'identity_detection_review', 'alerts',\n    (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}' ORDER BY created_at DESC LIMIT 1),\n    '{{ $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIpSql }}',\n    jsonb_build_object('workflowId', 'identity-attack', 'executionId', '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}',\n      'riskScore', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }},\n      'adminDecision', '{{ $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required' }}',\n      'reviewer', '{{ $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.reviewer : '' }}'))\n  RETURNING id;",
         "options": {}
       },
       "position": [
-        3740,
+        4400,
         0
       ],
-      "id": "00943841-e411-5de0-aba8-96add37ffb49",
+      "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
       "credentials": {
         "postgres": {
           "id": "mg-postgres-credential",
@@ -386,16 +485,16 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 20, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, admin_decision: $('Kiểm tra quyết định duyệt').first().json.data.decision }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
         "options": {
           "timeout": 15000
         }
       },
       "position": [
-        3960,
+        4620,
         0
       ],
-      "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
+      "id": "e019fb1d-88f4-54d5-b495-87a0007fec8c",
       "onError": "stopWorkflow"
     },
     {
@@ -403,7 +502,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 20 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
+        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
         "height": 170,
         "width": 1900,
         "color": 4
@@ -412,7 +511,7 @@
         0,
         -420
       ],
-      "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722"
+      "id": "9619fd28-6e68-531d-b47e-189e21536dd8"
     },
     {
       "name": "Ghi chú — Phát hiện & Chấm điểm",
@@ -428,14 +527,14 @@
         0,
         -220
       ],
-      "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
+      "id": "339234ac-71d5-511e-83c2-88fad6ee218a"
     },
     {
       "name": "Ghi chú — AI, Cảnh báo & Duyệt",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quản trị viên duyệt trong execution của n8n trước khi ghi audit log.",
+        "content": "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ trước khi ghi audit log.",
         "height": 145,
         "width": 1550,
         "color": 3
@@ -444,7 +543,7 @@
         1500,
         -220
       ],
-      "id": "0062a290-9257-5f47-a261-2ed2cbde8693"
+      "id": "6c533bf0-10da-58fb-86f9-d94477a54e71"
     }
   ],
   "connections": {
@@ -631,7 +730,7 @@
         ],
         [
           {
-            "node": "16 · Chờ quản trị viên duyệt",
+            "node": "Ghi nhận yêu cầu duyệt",
             "type": "main",
             "index": 0
           }
@@ -639,6 +738,17 @@
       ]
     },
     "15 · Gửi thông báo Telegram": {
+      "main": [
+        [
+          {
+            "node": "Ghi nhận yêu cầu duyệt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ghi nhận yêu cầu duyệt": {
       "main": [
         [
           {
@@ -651,6 +761,35 @@
     },
     "16 · Chờ quản trị viên duyệt": {
       "main": [
+        [
+          {
+            "node": "Kiểm tra quyết định duyệt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kiểm tra quyết định duyệt": {
+      "main": [
+        [
+          {
+            "node": "Chưa có quyết định?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chưa có quyết định?": {
+      "main": [
+        [
+          {
+            "node": "16 · Chờ quản trị viên duyệt",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "17 · Ghi nhật ký kiểm toán",
