@@ -134,7 +134,8 @@ app.get([`${api}/docs`, `${api}/docs/`], (_req, res) => {
   res.type("html").send(docsHtml);
 });
 
-app.get("/api-docs", (_req, res) => { console.log("HIT /api-docs"); res.removeHeader("Content-Security-Policy"); res.type("html").send(docsHtml); });
+app.get("/api-docs", (_req, res) => { res.removeHeader("Content-Security-Policy"); res.type("html").send(docsHtml); });
+app.head("/api-docs", (_req, res) => { res.removeHeader("Content-Security-Policy"); res.status(200).end(); });
 
 app.use(notFound);
 app.use(errorHandler);
