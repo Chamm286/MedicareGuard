@@ -35,24 +35,33 @@
     },
     {
       "name": "🗄️ Tải đơn hàng",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id, order_number, shipping_name, total, status, risk_score, fraud_flags, ip_address, ip_country, ip_country_code, shipping_email FROM store_orders WHERE id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}' LIMIT 1;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/store/admin/orders/' + $('🔍 Kiểm tra dữ liệu').first().json.orderId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         440,
         0
       ],
       "id": "d9621189-c651-45e4-bed2-bed7c7b28463",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -60,7 +69,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nconst emailHtml = '<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;\">'\n  + '<div style=\"background-color: #0f172a; color: #fff; padding: 20px; text-align: center;\"><h2 style=\"margin: 0;\">🚨 CẢNH BÁO GIAN LẬN - MEDICAREGUARD</h2></div>'\n  + '<div style=\"padding: 20px; background-color: #f7fafc;\">'\n  + '<table style=\"width: 100%; border-collapse: collapse;\">'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Mã đơn hàng:</b></td><td>' + String(orderNumber) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>IP khách hàng:</b></td><td>' + String(ip) + ' (' + String(order.ip_country || base.country || 'không rõ') + ')</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Admin xử lý:</b></td><td>' + String(admin) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Lý do:</b></td><td>' + String(base.reason || 'Admin confirmed fraud') + '</td></tr>'\n  + '</table>'\n  + '<p style=\"margin-top: 20px; color: #e53e3e;\"><b>✅ Hệ thống đã tự động chặn IP và cập nhật SOC.</b></p>'\n  + '</div>'\n  + '<div style=\"background-color: #edf2f7; padding: 10px; text-align: center; font-size: 12px; color: #718096;\">Hệ thống MedicareGuard SOC tự động gửi.</div>'\n  + '</div>';\nreturn [{ json: { ...base, order, ip, orderNumber, order_id: orderNumber, admin, admin_email: admin, country: order.ip_country || base.country || 'không rõ', reason: 'Admin confirmed fraud', telegramText: text, emailHtml: emailHtml } }];"
+        "jsCode": "const base = $('🔍 Kiểm tra dữ liệu').first().json;\nconst order = $('🗄️ Tải đơn hàng').first().json?.data || $('🗄️ Tải đơn hàng').first().json || {};\nconst ip = order.ip_address || base.ip || 'không rõ';\nconst orderNumber = order.order_number || base.orderNumber || base.orderId;\nconst admin = base.adminEmail || 'admin@medicareguard.io';\nconst text = [\n  '✅ <b>ADMIN XÁC NHẬN GIAN LẬN — MEDICAREGUARD</b>',\n  '━━━━━━━━━━━━━━━━━━━━',\n  '<b>Đơn hàng</b>  <code>' + String(orderNumber) + '</code>',\n  '<b>IP khách</b>  <code>' + String(ip) + '</code>',\n  '<b>Quốc gia</b>  ' + String(order.ip_country || base.country || 'không rõ'),\n  '<b>Admin</b>  ' + String(admin),\n  '<b>Lý do</b>  Admin confirmed fraud',\n  '━━━━━━━━━━━━━━━━━━━━',\n  'Hệ thống đã tự động chặn IP và cập nhật SOC.',\n].join('\\n');\nconst emailHtml = '<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;\">'\n  + '<div style=\"background-color: #0f172a; color: #fff; padding: 20px; text-align: center;\"><h2 style=\"margin: 0;\">🚨 CẢNH BÁO GIAN LẬN - MEDICAREGUARD</h2></div>'\n  + '<div style=\"padding: 20px; background-color: #f7fafc;\">'\n  + '<table style=\"width: 100%; border-collapse: collapse;\">'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Mã đơn hàng:</b></td><td>' + String(orderNumber) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>IP khách hàng:</b></td><td>' + String(ip) + ' (' + String(order.ip_country || base.country || 'không rõ') + ')</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Admin xử lý:</b></td><td>' + String(admin) + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee;\"><b>Lý do:</b></td><td>' + String(base.reason || 'Admin confirmed fraud') + '</td></tr>'\n  + '</table>'\n  + '<p style=\"margin-top: 20px; color: #e53e3e;\"><b>✅ Hệ thống đã tự động chặn IP và cập nhật SOC.</b></p>'\n  + '</div>'\n  + '<div style=\"background-color: #edf2f7; padding: 10px; text-align: center; font-size: 12px; color: #718096;\">Hệ thống MedicareGuard SOC tự động gửi.</div>'\n  + '</div>';\nreturn [{ json: { ...base, order, ip, orderNumber, order_id: orderNumber, admin, admin_email: admin, country: order.ip_country || base.country || 'không rõ', reason: 'Admin confirmed fraud', telegramText: text, emailHtml: emailHtml } }];"
       },
       "position": [
         660,
@@ -224,24 +233,37 @@
     },
     {
       "name": "📝 Ghi nhận phản hồi",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE store_security_events SET metadata = metadata || jsonb_build_object('fraudConfirmedAt', now()::text, 'adminConfirmed', true) WHERE order_id = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}'::uuid; UPDATE alerts SET status = 'resolved', metadata = metadata || jsonb_build_object('fraudConfirmed', true, 'confirmedAt', now()::text), updated_at = now() WHERE metadata->>'orderId' = '{{ $('🔍 Kiểm tra dữ liệu').first().json.orderId }}';",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/store/admin/orders/' + $('🔍 Kiểm tra dữ liệu').first().json.orderId + '/fraud-confirmed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}"
       },
       "position": [
         1980,
         0
       ],
       "id": "2a7ac94e-0cb9-41b1-8a57-8f22fed6879f",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {

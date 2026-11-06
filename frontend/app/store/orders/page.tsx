@@ -46,41 +46,41 @@ export default function OrdersPage() {
   if (!customer && !getStoreToken()) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 px-4 py-24 text-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-300"><PackageSearch className="h-7 w-7" /></span>
-        <div><h1 className="font-display text-xl font-semibold text-white">Đăng nhập để xem đơn hàng</h1><p className="mt-1 text-xs text-slate-500">Bạn cũng có thể tra cứu đơn khách vãng lai bằng mã đơn và email.</p></div>
-        <div className="flex gap-2"><Link href="/store/account" className="btn btn-primary h-10 px-5 text-xs">Đăng nhập</Link><Link href="/store" className="btn btn-secondary h-10 px-5 text-xs">Về cửa hàng</Link></div>
+        <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-50 text-blue-600"><PackageSearch className="h-8 w-8" /></span>
+        <div><h1 className="font-display text-2xl font-bold text-slate-900">Đăng nhập để xem đơn hàng</h1><p className="mt-1 text-sm text-slate-500">Bạn cũng có thể tra cứu đơn khách vãng lai bằng mã đơn và email.</p></div>
+        <div className="flex gap-2"><Link href="/store/account" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 text-xs font-semibold text-white shadow-lg shadow-blue-500/25">Đăng nhập</Link><Link href="/store" className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">Về cửa hàng</Link></div>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="flex items-end justify-between gap-4">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-300">Tài khoản</p><h1 className="mt-1 font-display text-2xl font-semibold text-white">Đơn hàng của tôi</h1></div>
-        <Link href="/store" className="text-xs text-slate-500 hover:text-brand-300">Mua sắm tiếp</Link>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600">Tài khoản</p><h1 className="mt-1 font-display text-3xl font-bold text-slate-900">Đơn hàng của tôi</h1></div>
+        <Link href="/store" className="text-sm font-medium text-slate-500 transition hover:text-blue-700">Mua sắm tiếp →</Link>
       </div>
 
       {loading ? (
-        <div className="mt-6 space-y-3">{Array.from({ length: 3 }).map((_, index) => <div key={index} className="skeleton h-24 rounded-2xl" />)}</div>
+        <div className="mt-6 space-y-3">{Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-24 animate-pulse rounded-3xl bg-slate-100" />)}</div>
       ) : error ? (
-        <div className="panel mt-6 p-6 text-sm text-red-300">{error}</div>
+        <div className="mt-6 rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">{error}</div>
       ) : !orders.length ? (
-        <div className="panel mt-6 flex flex-col items-center gap-3 py-16 text-center"><PackageSearch className="h-9 w-9 text-slate-700" /><p className="text-sm text-slate-400">Bạn chưa có đơn hàng nào.</p><Link href="/store" className="btn btn-primary h-9 px-4 text-xs">Bắt đầu mua sắm</Link></div>
+        <div className="mt-6 flex flex-col items-center gap-3 rounded-3xl border border-slate-200 bg-white py-16 text-center shadow-sm"><PackageSearch className="h-9 w-9 text-slate-300" /><p className="text-sm text-slate-500">Bạn chưa có đơn hàng nào.</p><Link href="/store" className="inline-flex h-9 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 text-xs font-semibold text-white shadow-lg shadow-blue-500/25">Bắt đầu mua sắm</Link></div>
       ) : (
         <div className="mt-6 space-y-3">
           {orders.map((order) => (
-            <Link key={order.id} href={`/store/order/${order.id}`} className="panel panel-hover flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <Link key={order.id} href={`/store/order/${order.id}`} className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-mono text-sm text-white">{order.order_number}</p>
-                  <span className={cn("chip", order.status === "cancelled" ? "border-critical/25 bg-critical/10 text-critical" : order.status === "on_hold" ? "border-high/25 bg-high/10 text-high" : order.status === "delivered" ? "border-low/25 bg-low/10 text-low" : "border-brand-400/25 bg-brand-500/10 text-brand-200")}>{orderStatusLabel[order.status] || order.status}</span>
-                  {order.risk_score >= 50 && <span className="chip border-high/25 bg-high/10 text-high"><ShieldAlert className="h-3 w-3" /> Rủi ro {order.risk_score}</span>}
+                  <p className="font-mono text-sm font-semibold text-slate-900">{order.order_number}</p>
+                  <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-semibold", order.status === "cancelled" ? "border-rose-200 bg-rose-50 text-rose-700" : order.status === "on_hold" ? "border-amber-200 bg-amber-50 text-amber-700" : order.status === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-blue-200 bg-blue-50 text-blue-700")}>{orderStatusLabel[order.status] || order.status}</span>
+                  {order.risk_score >= 50 && <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700"><ShieldAlert className="h-3 w-3" /> Rủi ro {order.risk_score}</span>}
                 </div>
-                <p className="mt-1.5 text-[10px] text-slate-500">{formatStoreDate(order.created_at)} · {order.shipping_city}, {order.shipping_country}</p>
+                <p className="mt-1.5 text-[11px] text-slate-500">{formatStoreDate(order.created_at)} · {order.shipping_city}, {order.shipping_country}</p>
               </div>
               <div className="flex items-center justify-between gap-4 sm:justify-end">
-                <div className="text-right"><p className="text-sm font-semibold text-white">{formatVnd(order.total)}</p><p className="text-[10px] text-slate-500">{paymentStatusLabel[order.payment_status] || order.payment_status}</p></div>
-                <ArrowRight className="h-4 w-4 text-slate-600" />
+                <div className="text-right"><p className="text-sm font-bold text-slate-900">{formatVnd(order.total)}</p><p className="text-[11px] text-slate-500">{paymentStatusLabel[order.payment_status] || order.payment_status}</p></div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
               </div>
             </Link>
           ))}

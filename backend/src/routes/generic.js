@@ -190,7 +190,11 @@ const createCrudRouter = (resource) => {
     const fields = columns.filter((column) => req.body[column] !== undefined);
     if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
     const values = fields.map((column) => serializeValue(column, req.body[column], jsonColumns));
-    const sets = fields.map((column, index) => `${column} = $${index + 1}`);
+    const sets = fields.map((column, index) => (
+      jsonColumns.includes(column)
+        ? `${column} = COALESCE(${column}, '{}'::jsonb) || $${index + 1}::jsonb`
+        : `${column} = $${index + 1}`
+    ));
     values.push(req.params.id);
     const result = await query(
       `UPDATE ${table} SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`,

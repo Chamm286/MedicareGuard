@@ -269,10 +269,9 @@ router.post(
 
 router.get(
   "/context",
-  requirePermission("ai:use"),
   asyncHandler(async (_req, res) => {
     const context = await getContext();
-    res.json({ data: context });
+    res.json({ context });
   }),
 );
 
