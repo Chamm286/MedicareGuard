@@ -104,6 +104,32 @@ const run = async () => {
     status: identityContext.status,
     ok: identityContext.ok && identityContext.body?.data?.email === "viewer@medicareguard.io",
   });
+  const recentSessions = await request("/automation/identity/sessions?userEmail=viewer%40medicareguard.io", { headers });
+  results.push({
+    name: "identity sessions API returns recent session history",
+    status: recentSessions.status,
+    ok: recentSessions.ok && Array.isArray(recentSessions.body?.data),
+  });
+  const invalidTravelAlert = await request("/automation/impossible-travel/alerts", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ executionId: "smoke-travel" }),
+  });
+  results.push({
+    name: "impossible-travel alert API validates required fields",
+    status: invalidTravelAlert.status,
+    ok: invalidTravelAlert.status === 400,
+  });
+  const unapprovedTravelRevoke = await request(`/automation/impossible-travel/sessions/${crypto.randomUUID()}/revoke`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ executionId: "smoke-travel", userEmail: "viewer@medicareguard.io" }),
+  });
+  results.push({
+    name: "impossible-travel session revoke requires an approval request",
+    status: unapprovedTravelRevoke.status,
+    ok: unapprovedTravelRevoke.status === 404,
+  });
   const invalidIdentityEvidence = await request("/automation/identity/evidence", {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
@@ -202,12 +228,13 @@ const run = async () => {
     "ecommerce-fraud-response": 13,
     "live-attack-monitor": 18,
     "identity-attack": 23,
+    "impossible-travel": 24,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
-    name: "automation suite exposes 7 workflows",
+    name: "automation suite exposes 8 workflows",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suite.length === 7 && suiteSummary.active === enabledWorkflowCount,
+    ok: suiteResponse.ok && suite.length === 8 && suiteSummary.active === enabledWorkflowCount,
   });
   const identityWorkflow = suite.find((workflow) => workflow.id === "identity-attack");
   results.push({
@@ -216,9 +243,9 @@ const run = async () => {
     ok: Boolean(identityWorkflow && identityWorkflow.name === "Phát hiện tấn công danh tính" && identityWorkflow.integrations.includes("Groq AI")),
   });
   results.push({
-    name: "automation suite totals 126 nodes",
+    name: "automation suite totals 150 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 126,
+    ok: suiteResponse.ok && suiteSummary.nodes === 150,
   });
   results.push({
     name: "automation node counts match the compact design",
@@ -231,6 +258,17 @@ const run = async () => {
     name: "identity workflow has more than 15 executable nodes and no PostgreSQL nodes",
     status: suiteResponse.status,
     ok: identityExecutableNodes.length > 15 && identityExecutableNodes.every((node) => node.type !== "n8n-nodes-base.postgres"),
+  });
+  const travelWorkflow = suite.find((workflow) => workflow.id === "impossible-travel");
+  const travelDefinition = require("../../n8n/workflows/impossible-travel.json");
+  const travelExecutableNodes = travelDefinition.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote");
+  results.push({
+    name: "impossible-travel workflow has 24 executable nodes and no SQL nodes",
+    status: suiteResponse.status,
+    ok: Boolean(travelWorkflow && travelWorkflow.nodeCount === 24)
+      && travelExecutableNodes.length === 24
+      && travelExecutableNodes.every((node) => node.type !== "n8n-nodes-base.postgres")
+      && travelDefinition.connections["20 · Mô hình chat Groq"]?.ai_languageModel?.[0]?.[0]?.node === "19 · Chuyên gia AI phân tích danh tính",
   });
 
   const meta = await request("/_meta/endpoints", { headers });
