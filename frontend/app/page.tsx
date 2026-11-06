@@ -18,7 +18,7 @@ export default function IndexPage() {
           <span className="absolute inset-0 animate-pulse-ring rounded-2xl border border-brand-400/30" />
           <span className="font-display text-xl font-bold text-brand-300">MG</span>
         </div>
-        <p className="text-sm text-slate-500">Establishing secure session…</p>
+        <p className="text-sm text-slate-500">Đang thiết lập phiên bảo mật…</p>
       </div>
     </div>
   );

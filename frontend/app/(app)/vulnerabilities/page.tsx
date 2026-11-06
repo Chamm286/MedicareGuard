@@ -83,15 +83,15 @@ export default function VulnerabilitiesPage() {
     },
     {
       key: "title",
-      header: "Vulnerability",
+      header: "Tính dễ bị tổn thương",
       render: (row) => (
         <div className="min-w-0">
           <p className="max-w-[340px] truncate text-[12px] font-medium text-slate-200">{row.title}</p>
-          <p className="mt-0.5 max-w-[340px] truncate text-[9.5px] text-slate-600">{row.description || "No description"}</p>
+          <p className="mt-0.5 max-w-[340px] truncate text-[9.5px] text-slate-600">{row.description || "Không có mô tả"}</p>
         </div>
       ),
     },
-    { key: "severity", header: "Severity", width: "94px", render: (row) => <SeverityBadge severity={row.severity} /> },
+    { key: "severity", header: "Mức độ", width: "94px", render: (row) => <SeverityBadge severity={row.severity} /> },
     {
       key: "cvss_score",
       header: "CVSS",
@@ -108,26 +108,26 @@ export default function VulnerabilitiesPage() {
     },
     {
       key: "asset_id",
-      header: "Affected asset",
+      header: "Tài sản bị ảnh hưởng",
       width: "170px",
-      render: (row) => assetMap[row.asset_id] ? <Link href={`/assets/${row.asset_id}`} className="text-[10.5px] text-slate-400 hover:text-brand-300">{assetMap[row.asset_id].name}</Link> : <span className="text-[10px] text-slate-700">Unmapped</span>,
+      render: (row) => assetMap[row.asset_id] ? <Link href={`/assets/${row.asset_id}`} className="text-[10.5px] text-slate-400 hover:text-brand-300">{assetMap[row.asset_id].name}</Link> : <span className="text-[10px] text-slate-700">Chưa được lập bản đồ</span>,
     },
-    { key: "status", header: "Status", width: "110px", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "created_at", header: "Discovered", width: "90px", render: (row) => <span className="text-[9.5px] text-slate-600">{relativeTime(row.created_at)}</span> },
+    { key: "status", header: "Trạng thái", width: "110px", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "created_at", header: "Phát hiện", width: "90px", render: (row) => <span className="text-[9.5px] text-slate-600">{relativeTime(row.created_at)}</span> },
     { key: "open", header: "", width: "34px", render: () => <ArrowUpRight className="h-3.5 w-3.5 text-slate-700" /> },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Vulnerability Management"
-        subtitle="CVE exposure, CVSS prioritisation and remediation tracking across the estate"
+        title="Quản lý lỗ hổng"
+        subtitle="Mức độ phơi nhiễm CVE, ưu tiên CVSS và theo dõi biện pháp khắc phục trên toàn khu vực"
         icon={Bug}
-        badge={<Badge tone="critical" dot>{criticalCount} critical</Badge>}
+        badge={<Badge tone="critical" dot>{criticalCount} nghiêm trọng</Badge>}
         actions={
           <>
-            <Button icon={RefreshCw} onClick={() => { refetch(); all.refetch(); }} loading={refreshing}>Refresh</Button>
-            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Track CVE</Button>
+            <Button icon={RefreshCw} onClick={() => { refetch(); all.refetch(); }} loading={refreshing}>Làm mới</Button>
+            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Theo dõi CVE</Button>
           </>
         }
       />
@@ -137,40 +137,40 @@ export default function VulnerabilitiesPage() {
           Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[112px] rounded-xl" />)
         ) : (
           <>
-            <StatCard label="Tracked CVEs" value={formatNumber(records.length)} hint={`${exposedAssets.length} exposed assets`} icon={Bug} tone="brand" />
-            <StatCard label="Critical severity" value={formatNumber(criticalCount)} hint="Immediate remediation" icon={ShieldAlert} tone="critical" />
-            <StatCard label="Open findings" value={formatNumber(openCount)} hint="Unremediated" icon={Target} tone="warning" />
-            <StatCard label="Average CVSS" value={avgCvss} hint="Portfolio exposure" icon={ShieldCheck} tone="success" />
+            <StatCard label="CVE được theo dõi" value={formatNumber(records.length)} hint={`${exposedAssets.length} tài sản bị ảnh hưởng`} icon={Bug} tone="brand" />
+            <StatCard label="Lỗ hổng nghiêm trọng" value={formatNumber(criticalCount)} hint="Khắc phục ngay lập tức" icon={ShieldAlert} tone="critical" />
+            <StatCard label="Phát hiện đang mở" value={formatNumber(openCount)} hint="Chưa được khắc phục" icon={Target} tone="warning" />
+            <StatCard label="CVSS trung bình" value={avgCvss} hint="Tiếp xúc danh mục đầu tư" icon={ShieldCheck} tone="success" />
           </>
         )}
       </div>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-3">
         <Card className="p-4">
-          <h2 className="font-display text-sm font-semibold text-slate-200">Severity mix</h2>
+          <h2 className="font-display text-sm font-semibold text-slate-200">Phân bố mức độ nghiêm trọng</h2>
           <SeverityDonut data={bySeverity} height={154} />
           <SeverityLegend data={bySeverity} />
         </Card>
         <Card className="p-4 xl:col-span-2">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="font-display text-sm font-semibold text-slate-200">Most exposed assets</h2>
-              <p className="mt-0.5 text-[11px] text-slate-600">Ranked by maximum CVSS score</p>
+              <h2 className="font-display text-sm font-semibold text-slate-200">Tài sản bị lộ nhiều nhất</h2>
+              <p className="mt-0.5 text-[11px] text-slate-600">Xếp hạng theo điểm CVSS tối đa</p>
             </div>
-            <Link href="/assets" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">Inventory <ArrowUpRight className="h-3 w-3" /></Link>
+            <Link href="/assets" className="flex items-center gap-1 text-[10px] text-slate-500 transition hover:text-brand-300">Danh sách tài sản <ArrowUpRight className="h-3 w-3" /></Link>
           </div>
           <div className="mt-3 space-y-2.5">
             {exposedAssets.map((item) => (
               <Link key={item.id} href={`/assets/${item.id}`} className="group flex items-center gap-3">
-                <span className="w-40 shrink-0 truncate text-[10.5px] text-slate-400 group-hover:text-slate-200">{assetMap[item.id]?.name || "Unknown asset"}</span>
+                <span className="w-40 shrink-0 truncate text-[10.5px] text-slate-400 group-hover:text-slate-200">{assetMap[item.id]?.name || "Tài sản không xác định"}</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="h-full rounded-full bg-gradient-to-r from-high to-critical" style={{ width: `${item.max * 10}%` }} />
                 </div>
                 <span className="w-8 text-right font-mono text-[10px] text-high">{item.max.toFixed(1)}</span>
-                <span className="w-16 text-right text-[9px] text-slate-600">{item.count} CVEs</span>
+                <span className="w-16 text-right text-[9px] text-slate-600">{item.count} CVE</span>
               </Link>
             ))}
-            {!exposedAssets.length && <p className="py-6 text-center text-xs text-slate-600">No asset-mapped vulnerabilities yet.</p>}
+            {!exposedAssets.length && <p className="py-6 text-center text-xs text-slate-600">Chưa có lỗ hổng nào được ánh xạ tài sản.</p>}
           </div>
         </Card>
       </div>
@@ -178,21 +178,21 @@ export default function VulnerabilitiesPage() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] p-3.5">
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-sm font-semibold text-slate-200">CVE register</h2>
-            <Badge>{data?.pagination?.total || 0} findings</Badge>
+            <h2 className="font-display text-sm font-semibold text-slate-200">Sổ đăng ký CVE</h2>
+            <Badge>{data?.pagination?.total || 0} phát hiện</Badge>
           </div>
           <div className="flex items-center gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search CVE, title…" className="w-full sm:w-60" />
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm CVE, tiêu đề…" className="w-full sm:w-60" />
             <Select value={severity} onChange={(event) => setSeverity(event.target.value)} className="w-32">
-              <option value="">Severity</option>
+              <option value="">Mức độ</option>
               {SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </Select>
             <Select value={status} onChange={(event) => setStatus(event.target.value)} className="w-32">
-              <option value="">Status</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In progress</option>
-              <option value="resolved">Resolved</option>
-              <option value="accepted">Accepted risk</option>
+              <option value="">Trạng thái</option>
+              <option value="open">Mở</option>
+              <option value="in_progress">Đang tiến hành</option>
+              <option value="resolved">Đã xử lý</option>
+              <option value="accepted">Rủi ro được chấp nhận</option>
             </Select>
           </div>
         </div>
@@ -204,8 +204,8 @@ export default function VulnerabilitiesPage() {
             columns={columns}
             loading={loading && !data}
             onRowClick={(row) => router.push(`/vulnerabilities/${row.id}`)}
-            emptyTitle="No vulnerabilities match"
-            emptyMessage="Adjust filters or track a new CVE."
+            emptyTitle="Không có lỗ hổng nào phù hợp"
+            emptyMessage="Điều chỉnh bộ lọc hoặc theo dõi CVE mới."
             footer={data?.pagination ? <Pagination page={data.pagination.page} pages={data.pagination.pages} total={data.pagination.total} limit={data.pagination.limit} onPage={setPage} /> : null}
           />
         )}
@@ -238,10 +238,10 @@ function CreateVulnerabilityModal({ open, onClose, assets, onCreated }: { open: 
     setSaving(true);
     try {
       await api("/vulnerabilities", { method: "POST", body: { ...form, cvss_score: Number(form.cvss_score), asset_id: form.asset_id || undefined } });
-      success("CVE tracked", "The vulnerability is now part of the remediation backlog.");
+      success("Đã theo dõi CVE", "Lỗ hổng đã được thêm vào danh sách khắc phục.");
       onCreated();
     } catch (err) {
-      toastError("Could not add CVE", err instanceof Error ? err.message : "Unknown error");
+      toastError("Không thể thêm CVE", err instanceof Error ? err.message : "Lỗi không xác định");
     } finally {
       setSaving(false);
     }
@@ -251,45 +251,45 @@ function CreateVulnerabilityModal({ open, onClose, assets, onCreated }: { open: 
     <Modal
       open={open}
       onClose={onClose}
-      title="Track vulnerability"
-      description="Add a CVE or detected weakness to the remediation backlog."
+      title="Theo dõi lỗ hổng"
+      description="Thêm CVE hoặc điểm yếu được phát hiện vào tồn đọng khắc phục."
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={submit}>Track CVE</Button>
+          <Button variant="ghost" onClick={onClose}>Hủy</Button>
+          <Button variant="primary" loading={saving} onClick={submit}>Theo dõi CVE</Button>
         </>
       }
     >
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        <Field label="Vulnerability title" className="md:col-span-2">
-          <Input value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="e.g. OpenSSL remote code execution" required />
+        <Field label="Tiêu đề về lỗ hổng" className="md:col-span-2">
+          <Input value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="Ví dụ: Thực thi mã từ xa OpenSSL" required />
         </Field>
-        <Field label="CVE ID">
+        <Field label="Mã CVE">
           <Input value={form.cve_id} onChange={(event) => set("cve_id", event.target.value)} placeholder="CVE-2026-XXXX" className="font-mono" />
         </Field>
-        <Field label="CVSS score" hint="0.0 – 10.0">
+        <Field label="Điểm CVSS" hint="0.0 – 10.0">
           <Input type="number" step="0.1" min={0} max={10} value={form.cvss_score} onChange={(event) => set("cvss_score", Number(event.target.value))} />
         </Field>
-        <Field label="Severity">
+        <Field label="Mức độ">
           <Select value={form.severity} onChange={(event) => set("severity", event.target.value)}>{SEVERITIES.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</Select>
         </Field>
-        <Field label="Status">
+        <Field label="Trạng thái">
           <Select value={form.status} onChange={(event) => set("status", event.target.value)}>
-            <option value="open">Open</option>
-            <option value="in_progress">In progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="accepted">Accepted risk</option>
+            <option value="open">Mở</option>
+            <option value="in_progress">Đang tiến hành</option>
+            <option value="resolved">Đã xử lý</option>
+            <option value="accepted">Rủi ro được chấp nhận</option>
           </Select>
         </Field>
-        <Field label="Affected asset" className="md:col-span-2">
+        <Field label="Tài sản bị ảnh hưởng" className="md:col-span-2">
           <Select value={form.asset_id} onChange={(event) => set("asset_id", event.target.value)}>
-            <option value="">Unmapped</option>
+            <option value="">Chưa được lập bản đồ</option>
             {assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} · {asset.ip_address}</option>)}
           </Select>
         </Field>
-        <Field label="Description" className="md:col-span-2">
-          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="Technical impact, exploitability and required remediation…" />
+        <Field label="Mô tả" className="md:col-span-2">
+          <Textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="Tác động kỹ thuật, khả năng khai thác và yêu cầu khắc phục…" />
         </Field>
       </form>
     </Modal>

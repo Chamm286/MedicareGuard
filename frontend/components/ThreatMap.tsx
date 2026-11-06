@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import landTopology from "world-atlas/land-110m.json";
-import { cn, countryFlag, formatNumber } from "@/lib/utils";
+import { cn, countryFlag, countryName, formatNumber } from "@/lib/utils";
 
 type Origin = {
   country: string;
@@ -85,15 +85,15 @@ export function ThreatMap({ data, className }: { data: Origin[]; className?: str
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-critical opacity-75" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-critical" />
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">Live attack surface</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">Bề mặt tấn công trực tiếp</span>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-slate-500">
-          <span><span className="font-medium text-white">{formatNumber(total)}</span> events</span>
-          <span><span className="font-medium text-white">{markers.length}</span> origins</span>
+          <span><span className="font-medium text-white">{formatNumber(total)}</span> sự kiện</span>
+          <span><span className="font-medium text-white">{markers.length}</span> nguồn</span>
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="relative w-full" role="img" aria-label="Global attack origins map">
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="relative w-full" role="img" aria-label="Bản đồ nguồn gốc tấn công toàn cầu">
         <defs>
           <linearGradient id="landFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#15213c" />
@@ -156,7 +156,7 @@ export function ThreatMap({ data, className }: { data: Origin[]; className?: str
           <animate attributeName="r" from="3" to="22" dur="3s" repeatCount="indefinite" />
           <animate attributeName="opacity" from="0.8" to="0" dur="3s" repeatCount="indefinite" />
         </circle>
-        <text x={hq[0] + 10} y={hq[1] + 3} fill="#67e8f9" fontSize="8" fontFamily="monospace" letterSpacing="1">SOC HQ</text>
+        <text x={hq[0] + 10} y={hq[1] + 3} fill="#67e8f9" fontSize="8" fontFamily="monospace" letterSpacing="1">trụ sở SOC</text>
       </svg>
 
       {active && (
@@ -165,20 +165,20 @@ export function ThreatMap({ data, className }: { data: Origin[]; className?: str
           style={{ left: `${(active.x / WIDTH) * 100}%`, top: `${(active.y / HEIGHT) * 100 - 3}%` }}
         >
           <p className="flex items-center gap-1.5 text-xs font-medium text-white">
-            <span>{countryFlag(active.country_code)}</span> {active.country}
+            <span>{countryFlag(active.country_code)}</span> {countryName(active.country)}
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">
-            {formatNumber(active.attacks)} events · risk {active.risk ?? active.avg_risk ?? "—"}
+            {formatNumber(active.attacks)} sự kiện · rủi ro {active.risk ?? active.avg_risk ?? "—"}
           </p>
         </div>
       )}
 
       <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 pb-4 pt-1 text-[10px] text-slate-600">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-critical" /> Attack origin</span>
-          <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> SOC headquarters</span>
+          <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-critical" /> Nguồn gốc tấn công</span>
+          <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> trụ sở SOC</span>
         </div>
-        <span className="font-mono">geo projection · natural earth</span>
+        <span className="font-mono">Phép chiếu địa lý · Natural Earth</span>
       </div>
     </div>
   );

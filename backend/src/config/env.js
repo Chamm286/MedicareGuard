@@ -32,6 +32,14 @@ const config = {
     apiKey: process.env.OPENAI_API_KEY || "",
     model: process.env.OPENAI_MODEL || "gpt-4o-mini",
   },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  },
+  n8n: {
+    aiChatUrl: process.env.N8N_AI_CHAT_URL || "",
+    timeoutMs: Number(process.env.N8N_AI_CHAT_TIMEOUT_MS || 15000),
+  },
 };
 
 module.exports = config;

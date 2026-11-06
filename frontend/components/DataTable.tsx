@@ -38,7 +38,7 @@ export function DataTable<T extends Record<string, any>>({
 }) {
   if (loading) return <TableSkeleton rows={7} />;
   if (error) return <ErrorState message={error} />;
-  if (!rows?.length) return <EmptyState title={emptyTitle || "No records found"} message={emptyMessage || "Adjust your filters or create a new record."} />;
+  if (!rows?.length) return <EmptyState title={emptyTitle || "Không tìm thấy bản ghi"} message={emptyMessage || "Điều chỉnh bộ lọc hoặc tạo bản ghi mới."} />;
 
   const keyOf = (row: T) => (typeof rowKey === "function" ? rowKey(row) : String(row[rowKey] ?? ""));
 

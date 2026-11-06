@@ -708,3 +708,189 @@ SELECT framework,
        count(*) FILTER (WHERE status = 'compliant')::int AS compliant
 FROM compliance_controls
 GROUP BY framework;
+
+-- ── Medicare Store (e-commerce) ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS store_customers (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         VARCHAR(255) NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  full_name     VARCHAR(160) NOT NULL,
+  phone         VARCHAR(40),
+  address       TEXT,
+  city          VARCHAR(120),
+  country       VARCHAR(80) NOT NULL DEFAULT 'Việt Nam',
+  country_code  VARCHAR(4) NOT NULL DEFAULT 'VN',
+  status        VARCHAR(24) NOT NULL DEFAULT 'active',
+  last_login_at TIMESTAMPTZ,
+  metadata      JSONB NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_products (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku         VARCHAR(64) NOT NULL UNIQUE,
+  slug        VARCHAR(180) NOT NULL UNIQUE,
+  name        VARCHAR(200) NOT NULL,
+  category    VARCHAR(80) NOT NULL,
+  brand       VARCHAR(120),
+  description TEXT,
+  price       NUMERIC(12,2) NOT NULL CHECK (price >= 0),
+  sale_price  NUMERIC(12,2) CHECK (sale_price IS NULL OR sale_price >= 0),
+  currency    VARCHAR(8) NOT NULL DEFAULT 'VND',
+  stock       INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  image_url   TEXT,
+  rating      NUMERIC(3,2) NOT NULL DEFAULT 5,
+  tags        TEXT[] NOT NULL DEFAULT '{}',
+  status      VARCHAR(24) NOT NULL DEFAULT 'active',
+  metadata    JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_coupons (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code         VARCHAR(40) NOT NULL UNIQUE,
+  type         VARCHAR(20) NOT NULL CHECK (type IN ('percent','fixed')),
+  value        NUMERIC(12,2) NOT NULL CHECK (value > 0),
+  min_subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
+  max_uses     INTEGER,
+  used_count   INTEGER NOT NULL DEFAULT 0,
+  active       BOOLEAN NOT NULL DEFAULT true,
+  starts_at    TIMESTAMPTZ,
+  expires_at   TIMESTAMPTZ,
+  metadata     JSONB NOT NULL DEFAULT '{}',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_carts (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID REFERENCES store_customers(id) ON DELETE SET NULL,
+  token       VARCHAR(80) NOT NULL UNIQUE,
+  status      VARCHAR(24) NOT NULL DEFAULT 'open',
+  coupon_code VARCHAR(40),
+  subtotal    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  discount    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  currency    VARCHAR(8) NOT NULL DEFAULT 'VND',
+  expires_at  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_cart_items (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cart_id    UUID NOT NULL REFERENCES store_carts(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES store_products(id) ON DELETE CASCADE,
+  quantity   INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 99),
+  unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
+  line_total NUMERIC(12,2) NOT NULL CHECK (line_total >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (cart_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_orders (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_number        VARCHAR(32) NOT NULL UNIQUE,
+  customer_id         UUID REFERENCES store_customers(id) ON DELETE SET NULL,
+  cart_id             UUID REFERENCES store_carts(id) ON DELETE SET NULL,
+  status              VARCHAR(24) NOT NULL DEFAULT 'pending',
+  payment_status      VARCHAR(24) NOT NULL DEFAULT 'unpaid',
+  payment_method      VARCHAR(40) NOT NULL DEFAULT 'cod',
+  subtotal            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  discount            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  shipping_fee        NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax                 NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total               NUMERIC(12,2) NOT NULL DEFAULT 0,
+  currency            VARCHAR(8) NOT NULL DEFAULT 'VND',
+  shipping_name       VARCHAR(160) NOT NULL,
+  shipping_email      VARCHAR(255) NOT NULL,
+  shipping_phone      VARCHAR(40) NOT NULL,
+  shipping_address    TEXT NOT NULL,
+  shipping_city       VARCHAR(120) NOT NULL,
+  shipping_country    VARCHAR(80) NOT NULL DEFAULT 'Việt Nam',
+  shipping_country_code VARCHAR(4) NOT NULL DEFAULT 'VN',
+  notes               TEXT,
+  risk_score          INTEGER NOT NULL DEFAULT 0,
+  fraud_flags         TEXT[] NOT NULL DEFAULT '{}',
+  ip_address          VARCHAR(64),
+  ip_country          VARCHAR(80),
+  ip_country_code     VARCHAR(4),
+  ip_source           VARCHAR(40),
+  user_agent          TEXT,
+  metadata            JSONB NOT NULL DEFAULT '{}',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_order_items (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id   UUID NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES store_products(id) ON DELETE SET NULL,
+  sku        VARCHAR(64) NOT NULL,
+  name       VARCHAR(200) NOT NULL,
+  quantity   INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 99),
+  unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
+  line_total NUMERIC(12,2) NOT NULL CHECK (line_total >= 0),
+  image_url  TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_payments (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id        UUID NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+  provider        VARCHAR(40) NOT NULL DEFAULT 'cod',
+  status          VARCHAR(24) NOT NULL DEFAULT 'pending',
+  amount          NUMERIC(12,2) NOT NULL DEFAULT 0,
+  transaction_ref VARCHAR(120),
+  metadata        JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_reviews (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id  UUID NOT NULL REFERENCES store_products(id) ON DELETE CASCADE,
+  customer_id UUID REFERENCES store_customers(id) ON DELETE SET NULL,
+  rating      INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  title       VARCHAR(180),
+  body        TEXT NOT NULL,
+  status      VARCHAR(24) NOT NULL DEFAULT 'published',
+  metadata    JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS store_security_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type    VARCHAR(80) NOT NULL,
+  severity      VARCHAR(24) NOT NULL DEFAULT 'medium',
+  ip_address    VARCHAR(64),
+  country       VARCHAR(80),
+  country_code  VARCHAR(4),
+  customer_id   UUID REFERENCES store_customers(id) ON DELETE SET NULL,
+  order_id      UUID REFERENCES store_orders(id) ON DELETE SET NULL,
+  risk_score    INTEGER NOT NULL DEFAULT 0,
+  metadata      JSONB NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_products_category ON store_products(category);
+CREATE INDEX IF NOT EXISTS idx_store_products_status ON store_products(status);
+CREATE INDEX IF NOT EXISTS idx_store_cart_items_cart ON store_cart_items(cart_id);
+CREATE INDEX IF NOT EXISTS idx_store_orders_customer ON store_orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_store_orders_status ON store_orders(status);
+CREATE INDEX IF NOT EXISTS idx_store_orders_created ON store_orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_store_security_created ON store_security_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_store_reviews_product ON store_reviews(product_id);
+
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['store_customers','store_products','store_coupons','store_carts','store_cart_items','store_orders','store_payments','store_reviews'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I', t, t);
+    EXECUTE format('CREATE TRIGGER trg_%s_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at()', t, t);
+  END LOOP;
+END $$;

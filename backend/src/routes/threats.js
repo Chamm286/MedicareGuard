@@ -76,7 +76,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM threats WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Threat not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
     const related = await query(
       `SELECT id, title, severity, status, detected_at FROM alerts WHERE threat_id = $1 ORDER BY detected_at DESC LIMIT 20`,
       [req.params.id],
@@ -98,7 +98,7 @@ router.post(
   requirePermission("threats:write"),
   asyncHandler(async (req, res) => {
     const { name, category, severity = "medium", status = "active", source, source_ip, country, country_code, ioc_type, ioc_value, confidence = 70, risk_score = 50, description, mitre_tactic, mitre_technique, first_seen, last_seen, metadata = {} } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const result = await query(
       `INSERT INTO threats (name, category, severity, status, source, source_ip, country, country_code, ioc_type, ioc_value, confidence, risk_score, description, mitre_tactic, mitre_technique, first_seen, last_seen, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
@@ -114,7 +114,7 @@ router.post(
   requirePermission("threats:enrich"),
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM threats WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Threat not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
     const threat = result.rows[0];
     const intel = await query(
       `SELECT * FROM threat_intel WHERE indicator = $1 OR ($2 IS NOT NULL AND indicator = $2) LIMIT 5`,
@@ -131,7 +131,7 @@ router.post(
       },
     };
     await query("UPDATE threats SET confidence = $1, metadata = metadata || $2 WHERE id = $3", [enriched.enrichment.confidence, JSON.stringify({ enrichment: enriched.enrichment }), req.params.id]);
-    await recordActivity({ eventType: "threat_enrich", req, resource: "threats", resourceId: req.params.id, action: "enrich", message: "Threat enriched with CTI matches", metadata: { matches: intel.rows.length } });
+    await recordActivity({ eventType: "threat_enrich", req, resource: "threats", resourceId: req.params.id, action: "enrich", message: "Mối đe dọa đã được làm giàu với kết quả CTI", metadata: { matches: intel.rows.length } });
     res.json({ data: enriched });
   }),
 );
@@ -141,21 +141,21 @@ router.post(
   requirePermission("threats:write"),
   asyncHandler(async (req, res) => {
     const threatResult = await query("SELECT * FROM threats WHERE id = $1", [req.params.id]);
-    if (!threatResult.rows.length) throw new HttpError(404, "Threat not found");
+    if (!threatResult.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
     const threat = threatResult.rows[0];
     const value = threat.source_ip || threat.ioc_value;
-    if (!value) throw new HttpError(400, "Threat has no blockable indicator");
+    if (!value) throw new HttpError(400, "Mối đe dọa không có chỉ báo có thể chặn");
     const rule = await query(
       `INSERT INTO firewall_rules (name, description, direction, action, protocol, source_ip, priority, enabled, created_by, metadata)
        VALUES ($1,$2,'inbound','deny','any',$3,10,true,$4,$5) RETURNING *`,
-      [`Block ${value}`, `Auto-generated from threat ${threat.name}`, value, req.user.id, JSON.stringify({ threatId: threat.id, automated: true })],
+      [`Chặn ${value}`, `Tự động tạo từ mối đe dọa ${threat.name}`, value, req.user.id, JSON.stringify({ threatId: threat.id, automated: true })],
     );
     await query("UPDATE threats SET status = 'blocked', metadata = metadata || $1 WHERE id = $2", [JSON.stringify({ firewallRuleId: rule.rows[0].id }), req.params.id]);
     await query(
       `INSERT INTO blocklist (value, type, reason, source, status, created_by, metadata) VALUES ($1,$2,$3,'threat-response','active',$4,$5)`,
-      [value, threat.source_ip ? "ip" : "indicator", `Blocked threat ${threat.name}`, req.user.id, JSON.stringify({ threatId: threat.id })],
+      [value, threat.source_ip ? "ip" : "indicator", `Đã chặn mối đe dọa ${threat.name}`, req.user.id, JSON.stringify({ threatId: threat.id })],
     );
-    await recordActivity({ eventType: "threat_block", req, resource: "threats", resourceId: req.params.id, action: "block", message: `Blocked ${value} at the firewall` });
+    await recordActivity({ eventType: "threat_block", req, resource: "threats", resourceId: req.params.id, action: "block", message: `Đã chặn ${value} tại tường lửa` });
     res.status(201).json({ data: { threat_id: req.params.id, firewall_rule: rule.rows[0], indicator: value } });
   }),
 );
@@ -163,11 +163,11 @@ router.post(
 const updateThreat = asyncHandler(async (req, res) => {
   const allowed = ["name", "category", "severity", "status", "source", "source_ip", "country", "country_code", "ioc_type", "ioc_value", "confidence", "risk_score", "description", "mitre_tactic", "mitre_technique", "last_seen", "metadata"];
   const fields = allowed.filter((field) => req.body[field] !== undefined);
-  if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+  if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
   const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
   values.push(req.params.id);
   const result = await query(`UPDATE threats SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-  if (!result.rows.length) throw new HttpError(404, "Threat not found");
+  if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
   await recordAudit({ req, action: "update", resource: "threats", resourceId: req.params.id });
   res.json({ data: result.rows[0] });
 });
@@ -180,7 +180,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM threats WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Threat not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mối đe dọa");
     await recordAudit({ req, action: "delete", resource: "threats", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

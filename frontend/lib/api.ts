@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { clearSession, getToken } from "./auth";
 import { downloadBlob } from "./utils";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? "/api" : "http://localhost:4000/api");
 
 export class ApiError extends Error {
   status: number;
@@ -47,14 +48,14 @@ export const api = async <T = any>(path: string, options: ApiOptions = {}): Prom
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
-    throw new ApiError(payload?.error || `Request failed (${response.status})`, response.status, payload);
+    throw new ApiError(payload?.error || `Yêu cầu thất bại (${response.status})`, response.status, payload);
   }
   return payload as T;
 };
 
 export const apiDownload = async (path: string, filename: string) => {
   const response = await api<Response>(path, { raw: true });
-  if (!response.ok) throw new ApiError(`Download failed (${response.status})`, response.status);
+  if (!response.ok) throw new ApiError(`Tải xuống thất bại (${response.status})`, response.status);
   const blob = await response.blob();
   downloadBlob(blob, filename);
 };
@@ -87,7 +88,7 @@ export const useApi = <T = any>(path: string | null, options: UseApiOptions = {}
         setError(null);
       }
     } catch (err) {
-      if (mounted.current) setError(err instanceof Error ? err.message : "Failed to load data");
+      if (mounted.current) setError(err instanceof Error ? err.message : "Không thể tải dữ liệu");
     } finally {
       if (mounted.current) {
         setLoading(false);

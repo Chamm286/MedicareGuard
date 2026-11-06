@@ -8,12 +8,12 @@ const { recordAudit } = require("../services/audit");
 const router = express.Router();
 
 const TEMPLATES = [
-  { id: "executive", name: "Executive Security Brief", description: "Board-level posture, risk and compliance summary", formats: ["pdf", "csv", "json"], cadence: "weekly" },
-  { id: "threat", name: "Threat Landscape Report", description: "Attack origins, actors, categories and MITRE coverage", formats: ["pdf", "csv", "json"], cadence: "daily" },
-  { id: "incident", name: "Incident Response Review", description: "Incident lifecycle, SLA/MttR and root causes", formats: ["pdf", "csv", "json"], cadence: "weekly" },
-  { id: "compliance", name: "Compliance Posture", description: "NIST, ISO 27001, HIPAA and PCI DSS control scores", formats: ["pdf", "json"], cadence: "monthly" },
-  { id: "vulnerability", name: "Vulnerability Management", description: "Open CVEs, exploitation risk and remediation SLA", formats: ["pdf", "csv", "json"], cadence: "weekly" },
-  { id: "firewall", name: "Network Enforcement", description: "Firewall rule effectiveness and blocked traffic", formats: ["pdf", "csv"], cadence: "daily" },
+  { id: "executive", name: "Bản tin an ninh điều hành", description: "Tóm tắt tình hình, rủi ro và tuân thủ cấp hội đồng", formats: ["pdf", "csv", "json"], cadence: "weekly" },
+  { id: "threat", name: "Báo cáo bối cảnh mối đe dọa", description: "Nguồn tấn công, tác nhân, danh mục và độ phủ MITRE", formats: ["pdf", "csv", "json"], cadence: "daily" },
+  { id: "incident", name: "Đánh giá ứng phó sự cố", description: "Vòng đời sự cố, SLA/MttR và nguyên nhân gốc", formats: ["pdf", "csv", "json"], cadence: "weekly" },
+  { id: "compliance", name: "Tình trạng tuân thủ", description: "Điểm kiểm soát NIST, ISO 27001, HIPAA và PCI DSS", formats: ["pdf", "json"], cadence: "monthly" },
+  { id: "vulnerability", name: "Quản lý lỗ hổng", description: "CVE đang mở, rủi ro khai thác và SLA khắc phục", formats: ["pdf", "csv", "json"], cadence: "weekly" },
+  { id: "firewall", name: "Thực thi mạng", description: "Hiệu quả quy tắc tường lửa và lưu lượng bị chặn", formats: ["pdf", "csv"], cadence: "daily" },
 ];
 
 const buildReportData = async (rangeDays = 30) => {
@@ -34,7 +34,7 @@ const buildReportData = async (rangeDays = 30) => {
     ),
     query("SELECT * FROM v_attacks_by_country LIMIT 10"),
     query("SELECT * FROM v_top_attackers LIMIT 10"),
-    query("SELECT coalesce(category,'Uncategorised') AS category, count(*)::int AS total FROM threats GROUP BY category ORDER BY total DESC LIMIT 8"),
+    query("SELECT coalesce(category,'Chưa phân loại') AS category, count(*)::int AS total FROM threats GROUP BY category ORDER BY total DESC LIMIT 8"),
     query("SELECT severity, count(*)::int AS total FROM alerts GROUP BY severity"),
     query("SELECT incident_key, title, severity, status, priority, detected_at, resolved_at FROM incidents ORDER BY detected_at DESC LIMIT 12"),
     query("SELECT framework, round(avg(score))::int AS score, count(*)::int AS controls, count(*) FILTER (WHERE status = 'compliant')::int AS compliant FROM compliance_controls GROUP BY framework ORDER BY score DESC"),
@@ -56,7 +56,7 @@ const buildReportData = async (rangeDays = 30) => {
   };
 };
 
-const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
+const renderPdf = (doc, data, name = "Báo cáo an ninh MedicareGuard") => {
   const brand = "#0b1220";
   const accent = "#2563eb";
   const muted = "#64748b";
@@ -65,21 +65,21 @@ const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
   doc.rect(0, 0, pageWidth, 110).fill(brand);
   doc.rect(0, 104, pageWidth, 6).fill(accent);
   doc.fillColor("#ffffff").fontSize(24).font("Helvetica-Bold").text("MedicareGuard", 50, 32);
-  doc.fillColor("#93c5fd").fontSize(11).font("Helvetica").text("SECURITY OPERATIONS CENTER", 50, 62);
+  doc.fillColor("#93c5fd").fontSize(11).font("Helvetica").text("TRUNG TÂM VẬN HÀNH AN NINH", 50, 62);
   doc.fillColor("#cbd5e1").fontSize(10).text(name, 50, 80, { width: pageWidth - 100, align: "right" });
-  doc.fillColor(muted).fontSize(9).text(`Generated ${new Date(data.generatedAt).toLocaleString("en-GB")} · period ${data.periodDays} days`, 50, 122);
+  doc.fillColor(muted).fontSize(9).text(`Tạo lúc ${new Date(data.generatedAt).toLocaleString("vi-VN")} · giai đoạn ${data.periodDays} ngày`, 50, 122);
 
   let y = 155;
   const o = data.overview;
   const kpis = [
-    ["Alerts", o.alerts],
-    ["Critical", o.critical_alerts],
-    ["Threats", o.threats],
-    ["Incidents", o.incidents],
-    ["Open Incidents", o.open_incidents],
-    ["Avg Asset Risk", o.avg_asset_risk || 0],
-    ["Compliance", `${o.compliance_score || 0}%`],
-    ["MttR (h)", o.mttr_hours || 0],
+    ["Cảnh báo", o.alerts],
+    ["Nghiêm trọng", o.critical_alerts],
+    ["Mối đe dọa", o.threats],
+    ["Sự cố", o.incidents],
+    ["Sự cố mở", o.open_incidents],
+    ["Rủi ro tài sản TB", o.avg_asset_risk || 0],
+    ["Tuân thủ", `${o.compliance_score || 0}%`],
+    ["MttR (giờ)", o.mttr_hours || 0],
   ];
   const cardWidth = (pageWidth - 100 - 21) / 4;
   kpis.forEach(([label, value], index) => {
@@ -93,17 +93,17 @@ const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
   });
   y += 140;
 
-  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Top Attack Origins", 50, y);
+  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Nguồn tấn công hàng đầu", 50, y);
   y += 22;
   doc.fontSize(9).font("Helvetica");
   data.countries.slice(0, 8).forEach((row, index) => {
     doc.fillColor(muted).text(`${index + 1}. ${row.country} (${row.country_code})`, 55, y, { width: 250 });
-    doc.fillColor(brand).text(`${row.attacks} events · risk ${row.avg_risk}`, 320, y, { width: 220, align: "right" });
+    doc.fillColor(brand).text(`${row.attacks} sự kiện · rủi ro ${row.avg_risk}`, 320, y, { width: 220, align: "right" });
     y += 16;
   });
 
   y += 14;
-  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Threat Categories", 50, y);
+  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Danh mục mối đe dọa", 50, y);
   y += 22;
   data.categories.forEach((row) => {
     doc.fillColor(muted).fontSize(9).font("Helvetica").text(row.category, 55, y, { width: 250 });
@@ -112,7 +112,7 @@ const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
   });
 
   y += 14;
-  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Recent Incidents", 50, y);
+  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Sự cố gần đây", 50, y);
   y += 22;
   data.incidents.slice(0, 8).forEach((row) => {
     doc.fillColor(muted).fontSize(8).font("Helvetica").text(`${row.incident_key} · ${row.severity.toUpperCase()} · ${row.status}`, 55, y, { width: 480 });
@@ -120,15 +120,15 @@ const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
   });
 
   doc.addPage();
-  doc.fillColor(brand).fontSize(16).font("Helvetica-Bold").text("Compliance & Vulnerability Posture", 50, 50);
+  doc.fillColor(brand).fontSize(16).font("Helvetica-Bold").text("Tình trạng tuân thủ & lỗ hổng", 50, 50);
   y = 80;
   data.compliance.forEach((row) => {
-    doc.fillColor(muted).fontSize(10).font("Helvetica").text(`${row.framework} — ${row.compliant}/${row.controls} controls compliant`, 55, y, { width: 350 });
+    doc.fillColor(muted).fontSize(10).font("Helvetica").text(`${row.framework} — ${row.compliant}/${row.controls} kiểm soát tuân thủ`, 55, y, { width: 350 });
     doc.fillColor(accent).font("Helvetica-Bold").text(`${row.score}%`, 420, y, { width: 120, align: "right" });
     y += 20;
   });
   y += 20;
-  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Top Vulnerabilities", 50, y);
+  doc.fillColor(brand).fontSize(14).font("Helvetica-Bold").text("Lỗ hổng hàng đầu", 50, y);
   y += 22;
   data.vulnerabilities.forEach((row) => {
     doc.fillColor(muted).fontSize(9).font("Helvetica").text(`${row.cve_id || "CVE-—"} · ${row.title}`, 55, y, { width: 380 });
@@ -140,7 +140,7 @@ const renderPdf = (doc, data, name = "MedicareGuard Security Report") => {
     }
   });
 
-  doc.fontSize(8).fillColor(muted).text("CONFIDENTIAL — MedicareGuard SOC · Automatically generated by the reporting service", 50, 770, { width: pageWidth - 100, align: "center" });
+  doc.fontSize(8).fillColor(muted).text("TÀI LIỆU MẬT — SOC MedicareGuard · Tự động tạo bởi dịch vụ báo cáo", 50, 770, { width: pageWidth - 100, align: "center" });
   doc.end();
 };
 
@@ -164,13 +164,13 @@ router.post(
   requirePermission("reports:write"),
   asyncHandler(async (req, res) => {
     const { name, template = "executive", cadence = "weekly", recipients = [], format = "pdf", enabled = true } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const key = `report.schedule.${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
     const value = { template, cadence, recipients, format, enabled };
     const result = await query(
       `INSERT INTO settings (key, value, scope, description, updated_by) VALUES ($1,$2,'reporting',$3,$4)
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by RETURNING *`,
-      [key, JSON.stringify(value), `Scheduled ${template} report`, req.user.id],
+      [key, JSON.stringify(value), `Báo cáo ${template} theo lịch`, req.user.id],
     );
     res.status(201).json({ data: result.rows[0] });
   }),
@@ -181,7 +181,7 @@ router.delete(
   requirePermission("reports:write"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM settings WHERE id = $1 AND key LIKE 'report.schedule.%' RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Schedule not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy lịch");
     res.json({ deleted: true, id: req.params.id });
   }),
 );
@@ -191,7 +191,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
     const data = await buildReportData(days);
-    const name = String(req.query.name || "Security Operations Report");
+    const name = String(req.query.name || "Báo cáo vận hành an ninh");
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="medicareguard-report-${Date.now()}.pdf"`);
     const doc = new PDFDocument({ size: "A4", margin: 50, info: { Title: name, Author: "MedicareGuard SOC" } });
@@ -200,7 +200,7 @@ router.get(
     await query(
       `INSERT INTO reports (name, type, status, format, period_start, period_end, created_by, summary, metadata)
        VALUES ($1,'executive','ready','pdf', now() - ($2 || ' days')::interval, now(), $3, $4, $5)`,
-      [name, days, req.user?.id || null, `On-demand PDF export covering ${days} days`, JSON.stringify({ days, generatedBy: req.user?.email })],
+      [name, days, req.user?.id || null, `Xuất PDF theo yêu cầu trong ${days} ngày`, JSON.stringify({ days, generatedBy: req.user?.email })],
     );
   }),
 );
@@ -276,12 +276,12 @@ router.post(
   "/generate",
   requirePermission("reports:write"),
   asyncHandler(async (req, res) => {
-    const { name = "Security Operations Report", type = "executive", format = "pdf", days = 30 } = req.body;
+    const { name = "Báo cáo vận hành an ninh", type = "executive", format = "pdf", days = 30 } = req.body;
     const data = await buildReportData(Number(days));
     const result = await query(
       `INSERT INTO reports (name, type, status, format, period_start, period_end, created_by, summary, metadata)
        VALUES ($1,$2,'ready',$3, now() - ($4 || ' days')::interval, now(), $5, $6, $7) RETURNING *`,
-      [name, type, format, Number(days), req.user.id, `Generated ${type} report for the last ${days} days`, JSON.stringify({ snapshot: data.overview })],
+      [name, type, format, Number(days), req.user.id, `Đã tạo báo cáo ${type} trong ${days} ngày qua`, JSON.stringify({ snapshot: data.overview })],
     );
     await recordAudit({ req, action: "generate", resource: "reports", resourceId: result.rows[0].id });
     res.status(201).json({ data: result.rows[0], snapshot: data.overview });
@@ -292,7 +292,7 @@ router.get(
   "/:id/download",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM reports WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Report not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy báo cáo");
     const report = result.rows[0];
     const data = await buildReportData(30);
     if (report.format === "pdf") {
@@ -317,7 +317,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM reports WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Report not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy báo cáo");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -327,7 +327,7 @@ router.post(
   requirePermission("reports:write"),
   asyncHandler(async (req, res) => {
     const { name, type = "executive", status = "ready", format = "pdf", summary, metadata = {} } = req.body;
-    if (!name) throw new HttpError(400, "name is required");
+    if (!name) throw new HttpError(400, "Tên là bắt buộc");
     const result = await query(
       `INSERT INTO reports (name, type, status, format, created_by, summary, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [name, type, status, format, req.user.id, summary || null, JSON.stringify(metadata)],
@@ -342,11 +342,11 @@ router.put(
   asyncHandler(async (req, res) => {
     const allowed = ["name", "type", "status", "format", "summary", "metadata"];
     const fields = allowed.filter((field) => req.body[field] !== undefined);
-    if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+    if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
     const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
     values.push(req.params.id);
     const result = await query(`UPDATE reports SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-    if (!result.rows.length) throw new HttpError(404, "Report not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy báo cáo");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -356,7 +356,7 @@ router.delete(
   requirePermission("delete"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM reports WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Report not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy báo cáo");
     await recordAudit({ req, action: "delete", resource: "reports", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),

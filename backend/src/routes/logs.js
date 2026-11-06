@@ -101,7 +101,7 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await query("SELECT * FROM activity_logs WHERE id = $1", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Log entry not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mục nhật ký");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -126,11 +126,11 @@ router.put(
   asyncHandler(async (req, res) => {
     const allowed = ["level", "event_type", "resource", "resource_id", "action", "message", "metadata"];
     const fields = allowed.filter((field) => req.body[field] !== undefined);
-    if (!fields.length) throw new HttpError(400, "No valid fields supplied");
+    if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
     const values = fields.map((field) => (field === "metadata" ? JSON.stringify(req.body[field]) : req.body[field]));
     values.push(req.params.id);
     const result = await query(`UPDATE activity_logs SET ${fields.map((field, index) => `${field} = $${index + 1}`).join(", ")} WHERE id = $${values.length} RETURNING *`, values);
-    if (!result.rows.length) throw new HttpError(404, "Log entry not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mục nhật ký");
     res.json({ data: result.rows[0] });
   }),
 );
@@ -140,7 +140,7 @@ router.delete(
   authorize("admin"),
   asyncHandler(async (req, res) => {
     const result = await query("DELETE FROM activity_logs WHERE id = $1 RETURNING id", [req.params.id]);
-    if (!result.rows.length) throw new HttpError(404, "Log entry not found");
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy mục nhật ký");
     await recordAudit({ req, action: "delete", resource: "activity_logs", resourceId: req.params.id });
     res.json({ deleted: true, id: req.params.id });
   }),
