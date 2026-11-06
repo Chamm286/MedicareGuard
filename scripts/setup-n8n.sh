@@ -7,7 +7,7 @@ N8N_TARGET="${N8N_TARGET:-auto}"
 N8N_CONTAINER="${N8N_CONTAINER:-mg-n8n}"
 N8N_DB_CONTAINER="${N8N_DB_CONTAINER:-mg-postgres}"
 WORKFLOW_DIR="$ROOT/n8n/workflows"
-WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst identity-attack fraud-confirmed-response)
+WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst identity-attack impossible-travel fraud-confirmed-response)
 
 N8N_USER_ID="${N8N_USER_ID:-}"
 case "$N8N_TARGET" in

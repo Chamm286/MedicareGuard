@@ -1,6 +1,6 @@
 # n8n response workflows
 
-MedicareGuard ships focused n8n playbooks. Workflows stay at **5–23 executable nodes** (the identity playbook has 18 numbered stages plus supporting AI, Telegram, and frontend approval nodes; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
+MedicareGuard ships focused n8n playbooks. Workflows use **5–24 executable nodes** (the identity playbook has 18 numbered stages plus supporting AI, Telegram, and frontend approval nodes; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
@@ -12,6 +12,7 @@ MedicareGuard ships focused n8n playbooks. Workflows stay at **5–23 executable
 | Phản hồi Gian lận Thương mại điện tử | 13 | `POST /webhook/mg-ecommerce-fraud` | Giữ đơn, mở điều tra, cảnh báo SOC |
 | Chat AI phân tích SOC | 5 | `POST /webhook/mg-ai-chat` | Trả lời câu hỏi SOC từ PostgreSQL |
 | Phát hiện tấn công danh tính | 23 node · Groq AI | `POST /webhook/mg-identity-attack` | Dùng API MedicareGuard để lấy lịch sử đăng nhập, lưu bằng chứng/cảnh báo/audit; phát hiện tấn công tài khoản và leo thang đặc quyền bằng Groq + MITRE ATT&CK |
+| Phát hiện Di chuyển Bất khả thi | 24 node · 0 node SQL · Groq AI | `POST /webhook/mg-impossible-travel` | So sánh vị trí hai phiên, tính vận tốc, phân tích fingerprint/IP reputation, lưu cảnh báo và chờ SOC duyệt trước khi thu hồi đúng phiên |
 
 ## Integration flow
 
@@ -73,7 +74,26 @@ cd ..
 bash scripts/setup-n8n.sh
 ```
 
-The setup script requires `GROQ_API_KEY`, imports `mg-postgres-credential` and `mg-groq-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all nine shipped workflows. It stops before importing anything if the Groq key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized.
+The setup script requires `GROQ_API_KEY`, imports `mg-postgres-credential` and `mg-groq-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all ten shipped workflows. It stops before importing anything if the Groq key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized.
+
+The impossible-travel workflow verifies the internal webhook request using `MG_API_TOKEN` and accepts successful-login events only. Demo mode uses simulated coordinates. Live mode requires `MG_GEOIP_URL` to point to an HTTPS batch GeoIP service that accepts a JSON array of `{ "query": "IP" }` objects and returns an array with country, city and latitude/longitude fields. IP reputation uses `MG_IP_REPUTATION_URL` (defaults to `https://api.ipapi.is/?q=`). These services receive the IP addresses being checked. The Telegram node requires the MedicareGuard Telegram credential; a Telegram delivery failure is recorded while the approval path continues. After alerting, the workflow waits 70 seconds for an administrator decision in the SOC frontend; it only requests revocation of the specific suspicious session if approved. Rejected or expired requests do not revoke any session.
+
+### Demo phát hiện di chuyển bất khả thi
+
+The SOC console can start the workflow using an active non-admin account with at least two active sessions. Direct webhook requests must include `Authorization: Bearer <MG_API_TOKEN>` and a successful login payload:
+
+```json
+{
+  "userEmail": "viewer@medicareguard.io",
+  "ipAddress": "198.51.100.55",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "deviceFingerprint": "demo-device",
+  "timestamp": "2026-11-06T03:00:00.000Z",
+  "geoMode": "demo"
+}
+```
+
+The workflow compares this event with the account's latest earlier, unrevoked session. Demo mode uses simulated San Francisco/Tokyo coordinates; live mode queries both IPs through the configured batch GeoIP provider. A session is only revoked after an administrator approves the alert in **Tự động hóa SOAR** within the 70-second approval window. The backend validates the session belongs to the supplied account and records the revocation in the audit log.
 
 To explicitly select Docker (for example, when a local n8n CLI is also installed), run:
 

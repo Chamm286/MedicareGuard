@@ -1,5 +1,5 @@
 {
-  "nodeCount": 131,
+  "nodeCount": 155,
   "workflows": [
     {
       "id": "ransomware-containment",
@@ -64,6 +64,14 @@
       "stickyNotes": 3,
       "connections": 22,
       "file": "n8n/workflows/identity-attrack.json"
+    },
+    {
+      "id": "impossible-travel",
+      "name": "Phát hiện Di chuyển Bất khả thi",
+      "executable": 24,
+      "stickyNotes": 3,
+      "connections": 23,
+      "file": "n8n/workflows/impossible-travel.json"
     }
   ]
 }

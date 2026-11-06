@@ -177,6 +177,30 @@ const workflows = [
       { name: "Kiểm toán", detail: "Ghi quyết định và hoàn tất lần chạy sau khi được duyệt" },
     ],
   },
+  {
+    id: "impossible-travel",
+    name: "Phát hiện Di chuyển Bất khả thi",
+    description: "Đối chiếu vị trí và dấu vân tay của các phiên đăng nhập, chấm điểm nguy cơ chiếm đoạt tài khoản bằng Groq AI, gửi cảnh báo SOC và chờ quản trị viên duyệt trước khi thu hồi đúng phiên đáng ngờ.",
+    category: "Bảo mật danh tính",
+    trigger: "Webhook · đăng nhập thành công",
+    webhook: "/webhook/mg-impossible-travel",
+    schedule: "Hướng sự kiện",
+    status: "active",
+    enabled: true,
+    version: "1.0.0",
+    owner: "Tự động hóa SOC",
+    targetSla: "2 phút",
+    nodeCount: 24,
+    tags: ["danh tính", "impossible travel", "GeoIP", "Groq AI"],
+    integrations: ["MedicareGuard API", "GeoIP", "IP reputation", "Groq AI", "Telegram"],
+    stages: [
+      { name: "Tiếp nhận", detail: "Xác thực request từ backend và chuẩn hóa đăng nhập thành công" },
+      { name: "Đối chiếu", detail: "Lấy phiên trước, tra vị trí IP và tính khoảng cách, vận tốc di chuyển" },
+      { name: "Đánh giá", detail: "Tương quan vị trí, dấu vân tay thiết bị, VPN/proxy/hosting và chấm điểm nguy cơ" },
+      { name: "Cảnh báo", detail: "Groq AI phân tích bằng chứng, lưu cảnh báo MedicareGuard và gửi Telegram" },
+      { name: "Duyệt", detail: "Chờ quản trị viên resume execution trong n8n trước khi yêu cầu thu hồi đúng phiên nghi vấn" },
+    ],
+  },
 ];
 
 const byId = (id) => workflows.find((workflow) => workflow.id === id);

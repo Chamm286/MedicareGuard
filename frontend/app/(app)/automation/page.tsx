@@ -9,11 +9,12 @@ import { DataTable, type Column } from "@/components/DataTable";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Modal, PageHeader, Skeleton, StatCard, Toggle } from "@/components/ui";
 
-const STATUS_TONE: Record<string, string> = { success: "low", dispatched: "low", queued: "warning", failed: "critical", running: "info", awaiting_approval: "warning", approval_approved: "low", approval_rejected: "neutral" };
+const STATUS_TONE: Record<string, string> = { success: "low", dispatched: "low", queued: "warning", failed: "critical", running: "info", awaiting_approval: "warning", approval_approved: "low", approval_rejected: "neutral", approval_expired: "neutral" };
 const statusLabel = (status: string) => ({
   awaiting_approval: "Chờ duyệt",
-  approval_approved: "Đã duyệt · chờ n8n",
-  approval_rejected: "Đã từ chối · chờ n8n",
+  approval_approved: "Đã duyệt · chờ thu hồi",
+  approval_rejected: "Đã từ chối",
+  approval_expired: "Hết hạn duyệt",
 }[status] || titleCase(status));
 
 export default function AutomationPage() {
@@ -39,12 +40,13 @@ export default function AutomationPage() {
     "vulnerability-sla",
     "compliance-evidence",
     "identity-attack",
+    "impossible-travel",
   ]);
   const list = workflows.filter((workflow: any) => visibleWorkflowIds.has(workflow.id));
   const summary = data?.summary;
   const runtime = summary?.runtime;
   const runs = executions.data?.data || [];
-  const pendingApprovals = runs.filter((run: any) => run.workflowId === "identity-attack" && run.status === "awaiting_approval" && run.approvalDecision === "pending");
+  const pendingApprovals = runs.filter((run: any) => ["identity-attack", "impossible-travel"].includes(run.workflowId) && run.status === "awaiting_approval" && run.approvalDecision === "pending");
   const selected = list.find((item: any) => item.id === selectedId);
   const selectedRuns = useMemo(() => runs.filter((run: any) => run.workflowId === selectedId), [runs, selectedId]);
 
@@ -63,7 +65,7 @@ export default function AutomationPage() {
       setLastRun({ ...result, workflowName: workflow.name });
       if (result.dispatched) {
         success(
-          workflow.id === "identity-attack" ? "Đã chạy mô phỏng tấn công danh tính" : "Đã gửi quy trình",
+          ["identity-attack", "impossible-travel"].includes(workflow.id) ? `Đã khởi chạy mô phỏng ${workflow.name}` : "Đã gửi quy trình",
           `${workflow.name} đang thực thi trong n8n.`,
         );
       }
@@ -259,7 +261,7 @@ export default function AutomationPage() {
                 <div className="flex items-center gap-1.5">
                   <span className="hidden text-[8.5px] text-slate-700 sm:inline">{workflow.schedule}</span>
                   <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>
-                    {workflow.id === "identity-attack" ? "Chạy mô phỏng" : "Chạy ngay bây giờ"}
+                    {["identity-attack", "impossible-travel"].includes(workflow.id) ? "Chạy mô phỏng" : "Chạy ngay bây giờ"}
                   </Button>
                 </div>
               </div>
@@ -273,7 +275,7 @@ export default function AutomationPage() {
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
                 <h2 className="font-display text-sm font-semibold text-slate-100">Hàng đợi phê duyệt</h2>
-                <p className="mt-0.5 text-[10px] text-slate-500">Quyết định được ghi vào nhật ký kiểm toán; n8n kiểm tra tối đa mỗi 70 giây để tiếp tục workflow.</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">Chỉ quản trị viên có thể duyệt. Phiên nghi vấn chỉ bị thu hồi khi đã duyệt; thời hạn quyết định là 70 giây.</p>
               </div>
               <Badge tone="warning" dot>{pendingApprovals.length} chờ duyệt</Badge>
             </div>
@@ -284,7 +286,7 @@ export default function AutomationPage() {
                     <div className="min-w-0">
                       <p className="truncate text-[11px] font-medium text-slate-200">{run.approvalUserEmail || "Tài khoản không rõ"}</p>
                       <p className="mt-1 text-[9px] text-slate-500">
-                        Rủi ro {run.approvalRiskScore ?? "—"}/100 · execution {String(run.id).slice(0, 8)} · {relativeTime(run.created_at)}
+                        {run.workflowName} · rủi ro {run.approvalRiskScore ?? "—"}/100 · execution {String(run.id).slice(0, 8)} · {relativeTime(run.created_at)}
                       </p>
                     </div>
                     {canApprove ? (
@@ -300,7 +302,7 @@ export default function AutomationPage() {
               </div>
             ) : (
               <p className="rounded-xl border border-white/[0.06] bg-black/20 p-3 text-[10px] text-slate-500">
-                Chưa có yêu cầu chờ duyệt. Chạy demo “Phát hiện tấn công danh tính”; khi điểm rủi ro từ 70 trở lên, yêu cầu sẽ xuất hiện tại đây.
+                Chưa có yêu cầu chờ duyệt. Chạy mô phỏng phát hiện danh tính hoặc di chuyển bất khả thi để tạo yêu cầu tại đây.
               </p>
             )}
           </div>
