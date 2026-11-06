@@ -8,6 +8,7 @@ N8N_CONTAINER="${N8N_CONTAINER:-mg-n8n}"
 N8N_DB_CONTAINER="${N8N_DB_CONTAINER:-mg-postgres}"
 WORKFLOW_DIR="$ROOT/n8n/workflows"
 WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla compliance-evidence ecommerce-fraud-response live-attack-monitor ai-chat-analyst identity-attack impossible-travel fraud-confirmed-response)
+MG_IDENTITY_WEBHOOK_TOKEN="${MG_IDENTITY_WEBHOOK_TOKEN:-}"
 
 N8N_USER_ID="${N8N_USER_ID:-}"
 case "$N8N_TARGET" in
@@ -70,6 +71,8 @@ if [[ "$N8N_TARGET" == "docker" ]]; then
   MG_SMTP_PASSWORD="${MG_SMTP_PASSWORD:-$(docker exec "$N8N_CONTAINER" printenv MG_SMTP_PASSWORD 2>/dev/null || true)}"
   MG_SMTP_FROM="${MG_SMTP_FROM:-$(docker exec "$N8N_CONTAINER" printenv MG_SMTP_FROM 2>/dev/null || true)}"
   TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-$(docker exec "$N8N_CONTAINER" printenv TELEGRAM_BOT_TOKEN 2>/dev/null || true)}"
+  MG_API_TOKEN="${MG_API_TOKEN:-$(docker exec "$N8N_CONTAINER" printenv MG_API_TOKEN 2>/dev/null || true)}"
+  MG_IDENTITY_WEBHOOK_TOKEN="${MG_IDENTITY_WEBHOOK_TOKEN:-$(docker exec "$N8N_CONTAINER" printenv MG_IDENTITY_WEBHOOK_TOKEN 2>/dev/null || true)}"
 else
   PG_HOST="${MG_PG_HOST:-localhost}"
   PG_PORT="${MG_PG_PORT:-5433}"
@@ -82,6 +85,15 @@ if [[ -z "${GROQ_API_KEY:-}" ]]; then
   echo "GROQ_API_KEY is required to publish the identity-detection workflow. Set it in the environment or .env, then recreate the n8n container." >&2
   exit 1
 fi
+if [[ -z "${MG_API_TOKEN:-}" ]]; then
+  echo "MG_API_TOKEN is required for authenticated MedicareGuard callbacks. Mint one with 'cd backend && npm run --silent token:n8n' and set it for n8n." >&2
+  exit 1
+fi
+if [[ "${#MG_IDENTITY_WEBHOOK_TOKEN}" -lt 32 ]]; then
+  echo "MG_IDENTITY_WEBHOOK_TOKEN must contain at least 32 characters to secure the identity webhook. Generate one with 'openssl rand -hex 32' and set it for backend and n8n." >&2
+  exit 1
+fi
+export MG_IDENTITY_WEBHOOK_TOKEN
 
 run_n8n() {
   if [[ "$N8N_TARGET" == "docker" ]]; then
@@ -109,6 +121,10 @@ import_credentials() {
     local container_file="/tmp/medicareguard-$(basename "$input")"
     docker cp "$input" "$N8N_CONTAINER:$container_file"
     CONTAINER_TMP_FILES+=("$container_file")
+    if [[ "$(basename "$input")" == "identity-webhook.json" ]]; then
+      docker exec --user 0 "$N8N_CONTAINER" chown node:node "$container_file"
+      docker exec --user 0 "$N8N_CONTAINER" chmod 600 "$container_file"
+    fi
     run_n8n import:credentials --input="$container_file" --userId="$N8N_USER_ID"
     docker exec --user 0 "$N8N_CONTAINER" rm -f "$container_file"
   else
@@ -155,6 +171,24 @@ json.dump([credential], open(path, "w"), indent=2)
 PYCRED
 echo "Importing MedicareGuard Groq credential..."
 import_credentials "$TMP_DIR/groq.json"
+
+python3 - "$TMP_DIR/identity-webhook.json" <<'PYCRED'
+import json
+import os
+import sys
+path = sys.argv[1]
+token = os.environ["MG_IDENTITY_WEBHOOK_TOKEN"]
+credential = {
+    "id": "mg-identity-webhook-credential",
+    "name": "MedicareGuard Identity Webhook",
+    "type": "httpHeaderAuth",
+    "data": {"name": "Authorization", "value": f"Bearer {token}"},
+}
+json.dump([credential], open(path, "w"), indent=2)
+PYCRED
+chmod 600 "$TMP_DIR/identity-webhook.json"
+echo "Importing authenticated Identity webhook credential..."
+import_credentials "$TMP_DIR/identity-webhook.json"
 
 if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD:-}" ]]; then
   python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "${MG_SMTP_DISABLE_STARTTLS:-false}" <<'PYCRED'
@@ -237,6 +271,7 @@ Next steps:
        MG_API_URL=http://localhost:4000/api
        N8N_AI_CHAT_URL=http://localhost:5678/webhook/mg-ai-chat
        MG_API_TOKEN=<token from: cd backend && npm run token:n8n>
+       MG_IDENTITY_WEBHOOK_TOKEN=<separate random secret shared with backend>
   2. Restart n8n.
   3. Verify: curl -X POST http://localhost:5678/webhook/mg-ransomware -H 'Content-Type: application/json' -d '{"entityId":"<alert-uuid>"}'
 EOF
