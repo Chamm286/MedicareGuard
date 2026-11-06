@@ -1,5 +1,5 @@
 /**
- * Automation registry for the four production n8n workflows shipped with
+ * Automation registry for the production n8n workflows shipped with
  * MedicareGuard. The JSON definitions live in /n8n/workflows and are imported
  * into n8n on first boot. This registry exposes their operational metadata to
  * the SOC console without requiring the n8n API on the request path.
@@ -125,6 +125,33 @@ const workflows = [
       { name: "Digest", detail: "Aggregate attacks into one readable message" },
       { name: "Notify", detail: "Push Telegram and Gmail to the on-call analyst" },
       { name: "Record", detail: "Mark alerts notified and write audit evidence" },
+    ],
+  },
+  {
+    id: "workflow-7-ai-incident-analysis",
+    n8nWorkflowId: "krxbXgYr7BgX9tCE",
+    name: "Workflow 7 - AI Incident Analysis Agent",
+    description: "Analyzes incident context with an AI agent, assigns severity and priority, updates the incident record and reports critical findings.",
+    category: "AI Incident Analysis",
+    trigger: "Webhook · incident analysis demo",
+    webhook: "/webhook/incident-trigger",
+    schedule: "On demand · n8n demo",
+    status: "active",
+    enabled: true,
+    demoOnly: true,
+    version: "1.0.0",
+    owner: "SOC Automation",
+    targetSla: "AI analysis",
+    nodeCount: 16,
+    tags: ["AI", "incident analysis", "prioritization"],
+    integrations: ["Google Gemini", "PostgreSQL", "Telegram"],
+    stages: [
+      { name: "Validate", detail: "Validate and normalize incident data" },
+      { name: "Enrich", detail: "Load recent incidents for context" },
+      { name: "Analyze", detail: "Generate AI findings and recommendations" },
+      { name: "Prioritize", detail: "Assign severity and response priority" },
+      { name: "Update", detail: "Save analysis to the incident record" },
+      { name: "Notify", detail: "Alert the team about critical incidents" },
     ],
   },
 ];

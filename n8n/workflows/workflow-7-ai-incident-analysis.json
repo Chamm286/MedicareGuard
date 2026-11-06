@@ -1,0 +1,553 @@
+{
+  "name": "Workflow 7 - AI Incident Analysis Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6d780767-1149-46bd-af45-b3da0a2501fb",
+      "name": "01 Webhook Incident",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2864,
+        208
+      ],
+      "webhookId": "incident-trigger",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.incident_key }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.body.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a67e80b9-f3a8-46c8-bf15-917722e61283",
+      "name": "02 Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body;\nconst now = new Date().toISOString();\nreturn [{\n  json: {\n    incident_key: String(b.incident_key).slice(0,32),\n    title: b.title,\n    description: b.description || '',\n    severity: (b.severity || 'medium').toLowerCase(),\n    category: b.category || 'ai-incident',\n    detected_at: b.detected_at || now,\n    source_ip: b.source_ip || null,\n    raw: b\n  }\n}];"
+      },
+      "id": "fa45b22e-2e3a-46ce-8048-49fb769f751e",
+      "name": "03 Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, incident_key, status FROM incidents WHERE incident_key = $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.incident_key] }}"
+        }
+      },
+      "id": "028fd037-fe1b-4a3c-bd7d-b40e3782aa52",
+      "name": "04 Check Duplicate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -2208,
+        208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "TDjlfcrzYSZKgZWp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              },
+              "id": "abe84b3b-4145-4c03-a2eb-23c45c3209f6"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6415e43c-5153-4162-b37c-8186d896548b",
+      "name": "05 Is New?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO incidents (incident_key, title, description, severity, status, priority, category, detected_at, sla_due_at, metadata)\nVALUES ($1,$2,$3,$4,'open','P3',$5,$6,$7,'{}'::jsonb)\nRETURNING id, incident_key;",
+        "options": {
+          "queryReplacement": "={{ [ $('03 Normalize').item.json.incident_key, $('03 Normalize').item.json.title, $('03 Normalize').item.json.description, $('03 Normalize').item.json.severity, $('03 Normalize').item.json.category, $('03 Normalize').item.json.detected_at, new Date(Date.now()+4*3600*1000).toISOString() ] }}"
+        }
+      },
+      "id": "870c2148-d97f-4382-b884-6fc30fc281e5",
+      "name": "06 Create Incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1760,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "TDjlfcrzYSZKgZWp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, severity, category, detected_at FROM incidents\nWHERE category = $1 AND detected_at > now() - interval '30 days'\nORDER BY detected_at DESC LIMIT 10;",
+        "options": {
+          "queryReplacement": "={{ [$('03 Normalize').item.json.category] }}"
+        }
+      },
+      "id": "f0aa2679-0c54-42b4-a06e-6a13fa118caa",
+      "name": "07 Load Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1536,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "TDjlfcrzYSZKgZWp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inc = $('03 Normalize').item.json;\nconst history = $items('07 Load Context').map(i => i.json);\nconst ctx = `INCIDENT:\\n- key: ${inc.incident_key}\\n- title: ${inc.title}\\n- description: ${inc.description}\\n- severity: ${inc.severity}\\n- category: ${inc.category}\\n- detected_at: ${inc.detected_at}\\n\\nRECENT SIMILAR INCIDENTS (last 30d):\\n${history.map(h => `- ${h.title} [${h.severity}] ${h.detected_at}`).join('\\n') || 'none'}`;\nreturn [{ json: { ai_context: ctx, incident_id: $('06 Create Incident').item.json.id, incident_key: inc.incident_key } }];"
+      },
+      "id": "bacce781-5f05-4a48-a0e2-26b7dee32993",
+      "name": "08 Build AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.ai_context }}",
+        "options": {
+          "systemMessage": "You are a SOC incident analyst for MedicareGuard (healthcare). Analyze the incident.\nReturn ONLY valid JSON with fields:\n- category: one of compliance|phishing|ransomware|vulnerability|ai-incident\n- severity: critical|high|medium|low\n- root_cause: string\n- impact: string\n- remediation_steps: array of strings\n- prevention: string\nDo NOT include markdown or extra text.",
+          "returnIntermediateSteps": false,
+          "passthroughBinaryPdfs": false,
+          "tracingMetadata": {
+            "values": [
+              {}
+            ]
+          }
+        }
+      },
+      "id": "d29df738-2a82-41d3-b267-89ab25a91f18",
+      "name": "09 AI Agent Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -1104,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy dữ liệu từ AI hoặc từ phần normalize/input ban đầu\nconst ai = $json.output || $json;\n\n// Ưu tiên lấy severity từ AI, nếu không có thì lấy từ Normalize (Node 03) hoặc mặc định là medium\nconst rawSeverity = ai.severity || $('03 Normalize').first().json.severity || 'medium';\nconst sev = String(rawSeverity).toLowerCase();\n\nconst priority = sev === 'critical' ? 'P1' : sev === 'high' ? 'P2' : 'P3';\n\nreturn [{ \n  json: { \n    ...ai, \n    severity: sev, \n    priority, \n    incident_id: $('08 Build AI Context').first().json.incident_id \n  } \n}];"
+      },
+      "id": "a5aaf947-e078-45f0-8bdc-dee39d77a97d",
+      "name": "12 Calculate Priority",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE incidents SET\n  severity=$1, priority=$2, category=$3, root_cause=$4, impact=$5,\n  status='investigating',\n  metadata = COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(\n    'ai_analysis', $6::jsonb,\n    'ai_analyzed_at', now()\n  )\nWHERE id=$7 RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.severity, $json.priority, $json.category, $json.root_cause, $json.impact, JSON.stringify({steps:$json.remediation_steps, prevention:$json.prevention}), $json.incident_id ] }}"
+        }
+      },
+      "id": "b40211d3-3c71-498d-9db0-2d6085aa0114",
+      "name": "13 Update Incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -448,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "TDjlfcrzYSZKgZWp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('12 Calculate Priority').first().json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "f286f9aa-0b24-4ffa-96eb-54b4fe55d818"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5aad4ac2-bbed-459e-8039-590a04706abf",
+      "name": "14 Is Critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "8898288922",
+        "text": "=🚨 CRITICAL INCIDENT\nKey: {{ $('08 Build AI Context').first().json.incident_key }}\nTitle: {{ $('03 Normalize').first().json.title }}\nPriority: {{ $('12 Calculate Priority').first().json.priority }}\nSteps:\n{{ ($('12 Calculate Priority').first().json.remediation_steps || []).join('\\n') }}",
+        "additionalFields": {}
+      },
+      "id": "4501eb24-33d1-448e-97c5-fa69da222b47",
+      "name": "15 Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "8ed3d2bc-9623-4d6b-a17a-9ca69b0569d5",
+      "credentials": {
+        "telegramApi": {
+          "id": "Uz0Bu9JWWkUkWIpy",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO activity_logs (level, event_type, resource, resource_id, action, message, metadata)\nVALUES ('info','workflow','incidents',$1,'ai_analyzed','Workflow 7 AI analysis completed', $2::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ String($('12 Calculate Priority').item.json.incident_id), JSON.stringify({severity:$('12 Calculate Priority').item.json.severity, priority:$('12 Calculate Priority').item.json.priority}) ] }}"
+        }
+      },
+      "id": "586b82af-5be0-4f55-9f7c-296e3cbbc287",
+      "name": "16 Audit Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "TDjlfcrzYSZKgZWp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'analyzed', incident_id: $('12 Calculate Priority').item.json.incident_id, severity: $('12 Calculate Priority').item.json.severity, priority: $('12 Calculate Priority').item.json.priority, category: $('12 Calculate Priority').item.json.category } }}",
+        "options": {}
+      },
+      "id": "07c6604f-33a7-469c-9474-c13a77eca8c2",
+      "name": "17 Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -1104,
+        320
+      ],
+      "id": "fbcf58c6-fd4d-45ff-86d2-b72c01262e67",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "UnD2Sjsg9CRhyays",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "01 Webhook Incident": {
+      "main": [
+        [
+          {
+            "node": "02 Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 Validate": {
+      "main": [
+        [
+          {
+            "node": "03 Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 Normalize": {
+      "main": [
+        [
+          {
+            "node": "04 Check Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 Check Duplicate": {
+      "main": [
+        [
+          {
+            "node": "05 Is New?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 Is New?": {
+      "main": [
+        [
+          {
+            "node": "06 Create Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 Create Incident": {
+      "main": [
+        [
+          {
+            "node": "07 Load Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 Load Context": {
+      "main": [
+        [
+          {
+            "node": "08 Build AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 Build AI Context": {
+      "main": [
+        [
+          {
+            "node": "09 AI Agent Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 AI Agent Analyst": {
+      "main": [
+        [
+          {
+            "node": "12 Calculate Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 Calculate Priority": {
+      "main": [
+        [
+          {
+            "node": "13 Update Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13 Update Incident": {
+      "main": [
+        [
+          {
+            "node": "14 Is Critical?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 Is Critical?": {
+      "main": [
+        [
+          {
+            "node": "15 Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16 Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15 Telegram Alert": {
+      "main": [
+        [
+          {
+            "node": "16 Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16 Audit Log": {
+      "main": [
+        [
+          {
+            "node": "17 Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "09 AI Agent Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "5d1eb178-a97a-4254-ab8c-fd5f628b6160",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e699cbf6a2a899a3a6965687fa5a50117a9f45c4d2698b954b5b84c45d00ff09"
+  },
+  "nodeGroups": [],
+  "id": "krxbXgYr7BgX9tCE",
+  "tags": []
+}

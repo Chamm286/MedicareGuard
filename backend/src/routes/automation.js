@@ -85,7 +85,7 @@ router.get(
         success_rate: stat.attempted_runs ? Math.round((stat.successful_runs / stat.attempted_runs) * 100) : 100,
         last_run: stat.last_run || null,
         avg_duration_ms: stat.avg_duration_ms || null,
-        n8n_url: `${n8nBaseUrl()}/workflow/${workflow.id}`,
+        n8n_url: `${n8nBaseUrl()}/workflow/${workflow.n8nWorkflowId || workflow.id}`,
       };
     });
     const runtime = await runtimeStatus();
@@ -189,6 +189,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const workflow = byId(req.params.id);
     if (!workflow) throw new HttpError(404, "Workflow not found");
+    if (workflow.demoOnly) throw new HttpError(409, "This workflow is available for demo viewing only.");
     const enabled = (await readOverrides())[workflow.id] ?? workflow.enabled;
     if (!enabled) throw new HttpError(409, "Workflow is paused. Enable it before running.");
 
@@ -250,6 +251,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const workflow = byId(req.params.id);
     if (!workflow) throw new HttpError(404, "Workflow not found");
+    if (workflow.demoOnly) throw new HttpError(409, "This workflow is available for demo viewing only.");
     if (typeof req.body.enabled !== "boolean") throw new HttpError(400, "enabled must be a boolean");
     const key = `automation.workflow.${workflow.id}.enabled`;
     await query(

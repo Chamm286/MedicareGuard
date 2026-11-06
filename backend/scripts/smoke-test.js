@@ -106,22 +106,29 @@ const run = async () => {
     "vulnerability-sla": 20,
     "compliance-evidence": 20,
     "live-attack-monitor": 18,
+    "workflow-7-ai-incident-analysis": 16,
   };
   const actualNodes = Object.fromEntries(suite.map((workflow) => [workflow.id, workflow.nodeCount]));
   results.push({
-    name: "automation suite exposes 5 workflows",
+    name: "automation suite exposes 6 workflows",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suite.length === 5 && suiteSummary.active === 5,
+    ok: suiteResponse.ok && suite.length === 6 && suiteSummary.active === 6,
   });
   results.push({
-    name: "automation suite totals 98 nodes",
+    name: "automation suite totals 114 nodes",
     status: suiteResponse.status,
-    ok: suiteResponse.ok && suiteSummary.nodes === 98,
+    ok: suiteResponse.ok && suiteSummary.nodes === 114,
   });
   results.push({
     name: "automation node counts match the compact design",
     status: suiteResponse.status,
     ok: suiteResponse.ok && Object.entries(expectedNodes).every(([id, count]) => actualNodes[id] === count),
+  });
+  const demoWorkflow = suite.find((workflow) => workflow.id === "workflow-7-ai-incident-analysis");
+  results.push({
+    name: "Workflow 7 links to its n8n demo",
+    status: suiteResponse.status,
+    ok: suiteResponse.ok && demoWorkflow?.demoOnly === true && demoWorkflow.n8n_url.endsWith("/workflow/krxbXgYr7BgX9tCE"),
   });
 
   const meta = await request("/_meta/endpoints", { headers });
