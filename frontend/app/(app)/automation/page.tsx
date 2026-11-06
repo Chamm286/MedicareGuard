@@ -32,7 +32,15 @@ export default function AutomationPage() {
     setCanApprove(getUser()?.role === "admin");
   }, []);
 
-  const list = data?.data || [];
+  const workflows = data?.data || [];
+  const visibleWorkflowIds = new Set([
+    "ransomware-containment",
+    "phishing-triage",
+    "vulnerability-sla",
+    "compliance-evidence",
+    "identity-attack",
+  ]);
+  const list = workflows.filter((workflow: any) => visibleWorkflowIds.has(workflow.id));
   const summary = data?.summary;
   const runtime = summary?.runtime;
   const runs = executions.data?.data || [];
@@ -53,7 +61,12 @@ export default function AutomationPage() {
       const response = await api<any>(`/automation/workflows/${workflow.id}/run`, { method: "POST" });
       const result = response.data;
       setLastRun({ ...result, workflowName: workflow.name });
-      if (result.dispatched) success("Đã gửi quy trình", `${workflow.name} đang thực thi trong n8n.`);
+      if (result.dispatched) {
+        success(
+          workflow.id === "identity-attack" ? "Đã chạy mô phỏng tấn công danh tính" : "Đã gửi quy trình",
+          `${workflow.name} đang thực thi trong n8n.`,
+        );
+      }
       else toast("Quy trình đã vào hàng đợi", { message: "Không thể truy cập n8n. Lần chạy đã được ghi lại và sẽ được gửi khi động cơ trực tuyến.", tone: "warning" });
       refetch();
       executions.refetch();
@@ -208,6 +221,11 @@ export default function AutomationPage() {
               </div>
 
               <p className="mt-2.5 line-clamp-2 text-[10.5px] leading-relaxed text-slate-600">{workflow.description}</p>
+              {workflow.id === "identity-attack" && (
+                <p className="mt-2 rounded-lg border border-brand-400/10 bg-brand-500/[0.04] px-2.5 py-2 text-[9px] leading-relaxed text-slate-400">
+                  Demo: 5 lần đăng nhập sai → đăng nhập từ IP lạ → thử truy cập tài nguyên quản trị. Nếu rủi ro từ 70/100, yêu cầu duyệt sẽ hiện bên dưới.
+                </p>
+              )}
 
               <div className="mt-3 flex flex-wrap items-center gap-1">
                 {workflow.stages.map((stage: any, index: number) => (
@@ -240,7 +258,9 @@ export default function AutomationPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="hidden text-[8.5px] text-slate-700 sm:inline">{workflow.schedule}</span>
-                  <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>Chạy ngay bây giờ</Button>
+                  <Button size="sm" variant="primary" icon={Play} loading={running === workflow.id} disabled={!workflow.enabled || running === workflow.id} onClick={() => runWorkflow(workflow)}>
+                    {workflow.id === "identity-attack" ? "Chạy mô phỏng" : "Chạy ngay bây giờ"}
+                  </Button>
                 </div>
               </div>
             </Card>

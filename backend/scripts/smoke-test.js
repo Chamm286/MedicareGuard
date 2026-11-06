@@ -98,6 +98,43 @@ const run = async () => {
   });
   results.push({ name: "POST /ai/chat", status: chat.status, ok: chat.ok });
 
+  const identityContext = await request("/automation/identity/context?userEmail=viewer%40medicareguard.io", { headers });
+  results.push({
+    name: "identity API returns account context for n8n",
+    status: identityContext.status,
+    ok: identityContext.ok && identityContext.body?.data?.email === "viewer@medicareguard.io",
+  });
+  const invalidIdentityEvidence = await request("/automation/identity/evidence", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ executionId: "invalid" }),
+  });
+  results.push({
+    name: "identity evidence API validates required fields",
+    status: invalidIdentityEvidence.status,
+    ok: invalidIdentityEvidence.status === 400,
+  });
+  const invalidIdentityAlert = await request("/automation/identity/alerts", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ executionId: "invalid" }),
+  });
+  results.push({
+    name: "identity alert API validates required fields",
+    status: invalidIdentityAlert.status,
+    ok: invalidIdentityAlert.status === 400,
+  });
+  const invalidIdentityAudit = await request("/automation/identity/audit", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ executionId: "invalid" }),
+  });
+  results.push({
+    name: "identity audit API validates required fields",
+    status: invalidIdentityAudit.status,
+    ok: invalidIdentityAudit.status === 400,
+  });
+
   const approvalExecutionId = `smoke-approval-${crypto.randomUUID()}`;
   const approvalPath = `/automation/executions/${approvalExecutionId}/approval`;
   const approvalRequest = await request(`${approvalPath}-request`, {
@@ -187,6 +224,13 @@ const run = async () => {
     name: "automation node counts match the compact design",
     status: suiteResponse.status,
     ok: suiteResponse.ok && Object.entries(expectedNodes).every(([id, count]) => actualNodes[id] === count),
+  });
+  const identityDefinition = require("../../n8n/workflows/identity-attrack.json");
+  const identityExecutableNodes = identityDefinition.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote");
+  results.push({
+    name: "identity workflow has more than 15 executable nodes and no PostgreSQL nodes",
+    status: suiteResponse.status,
+    ok: identityExecutableNodes.length > 15 && identityExecutableNodes.every((node) => node.type !== "n8n-nodes-base.postgres"),
   });
 
   const meta = await request("/_meta/endpoints", { headers });

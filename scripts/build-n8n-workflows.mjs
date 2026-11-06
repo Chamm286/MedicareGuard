@@ -518,7 +518,7 @@ const buildIdentityWorkflow = (spec) => {
     webhook: "01 · Tiếp nhận sự kiện",
     validate: "02 · Kiểm tra dữ liệu",
     normalize: "03 · Chuẩn hóa sự kiện",
-    history: "04 · PostgreSQL — Lịch sử đăng nhập",
+    history: "04 · API MedicareGuard — Lịch sử đăng nhập",
     filter: "05 · Lọc đăng nhập thất bại",
     brute: "06 · Phát hiện dò mật khẩu",
     unusual: "07 · Phát hiện đăng nhập bất thường",
@@ -528,15 +528,15 @@ const buildIdentityWorkflow = (spec) => {
     agent: "11 · Groq AI — Phân tích danh tính",
     model: "Mô hình Groq",
     mitre: "12 · Ánh xạ MITRE ATT&CK",
-    evidence: "13 · PostgreSQL — Lưu bằng chứng",
-    alert: "14 · Tạo cảnh báo SOC",
+    evidence: "13 · API MedicareGuard — Lưu bằng chứng",
+    alert: "14 · API MedicareGuard — Tạo cảnh báo SOC",
     telegram: "15 · Gửi thông báo Telegram",
     telegramGate: "Telegram đã cấu hình?",
     approval: "16 · Chờ quản trị viên duyệt",
     approvalRequest: "Ghi nhận yêu cầu duyệt",
     approvalCheck: "Kiểm tra quyết định duyệt",
     approvalPending: "Chưa có quyết định?",
-    audit: "17 · Ghi nhật ký kiểm toán",
+    audit: "17 · API MedicareGuard — Ghi nhật ký kiểm toán",
     complete: "18 · Hoàn tất thực thi",
   };
   const pos = (index, y = 0) => [index * 220, y];
@@ -574,19 +574,12 @@ const events = input.map((event, index) => {
 });
 return [{ json: { ...base, events } }];`;
 
-  const historyQuery = `SELECT u.id AS user_id, u.email, u.full_name, u.department, r.name AS role_name, COALESCE(r.level, 0)::int AS role_level,
-  (SELECT count(*)::int FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS successful_logins_30d,
-  (SELECT count(*)::int FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login_failed' AND al.created_at > now() - interval '15 minutes') AS failed_logins_15m,
-  (SELECT COALESCE(json_agg(DISTINCT al.source_ip) FILTER (WHERE al.source_ip IS NOT NULL), '[]'::json) FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS known_ips
-FROM users u LEFT JOIN roles r ON r.id = u.role_id
-WHERE lower(u.email) = lower('${sqlRef(N.validate, "userEmail")}') LIMIT 1;`;
-
   const filterCode = `const base = $('${N.normalize}').first().json;
-const history = $('${N.history}').first().json || {};
-  if (!history.user_id) throw new Error('No account found for userEmail');
-  const windowStart = Date.now() - 15 * 60 * 1000;
-  const failedEvents = base.events.filter((event) => event.type === 'login_failed' && new Date(event.timestamp).getTime() >= windowStart);
-  const priorFailedLogins = Number(history.failed_logins_15m || 0);
+const history = $('${N.history}').first().json.data || {};
+if (!history.user_id) throw new Error('No account found for userEmail');
+const windowStart = Date.now() - 15 * 60 * 1000;
+const failedEvents = base.events.filter((event) => event.type === 'login_failed' && new Date(event.timestamp).getTime() >= windowStart);
+const priorFailedLogins = Number(history.failed_logins_15m || 0);
 return [{ json: { ...base, history, failedEvents, failedLoginCount: failedEvents.length + priorFailedLogins, priorFailedLogins } }];`;
 
   const bruteCode = `const base = $('${N.filter}').first().json;
@@ -598,7 +591,7 @@ const knownIps = Array.isArray(base.history.known_ips) ? base.history.known_ips 
 const successfulLogins = base.events.filter((event) => event.type === 'login_success');
 const unusualLogins = successfulLogins.filter((event) => !knownIps.includes(event.sourceIp));
 const suspiciousIp = unusualLogins[0]?.sourceIp || base.failedEvents[0]?.sourceIp || 'unknown';
-return [{ json: { ...base, knownIps, unusualLogins, unusualLoginDetected: unusualLogins.length > 0, suspiciousIp, suspiciousIpSql: String(suspiciousIp).replace(/'/g, \"''\") } }];`;
+return [{ json: { ...base, knownIps, unusualLogins, unusualLoginDetected: unusualLogins.length > 0, suspiciousIp } }];`;
 
   const privilegeCode = `const base = $('${N.unusual}').first().json;
 const privilegeEvents = base.events.filter((event) => event.type === 'admin_access_denied' || event.type === 'privilege_escalation_attempt');
@@ -623,44 +616,19 @@ if (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', techniq
 if (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });
 const user = risk.history.full_name || risk.userEmail;
 const evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };
-const sqlText = (value) => String(value == null ? '' : value).replace(/'/g, \"''\");
 const alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;
 const alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;
-return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, mitre: mappings, alertTitle, alertDescription, alertTitleSql: sqlText(alertTitle), alertDescriptionSql: sqlText(alertDescription), userEmailSql: sqlText(risk.userEmail), executionIdSql: sqlText(risk.executionId), suspiciousIpSql: sqlText(risk.suspiciousIp), evidenceJsonSql: sqlText(JSON.stringify(evidence)), mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];`;
+return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evidence, mitre: mappings, alertTitle, alertDescription, mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];`;
 
-  const evidenceQuery = `INSERT INTO activity_logs (level, event_type, actor_email, source_ip, resource, resource_id, action, message, metadata)
-VALUES ('warning', 'security', '${sqlRef(N.mitre, "userEmailSql")}', '${sqlRef(N.mitre, "suspiciousIpSql")}', 'identity_detection',
-  '${sqlRef(N.mitre, "executionIdSql")}', 'detect', 'Đã ghi nhận bằng chứng phát hiện tấn công danh tính',
-  '${sqlRef(N.mitre, "evidenceJsonSql")}'::jsonb)
-RETURNING id;`;
+  const approvalAuditBody = `={{ JSON.stringify({ workflowId: '${spec.id}', executionId: $('${N.validate}').first().json.executionId, userEmail: $('${N.validate}').first().json.userEmail, sourceIp: $('${N.unusual}').first().json.suspiciousIp, alertId: $('${N.alert}').first().json.data.id, riskScore: $('${N.score}').first().json.riskScore, adminDecision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required', reviewer: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.reviewer : null }) }}`;
 
-  const alertQuery = `INSERT INTO alerts (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique, risk_score, confidence, tags, metadata)
-VALUES ('${sqlRef(N.mitre, "alertTitleSql")}', '${sqlRef(N.mitre, "alertDescriptionSql")}',
-  '${sqlRef(N.score, "severity")}', 'open', 'Phát hiện tấn công danh tính bằng Groq AI', '${sqlRef(N.mitre, "suspiciousIpSql")}',
-  '${sqlRef(N.mitre, "mitreTactic")}', '${sqlRef(N.mitre, "mitreTechnique")}', ${sqlRef(N.score, "riskScore")}, 85,
-  ARRAY['identity','brute_force','privilege_escalation'],
-  '${sqlRef(N.mitre, "evidenceJsonSql")}'::jsonb)
-RETURNING id, title, severity, risk_score, source_ip;`;
-
-  const approvalDecision = `{{ $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required' }}`;
-  const approvalReviewer = `{{ $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.reviewer : '' }}`;
-  const approvalQuery = `INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)
-  VALUES ('${sqlRef(N.validate, "userEmail")}', 'identity_detection_review', 'alerts',
-    (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '${sqlRef(N.validate, "executionId")}' ORDER BY created_at DESC LIMIT 1),
-    '${sqlRef(N.unusual, "suspiciousIpSql")}',
-    jsonb_build_object('workflowId', '${spec.id}', 'executionId', '${sqlRef(N.validate, "executionId")}',
-      'riskScore', ${sqlRef(N.score, "riskScore")},
-      'adminDecision', '${approvalDecision}',
-      'reviewer', '${approvalReviewer}'))
-  RETURNING id;`;
-
-    const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70, admin_decision: $('${N.approvalCheck}').first().json.data.decision }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
+  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: true, approval_required: $('${N.score}').first().json.riskScore >= 70, admin_decision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
 
   const nodes = [
     node(N.webhook, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, pos(0), { webhookId: id() }),
     code(N.validate, validateCode, pos(1)),
     code(N.normalize, normalizeCode, pos(2)),
-    postgres(N.history, historyQuery, pos(3), { onError: "stopWorkflow" }),
+    http(N.history, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/context?userEmail=' + encodeURIComponent($('${N.validate}').first().json.userEmail) }}`, pos(3), null, { onError: "stopWorkflow" }),
     code(N.filter, filterCode, pos(4)),
     code(N.brute, bruteCode, pos(5)),
     code(N.unusual, unusualCode, pos(6)),
@@ -677,8 +645,8 @@ RETURNING id, title, severity, risk_score, source_ip;`;
       options: { temperature: 0.2 },
     }, pos(10, 220), { credentials: { groqApi: { id: "mg-groq-credential", name: "MedicareGuard Groq" } } }),
     code(N.mitre, mitreCode, pos(11)),
-    postgres(N.evidence, evidenceQuery, pos(12), { onError: "stopWorkflow" }),
-    postgres(N.alert, alertQuery, pos(13), { onError: "stopWorkflow" }),
+    http(N.evidence, "POST", apiUrl("/automation/identity/evidence"), pos(12), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, userEmail: $('${N.mitre}').first().json.userEmail, sourceIp: $('${N.mitre}').first().json.suspiciousIp, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow" }),
+    http(N.alert, "POST", apiUrl("/automation/identity/alerts"), pos(13), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, title: $('${N.mitre}').first().json.alertTitle, description: $('${N.mitre}').first().json.alertDescription, severity: $('${N.score}').first().json.severity, sourceIp: $('${N.mitre}').first().json.suspiciousIp, mitreTactic: $('${N.mitre}').first().json.mitreTactic, mitreTechnique: $('${N.mitre}').first().json.mitreTechnique, riskScore: $('${N.score}').first().json.riskScore, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow" }),
     ifNode(N.telegramGate, "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, pos(14)),
     node(N.telegram, "n8n-nodes-base.telegram", 1.2, {
       resource: "message",
@@ -686,21 +654,21 @@ RETURNING id, title, severity, risk_score, source_ip;`;
       chatId: "={{ $env.TELEGRAM_CHAT_ID || '' }}",
       text: `={{ [
   'MEDICAREGUARD — Phát hiện tấn công danh tính',
-  'Mức độ: ' + $('${N.alert}').first().json.severity + ' · Điểm rủi ro: ' + $('${N.alert}').first().json.risk_score + '/100',
+  'Mức độ: ' + $('${N.alert}').first().json.data.severity + ' · Điểm rủi ro: ' + $('${N.alert}').first().json.data.risk_score + '/100',
   'Tài khoản: ' + $('${N.score}').first().json.userEmail + ' (' + ($('${N.score}').first().json.history.role_name || 'không rõ') + ')',
   'Địa chỉ IP nguồn: ' + $('${N.score}').first().json.suspiciousIp,
   'Dấu hiệu: ' + $('${N.score}').first().json.detections.join(', '),
   'MITRE ATT&CK: ' + $('${N.mitre}').first().json.mitreTechnique,
-  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('${N.alert}').first().json.id,
+  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('${N.alert}').first().json.data.id,
   'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,
 ].join('\\n') }}`,
       additionalFields: { appendAttribution: false },
     }, pos(15), { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "stopWorkflow" }),
-    http(N.approvalRequest, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval-request' }}`, pos(16), jsonBody(`workflowId: '${spec.id}', userEmail: $('${N.score}').first().json.userEmail, riskScore: $('${N.score}').first().json.riskScore, alertId: $('${N.alert}').first().json.id`), { onError: "stopWorkflow" }),
+    http(N.approvalRequest, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval-request' }}`, pos(16), jsonBody(`workflowId: '${spec.id}', userEmail: $('${N.score}').first().json.userEmail, riskScore: $('${N.score}').first().json.riskScore, alertId: $('${N.alert}').first().json.data.id`), { onError: "stopWorkflow" }),
     node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "timeInterval", amount: 70, unit: "seconds", options: {} }, pos(17)),
     http(N.approvalCheck, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval' }}`, pos(18), null, { onError: "stopWorkflow" }),
     ifNode(N.approvalPending, `={{ $json.data.decision }}`, "pending", pos(19)),
-    postgres(N.audit, approvalQuery, pos(20), { onError: "stopWorkflow" }),
+    http(N.audit, "POST", apiUrl("/automation/identity/audit"), pos(20), approvalAuditBody, { onError: "stopWorkflow" }),
     node(N.complete, "n8n-nodes-base.httpRequest", 4.2, {
       method: "POST",
       url: `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/complete' }}`,
@@ -715,9 +683,9 @@ RETURNING id, title, severity, risk_score, source_ip;`;
       jsonBody: completionBody,
       options: { timeout: 15000 },
     }, pos(21), { onError: "stopWorkflow" }),
-    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
-    sticky("Ghi chú — Phát hiện & Chấm điểm", "## ① Tương quan danh tính\nĐếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với lịch sử PostgreSQL, phát hiện truy cập tài nguyên quản trị và tính risk score.", [0, -220], 1450, 145, 1),
-    sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ trước khi ghi audit log.", [1500, -220], 1550, 145, 3),
+    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
+    sticky("Ghi chú — Phát hiện & Chấm điểm", "## ① Tương quan danh tính\nLấy lịch sử đăng nhập qua API MedicareGuard, đếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với IP đã biết, phát hiện truy cập tài nguyên quản trị và tính risk score.", [0, -220], 1450, 145, 1),
+    sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, gọi API MedicareGuard để lưu alert/evidence và audit, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ.", [1500, -220], 1550, 145, 3),
   ];
 
   const main = (target) => [{ node: target, type: "main", index: 0 }];

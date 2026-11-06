@@ -11,7 +11,7 @@ MedicareGuard ships focused n8n playbooks. Workflows stay at **5–23 executable
 | Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 18 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
 | Phản hồi Gian lận Thương mại điện tử | 13 | `POST /webhook/mg-ecommerce-fraud` | Giữ đơn, mở điều tra, cảnh báo SOC |
 | Chat AI phân tích SOC | 5 | `POST /webhook/mg-ai-chat` | Trả lời câu hỏi SOC từ PostgreSQL |
-| Phát hiện tấn công danh tính | 18 giai đoạn + Groq AI | `POST /webhook/mg-identity-attack` | Phát hiện tấn công tài khoản và leo thang đặc quyền bằng Groq + MITRE ATT&CK; cảnh báo Telegram và chờ quản trị viên duyệt |
+| Phát hiện tấn công danh tính | 23 node · Groq AI | `POST /webhook/mg-identity-attack` | Dùng API MedicareGuard để lấy lịch sử đăng nhập, lưu bằng chứng/cảnh báo/audit; phát hiện tấn công tài khoản và leo thang đặc quyền bằng Groq + MITRE ATT&CK |
 
 ## Integration flow
 
@@ -32,6 +32,7 @@ Express API ── webhook ──▶ n8n
 - `GET /api/automation/runtime` probes n8n and reports latency.
 - `POST /api/automation/simulate/:action` provides deterministic EDR, identity, sandbox, patch and evidence adapters for demos.
 - `POST /api/automation/executions/:executionId/complete` finalizes the execution and updates the console activity log.
+- Identity workflow nodes use authenticated MedicareGuard API endpoints for account context and persistence; they do not connect directly to PostgreSQL.
 
 ## Setup
 

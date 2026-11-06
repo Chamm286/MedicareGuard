@@ -47,25 +47,34 @@
       "id": "0bab4752-3cdf-5ee0-9e7d-d9fdb81d343b"
     },
     {
-      "name": "04 · PostgreSQL — Lịch sử đăng nhập",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "04 · API MedicareGuard — Lịch sử đăng nhập",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT u.id AS user_id, u.email, u.full_name, u.department, r.name AS role_name, COALESCE(r.level, 0)::int AS role_level,\n  (SELECT count(*)::int FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS successful_logins_30d,\n  (SELECT count(*)::int FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login_failed' AND al.created_at > now() - interval '15 minutes') AS failed_logins_15m,\n  (SELECT COALESCE(json_agg(DISTINCT al.source_ip) FILTER (WHERE al.source_ip IS NOT NULL), '[]'::json) FROM activity_logs al WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth' AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS known_ips\nFROM users u LEFT JOIN roles r ON r.id = u.role_id\nWHERE lower(u.email) = lower('{{ $('02 · Kiểm tra dữ liệu').first().json.userEmail }}') LIMIT 1;",
-        "options": {}
+        "method": "GET",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/context?userEmail=' + encodeURIComponent($('02 · Kiểm tra dữ liệu').first().json.userEmail) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
       },
       "position": [
         660,
         0
       ],
       "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "stopWorkflow"
     },
     {
@@ -73,7 +82,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('03 · Chuẩn hóa sự kiện').first().json;\nconst history = $('04 · PostgreSQL — Lịch sử đăng nhập').first().json || {};\n  if (!history.user_id) throw new Error('No account found for userEmail');\n  const windowStart = Date.now() - 15 * 60 * 1000;\n  const failedEvents = base.events.filter((event) => event.type === 'login_failed' && new Date(event.timestamp).getTime() >= windowStart);\n  const priorFailedLogins = Number(history.failed_logins_15m || 0);\nreturn [{ json: { ...base, history, failedEvents, failedLoginCount: failedEvents.length + priorFailedLogins, priorFailedLogins } }];"
+        "jsCode": "const base = $('03 · Chuẩn hóa sự kiện').first().json;\nconst history = $('04 · API MedicareGuard — Lịch sử đăng nhập').first().json.data || {};\nif (!history.user_id) throw new Error('No account found for userEmail');\nconst windowStart = Date.now() - 15 * 60 * 1000;\nconst failedEvents = base.events.filter((event) => event.type === 'login_failed' && new Date(event.timestamp).getTime() >= windowStart);\nconst priorFailedLogins = Number(history.failed_logins_15m || 0);\nreturn [{ json: { ...base, history, failedEvents, failedLoginCount: failedEvents.length + priorFailedLogins, priorFailedLogins } }];"
       },
       "position": [
         880,
@@ -99,7 +108,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('06 · Phát hiện dò mật khẩu').first().json;\nconst knownIps = Array.isArray(base.history.known_ips) ? base.history.known_ips : [];\nconst successfulLogins = base.events.filter((event) => event.type === 'login_success');\nconst unusualLogins = successfulLogins.filter((event) => !knownIps.includes(event.sourceIp));\nconst suspiciousIp = unusualLogins[0]?.sourceIp || base.failedEvents[0]?.sourceIp || 'unknown';\nreturn [{ json: { ...base, knownIps, unusualLogins, unusualLoginDetected: unusualLogins.length > 0, suspiciousIp, suspiciousIpSql: String(suspiciousIp).replace(/'/g, \"''\") } }];"
+        "jsCode": "const base = $('06 · Phát hiện dò mật khẩu').first().json;\nconst knownIps = Array.isArray(base.history.known_ips) ? base.history.known_ips : [];\nconst successfulLogins = base.events.filter((event) => event.type === 'login_success');\nconst unusualLogins = successfulLogins.filter((event) => !knownIps.includes(event.sourceIp));\nconst suspiciousIp = unusualLogins[0]?.sourceIp || base.failedEvents[0]?.sourceIp || 'unknown';\nreturn [{ json: { ...base, knownIps, unusualLogins, unusualLoginDetected: unusualLogins.length > 0, suspiciousIp } }];"
       },
       "position": [
         1320,
@@ -214,7 +223,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Groq AI — Phân tích danh tính').first().json.output || $('11 · Groq AI — Phân tích danh tính').first().json.text || '';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst sqlText = (value) => String(value == null ? '' : value).replace(/'/g, \"''\");\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, mitre: mappings, alertTitle, alertDescription, alertTitleSql: sqlText(alertTitle), alertDescriptionSql: sqlText(alertDescription), userEmailSql: sqlText(risk.userEmail), executionIdSql: sqlText(risk.executionId), suspiciousIpSql: sqlText(risk.suspiciousIp), evidenceJsonSql: sqlText(JSON.stringify(evidence)), mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
+        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Groq AI — Phân tích danh tính').first().json.output || $('11 · Groq AI — Phân tích danh tính').first().json.text || '';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evidence, mitre: mappings, alertTitle, alertDescription, mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
       },
       "position": [
         2420,
@@ -223,47 +232,73 @@
       "id": "9fa1fc8b-c8cc-5c74-af1b-e9a0bfd4672b"
     },
     {
-      "name": "13 · PostgreSQL — Lưu bằng chứng",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "13 · API MedicareGuard — Lưu bằng chứng",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO activity_logs (level, event_type, actor_email, source_ip, resource, resource_id, action, message, metadata)\nVALUES ('warning', 'security', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.userEmailSql }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIpSql }}', 'identity_detection',\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.executionIdSql }}', 'detect', 'Đã ghi nhận bằng chứng phát hiện tấn công danh tính',\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.evidenceJsonSql }}'::jsonb)\nRETURNING id;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/evidence' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('12 · Ánh xạ MITRE ATT&CK').first().json.executionId, userEmail: $('12 · Ánh xạ MITRE ATT&CK').first().json.userEmail, sourceIp: $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIp, evidence: $('12 · Ánh xạ MITRE ATT&CK').first().json.evidence }) }}"
       },
       "position": [
         2640,
         0
       ],
       "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "stopWorkflow"
     },
     {
-      "name": "14 · Tạo cảnh báo SOC",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "14 · API MedicareGuard — Tạo cảnh báo SOC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO alerts (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique, risk_score, confidence, tags, metadata)\nVALUES ('{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertTitleSql }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.alertDescriptionSql }}',\n  '{{ $('09 · Tính điểm rủi ro').first().json.severity }}', 'open', 'Phát hiện tấn công danh tính bằng Groq AI', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIpSql }}',\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTactic }}', '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique }}', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }}, 85,\n  ARRAY['identity','brute_force','privilege_escalation'],\n  '{{ $('12 · Ánh xạ MITRE ATT&CK').first().json.evidenceJsonSql }}'::jsonb)\nRETURNING id, title, severity, risk_score, source_ip;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/alerts' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: $('12 · Ánh xạ MITRE ATT&CK').first().json.executionId, title: $('12 · Ánh xạ MITRE ATT&CK').first().json.alertTitle, description: $('12 · Ánh xạ MITRE ATT&CK').first().json.alertDescription, severity: $('09 · Tính điểm rủi ro').first().json.severity, sourceIp: $('12 · Ánh xạ MITRE ATT&CK').first().json.suspiciousIp, mitreTactic: $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTactic, mitreTechnique: $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, evidence: $('12 · Ánh xạ MITRE ATT&CK').first().json.evidence }) }}"
       },
       "position": [
         2860,
         0
       ],
       "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "stopWorkflow"
     },
     {
@@ -307,7 +342,7 @@
         "resource": "message",
         "operation": "sendMessage",
         "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
-        "text": "={{ [\n  'MEDICAREGUARD — Phát hiện tấn công danh tính',\n  'Mức độ: ' + $('14 · Tạo cảnh báo SOC').first().json.severity + ' · Điểm rủi ro: ' + $('14 · Tạo cảnh báo SOC').first().json.risk_score + '/100',\n  'Tài khoản: ' + $('09 · Tính điểm rủi ro').first().json.userEmail + ' (' + ($('09 · Tính điểm rủi ro').first().json.history.role_name || 'không rõ') + ')',\n  'Địa chỉ IP nguồn: ' + $('09 · Tính điểm rủi ro').first().json.suspiciousIp,\n  'Dấu hiệu: ' + $('09 · Tính điểm rủi ro').first().json.detections.join(', '),\n  'MITRE ATT&CK: ' + $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique,\n  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('14 · Tạo cảnh báo SOC').first().json.id,\n  'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,\n].join('\\n') }}",
+        "text": "={{ [\n  'MEDICAREGUARD — Phát hiện tấn công danh tính',\n  'Mức độ: ' + $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.severity + ' · Điểm rủi ro: ' + $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.risk_score + '/100',\n  'Tài khoản: ' + $('09 · Tính điểm rủi ro').first().json.userEmail + ' (' + ($('09 · Tính điểm rủi ro').first().json.history.role_name || 'không rõ') + ')',\n  'Địa chỉ IP nguồn: ' + $('09 · Tính điểm rủi ro').first().json.suspiciousIp,\n  'Dấu hiệu: ' + $('09 · Tính điểm rủi ro').first().json.detections.join(', '),\n  'MITRE ATT&CK: ' + $('12 · Ánh xạ MITRE ATT&CK').first().json.mitreTechnique,\n  'Cảnh báo: ' + ($env.MG_CONSOLE_URL || 'http://localhost:3000') + '/alerts/' + $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.id,\n  'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,\n].join('\\n') }}",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -351,7 +386,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', userEmail: $('09 · Tính điểm rủi ro').first().json.userEmail, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, alertId: $('14 · Tạo cảnh báo SOC').first().json.id }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', userEmail: $('09 · Tính điểm rủi ro').first().json.userEmail, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, alertId: $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.id }) }}"
       },
       "position": [
         3520,
@@ -441,25 +476,38 @@
       "id": "79d86dd3-f617-51cd-8e7a-473f77df381a"
     },
     {
-      "name": "17 · Ghi nhật ký kiểm toán",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "17 · API MedicareGuard — Ghi nhật ký kiểm toán",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)\n  VALUES ('{{ $('02 · Kiểm tra dữ liệu').first().json.userEmail }}', 'identity_detection_review', 'alerts',\n    (SELECT id::text FROM alerts WHERE metadata->>'executionId' = '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}' ORDER BY created_at DESC LIMIT 1),\n    '{{ $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIpSql }}',\n    jsonb_build_object('workflowId', 'identity-attack', 'executionId', '{{ $('02 · Kiểm tra dữ liệu').first().json.executionId }}',\n      'riskScore', {{ $('09 · Tính điểm rủi ro').first().json.riskScore }},\n      'adminDecision', '{{ $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required' }}',\n      'reviewer', '{{ $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.reviewer : '' }}'))\n  RETURNING id;",
-        "options": {}
+        "method": "POST",
+        "url": "={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/audit' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.MG_API_TOKEN || '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', executionId: $('02 · Kiểm tra dữ liệu').first().json.executionId, userEmail: $('02 · Kiểm tra dữ liệu').first().json.userEmail, sourceIp: $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIp, alertId: $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.id, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, adminDecision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required', reviewer: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.reviewer : null }) }}"
       },
       "position": [
         4400,
         0
       ],
       "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
-      "credentials": {
-        "postgres": {
-          "id": "mg-postgres-credential",
-          "name": "MedicareGuard PostgreSQL"
-        }
-      },
       "onError": "stopWorkflow"
     },
     {
@@ -485,7 +533,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, admin_decision: $('Kiểm tra quyết định duyệt').first().json.data.decision }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: true, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, admin_decision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
         "options": {
           "timeout": 15000
         }
@@ -502,7 +550,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
+        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
         "height": 170,
         "width": 1900,
         "color": 4
@@ -518,7 +566,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ① Tương quan danh tính\nĐếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với lịch sử PostgreSQL, phát hiện truy cập tài nguyên quản trị và tính risk score.",
+        "content": "## ① Tương quan danh tính\nLấy lịch sử đăng nhập qua API MedicareGuard, đếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với IP đã biết, phát hiện truy cập tài nguyên quản trị và tính risk score.",
         "height": 145,
         "width": 1450,
         "color": 1
@@ -534,7 +582,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, lưu alert/evidence, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ trước khi ghi audit log.",
+        "content": "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, gọi API MedicareGuard để lưu alert/evidence và audit, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ.",
         "height": 145,
         "width": 1550,
         "color": 3
@@ -573,14 +621,14 @@
       "main": [
         [
           {
-            "node": "04 · PostgreSQL — Lịch sử đăng nhập",
+            "node": "04 · API MedicareGuard — Lịch sử đăng nhập",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "04 · PostgreSQL — Lịch sử đăng nhập": {
+    "04 · API MedicareGuard — Lịch sử đăng nhập": {
       "main": [
         [
           {
@@ -657,7 +705,7 @@
         ],
         [
           {
-            "node": "17 · Ghi nhật ký kiểm toán",
+            "node": "17 · API MedicareGuard — Ghi nhật ký kiểm toán",
             "type": "main",
             "index": 0
           }
@@ -690,25 +738,25 @@
       "main": [
         [
           {
-            "node": "13 · PostgreSQL — Lưu bằng chứng",
+            "node": "13 · API MedicareGuard — Lưu bằng chứng",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "13 · PostgreSQL — Lưu bằng chứng": {
+    "13 · API MedicareGuard — Lưu bằng chứng": {
       "main": [
         [
           {
-            "node": "14 · Tạo cảnh báo SOC",
+            "node": "14 · API MedicareGuard — Tạo cảnh báo SOC",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "14 · Tạo cảnh báo SOC": {
+    "14 · API MedicareGuard — Tạo cảnh báo SOC": {
       "main": [
         [
           {
@@ -792,14 +840,14 @@
         ],
         [
           {
-            "node": "17 · Ghi nhật ký kiểm toán",
+            "node": "17 · API MedicareGuard — Ghi nhật ký kiểm toán",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "17 · Ghi nhật ký kiểm toán": {
+    "17 · API MedicareGuard — Ghi nhật ký kiểm toán": {
       "main": [
         [
           {

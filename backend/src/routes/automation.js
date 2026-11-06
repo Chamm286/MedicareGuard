@@ -28,6 +28,20 @@ const runtimeStatus = async () => {
   return value;
 };
 
+const identityExecutionId = (value) => {
+  const executionId = String(value || "");
+  if (!/^[a-zA-Z0-9._:-]{1,64}$/.test(executionId)) throw new HttpError(400, "executionId không hợp lệ");
+  return executionId;
+};
+
+const identityEmail = (value) => {
+  const email = String(value || "").trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@'";]+@[^\s@'";]+\.[^\s@'";]+$/.test(email)) {
+    throw new HttpError(400, "userEmail không hợp lệ");
+  }
+  return email;
+};
+
 const loadStats = async () => {
   const result = await query(
     `SELECT resource_id,
@@ -149,6 +163,146 @@ router.get(
         created_at: row.created_at,
       })),
     });
+  }),
+);
+
+router.get(
+  "/identity/context",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const userEmail = identityEmail(req.query.userEmail);
+    const result = await query(
+      `SELECT u.id AS user_id, u.email, u.full_name, u.department, r.name AS role_name,
+              COALESCE(r.level, 0)::int AS role_level,
+              (SELECT count(*)::int FROM activity_logs al
+               WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth'
+                 AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS successful_logins_30d,
+              (SELECT count(*)::int FROM activity_logs al
+               WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth'
+                 AND al.action = 'login_failed' AND al.created_at > now() - interval '15 minutes') AS failed_logins_15m,
+              (SELECT COALESCE(json_agg(DISTINCT al.source_ip) FILTER (WHERE al.source_ip IS NOT NULL), '[]'::json)
+               FROM activity_logs al
+               WHERE lower(al.actor_email) = lower(u.email) AND al.event_type = 'auth'
+                 AND al.action = 'login' AND al.created_at > now() - interval '30 days') AS known_ips
+       FROM users u LEFT JOIN roles r ON r.id = u.role_id
+       WHERE lower(u.email) = lower($1) AND u.status = 'active' LIMIT 1`,
+      [userEmail],
+    );
+    if (!result.rows.length) throw new HttpError(404, "Không tìm thấy tài khoản đang hoạt động");
+    res.json({ data: result.rows[0] });
+  }),
+);
+
+router.post(
+  "/identity/evidence",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const executionId = identityExecutionId(req.body?.executionId);
+    const userEmail = identityEmail(req.body?.userEmail);
+    const sourceIp = String(req.body?.sourceIp || "").slice(0, 64);
+    const evidence = req.body?.evidence;
+    if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new HttpError(400, "evidence phải là một object");
+    if (Buffer.byteLength(JSON.stringify(evidence), "utf8") > 32768) throw new HttpError(400, "evidence vượt quá 32 KB");
+
+    const existing = await query(
+      `SELECT id FROM activity_logs
+       WHERE event_type = 'security' AND resource = 'identity_detection'
+         AND action = 'detect' AND resource_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [executionId],
+    );
+    if (existing.rows.length) return res.json({ data: { id: existing.rows[0].id, executionId, created: false } });
+
+    const inserted = await query(
+      `INSERT INTO activity_logs
+         (level, event_type, actor_email, source_ip, resource, resource_id, action, message, metadata)
+       VALUES ('warn', 'security', $1, $2, 'identity_detection', $3, 'detect',
+               'Đã ghi nhận bằng chứng phát hiện tấn công danh tính', $4::jsonb)
+       RETURNING id`,
+      [userEmail, sourceIp || null, executionId, JSON.stringify(evidence)],
+    );
+    res.status(201).json({ data: { id: inserted.rows[0].id, executionId, created: true } });
+  }),
+);
+
+router.post(
+  "/identity/alerts",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const executionId = identityExecutionId(req.body?.executionId);
+    const title = String(req.body?.title || "").trim();
+    const description = String(req.body?.description || "");
+    const severity = String(req.body?.severity || "").toLowerCase();
+    const sourceIp = String(req.body?.sourceIp || "").slice(0, 64);
+    const riskScore = Number(req.body?.riskScore);
+    const evidence = req.body?.evidence;
+    if (!title || title.length > 200) throw new HttpError(400, "title là bắt buộc và không vượt quá 200 ký tự");
+    if (!["critical", "high", "medium", "low"].includes(severity)) throw new HttpError(400, "severity không hợp lệ");
+    if (!Number.isFinite(riskScore) || riskScore < 0 || riskScore > 100) throw new HttpError(400, "riskScore phải từ 0 đến 100");
+    if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new HttpError(400, "evidence phải là một object");
+    if (Buffer.byteLength(JSON.stringify(evidence), "utf8") > 32768) throw new HttpError(400, "evidence vượt quá 32 KB");
+
+    const existing = await query(
+      `SELECT id, title, severity, risk_score, source_ip FROM alerts
+       WHERE source = 'Phát hiện tấn công danh tính bằng Groq AI'
+         AND metadata->>'executionId' = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [executionId],
+    );
+    if (existing.rows.length) return res.json({ data: existing.rows[0], created: false });
+
+    const inserted = await query(
+      `INSERT INTO alerts
+         (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique,
+          risk_score, confidence, tags, metadata)
+       VALUES ($1, $2, $3, 'open', 'Phát hiện tấn công danh tính bằng Groq AI', $4, $5, $6,
+               $7, 85, ARRAY['identity','brute_force','privilege_escalation'], $8::jsonb)
+       RETURNING id, title, severity, risk_score, source_ip`,
+      [
+        title,
+        description.slice(0, 12000),
+        severity,
+        sourceIp || null,
+        String(req.body?.mitreTactic || "").slice(0, 200),
+        String(req.body?.mitreTechnique || "").slice(0, 200),
+        riskScore,
+        JSON.stringify({ ...evidence, workflowId: "identity-attack", executionId }),
+      ],
+    );
+    res.status(201).json({ data: inserted.rows[0], created: true });
+  }),
+);
+
+router.post(
+  "/identity/audit",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const executionId = identityExecutionId(req.body?.executionId);
+    const userEmail = identityEmail(req.body?.userEmail);
+    const adminDecision = String(req.body?.adminDecision || "");
+    if (!["approved", "rejected", "not_required"].includes(adminDecision)) throw new HttpError(400, "adminDecision không hợp lệ");
+    const riskScore = Number(req.body?.riskScore);
+    if (!Number.isFinite(riskScore) || riskScore < 0 || riskScore > 100) throw new HttpError(400, "riskScore phải từ 0 đến 100");
+    const alertId = String(req.body?.alertId || "").slice(0, 64);
+    const reviewer = req.body?.reviewer ? String(req.body.reviewer).slice(0, 254) : null;
+    const sourceIp = String(req.body?.sourceIp || "").slice(0, 64);
+
+    const existing = await query(
+      `SELECT id FROM audit_logs
+       WHERE action = 'identity_detection_review' AND details->>'executionId' = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [executionId],
+    );
+    if (existing.rows.length) return res.json({ data: { id: existing.rows[0].id, executionId, created: false } });
+
+    const details = { workflowId: "identity-attack", executionId, riskScore, adminDecision, reviewer };
+    const inserted = await query(
+      `INSERT INTO audit_logs (actor_email, action, resource, resource_id, ip_address, details)
+       VALUES ($1, 'identity_detection_review', 'alerts', $2, $3, $4::jsonb)
+       RETURNING id`,
+      [userEmail, alertId || null, sourceIp || null, JSON.stringify(details)],
+    );
+    res.status(201).json({ data: { id: inserted.rows[0].id, executionId, created: true } });
   }),
 );
 
