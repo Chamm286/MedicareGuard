@@ -12,6 +12,7 @@ const { notFound, errorHandler } = require("./middleware/error");
 const { authenticate } = require("./middleware/auth");
 const { enumerateRoutes } = require("./utils/routes");
 const swaggerUiDist = require("swagger-ui-dist");
+const swaggerUi = require("swagger-ui-express");
 const { buildOpenApi } = require("./openapi");
 
 const authRoutes = require("./routes/auth");
@@ -83,7 +84,6 @@ app.use(`${api}/automation`, authenticate, automationRoutes);
 if (process.env.DEMO_MODE === "true") app.use(`${api}/demo`, demoRoutes);
 app.use(`${api}/ingest`, ingestRoutes);
 app.use(`${api}/store`, storeRoutes);
-app.use(`${api}`, buildGenericRouter());
 
 app.get("/", (_req, res) => res.json({ service: "MedicareGuard SOC API", docs: `${api}/docs`, openapi: `${api}/openapi.json`, endpoints: `${api}/_meta/endpoints`, health: `${api}/health` }));
 
@@ -92,6 +92,8 @@ const apiRoutes = routes.filter((route) => route.path.startsWith(api));
 const openapi = buildOpenApi(apiRoutes, config);
 
 app.get(`${api}/openapi.json`, (_req, res) => res.json(openapi));
+const swaggerHandler = swaggerUi.setup(openapi, { explorer: true, customSiteTitle: "MedicareGuard API Docs" });
+app.use(`${api}`, buildGenericRouter());
 app.use(`${api}/swagger-ui`, express.static(swaggerUiDist.absolutePath(), { maxAge: "1h" }));
 const docsHtml = `<!doctype html>
 <html lang="vi">
@@ -131,6 +133,8 @@ app.get([`${api}/docs`, `${api}/docs/`], (_req, res) => {
   res.removeHeader("Content-Security-Policy");
   res.type("html").send(docsHtml);
 });
+
+app.get("/api-docs", (_req, res) => { console.log("HIT /api-docs"); res.removeHeader("Content-Security-Policy"); res.type("html").send(docsHtml); });
 
 app.use(notFound);
 app.use(errorHandler);
