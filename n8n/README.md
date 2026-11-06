@@ -1,6 +1,6 @@
 # n8n response workflows
 
-MedicareGuard ships seven focused n8n playbooks. Every workflow stays at **17–19 executable nodes** (the monitor has **18**, AI chat has **5**) so it is easy to explain, review and demonstrate. All node labels, sticky notes and alert copy are in **Vietnamese**. Automation canvases use three colour-coded notes (overview + two stage notes) with a straight left-to-right layout.
+MedicareGuard ships focused n8n playbooks. Workflows use **5–24 executable nodes** (the identity playbook has 18 numbered stages plus supporting AI, Telegram, and frontend approval nodes; AI chat has 5). The identity-detection workflow uses Vietnamese names and stage labels. Automation canvases use colour-coded overview and stage notes.
 
 | Workflow | Nodes | Trigger | Primary response |
 | --- | --- | --- | --- |
@@ -11,6 +11,8 @@ MedicareGuard ships seven focused n8n playbooks. Every workflow stays at **17–
 | Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | 18 | `POST /webhook/mg-attack-monitor` + mỗi 5 phút | Bản tin Telegram + Gmail cho tấn công critical/high mới |
 | Phản hồi Gian lận Thương mại điện tử | 13 | `POST /webhook/mg-ecommerce-fraud` | Giữ đơn, mở điều tra, cảnh báo SOC |
 | Chat AI phân tích SOC | 5 | `POST /webhook/mg-ai-chat` | Trả lời câu hỏi SOC từ PostgreSQL |
+| Phát hiện tấn công danh tính | 23 node · Groq AI | `POST /webhook/mg-identity-attack` | Dùng API MedicareGuard để lấy lịch sử đăng nhập, lưu bằng chứng/cảnh báo/audit; phát hiện tấn công tài khoản và leo thang đặc quyền bằng Groq + MITRE ATT&CK |
+| Phát hiện Di chuyển Bất khả thi | 24 node · 0 node SQL · Groq AI | `POST /webhook/mg-impossible-travel` | So sánh vị trí hai phiên, tính vận tốc, phân tích fingerprint/IP reputation, lưu cảnh báo và chờ SOC duyệt trước khi thu hồi đúng phiên |
 
 ## Integration flow
 
@@ -31,10 +33,11 @@ Express API ── webhook ──▶ n8n
 - `GET /api/automation/runtime` probes n8n and reports latency.
 - `POST /api/automation/simulate/:action` provides deterministic EDR, identity, sandbox, patch and evidence adapters for demos.
 - `POST /api/automation/executions/:executionId/complete` finalizes the execution and updates the console activity log.
+- Identity workflow nodes use authenticated MedicareGuard API endpoints for account context and persistence; they do not connect directly to PostgreSQL.
 
-## Local setup
+## Setup
 
-Prerequisites: a local n8n instance, `sqlite3`, `python3`, and a seeded MedicareGuard database.
+Prerequisites: a running n8n instance and `python3`. The setup script automatically uses a local n8n CLI and SQLite database when available; otherwise it uses the running Docker container `mg-n8n` and PostgreSQL container `mg-postgres`. For Docker, start the stack first with `docker compose up -d n8n`.
 
 1. Open n8n once and create the owner account.
 2. Mint a service token and add the n8n environment:
@@ -47,6 +50,7 @@ export MG_API_URL=http://localhost:4000/api
 export MG_API_TOKEN="$(cat /tmp/mg-n8n-token)"
 export MG_CONSOLE_URL=http://localhost:3000
 export N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+export GROQ_API_KEY="<Groq API key from https://console.groq.com/keys>"
 
 # Telegram phone alerts
 export TELEGRAM_BOT_TOKEN="<bot token from @BotFather>"
@@ -60,28 +64,75 @@ export MG_SMTP_USER="<your gmail address>"
 export MG_SMTP_PASSWORD="<16-character app password>"
 export MG_SMTP_FROM="<sender address>"
 export MG_ALERT_EMAIL="<inbox that should receive the alert>"
+
+cd ..
 ```
 
-3. Import the PostgreSQL and SMTP credentials, publish the workflows and restart n8n:
+3. Import the PostgreSQL, Groq and optional SMTP/Telegram credentials, then publish the workflows:
 
 ```bash
 bash scripts/setup-n8n.sh
 ```
 
-The setup script imports `mg-postgres-credential`, imports `mg-smtp-credential` when the SMTP variables are present, imports all seven workflows under the n8n owner and publishes them. It runs the n8n CLI from `/tmp` on purpose: a project `.env` containing `N8N_ENCRYPTION_KEY` would otherwise override the key used by the running instance.
+The setup script requires `GROQ_API_KEY`, imports `mg-postgres-credential` and `mg-groq-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all ten shipped workflows. It stops before importing anything if the Groq key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized.
 
-For Docker, point the database credential at the Compose service instead:
+The impossible-travel workflow verifies the internal webhook request using `MG_API_TOKEN` and accepts successful-login events only. Demo mode uses simulated coordinates. Live mode requires `MG_GEOIP_URL` to point to an HTTPS batch GeoIP service that accepts a JSON array of `{ "query": "IP" }` objects and returns an array with country, city and latitude/longitude fields. IP reputation uses `MG_IP_REPUTATION_URL` (defaults to `https://api.ipapi.is/?q=`). These services receive the IP addresses being checked. The Telegram node requires the MedicareGuard Telegram credential; a Telegram delivery failure is recorded while the approval path continues. After alerting, the workflow waits 70 seconds for an administrator decision in the SOC frontend; it only requests revocation of the specific suspicious session if approved. Rejected or expired requests do not revoke any session.
+
+### Demo phát hiện di chuyển bất khả thi
+
+The SOC console can start the workflow using an active non-admin account with at least two active sessions. Direct webhook requests must include `Authorization: Bearer <MG_API_TOKEN>` and a successful login payload:
+
+```json
+{
+  "userEmail": "viewer@medicareguard.io",
+  "ipAddress": "198.51.100.55",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "deviceFingerprint": "demo-device",
+  "timestamp": "2026-11-06T03:00:00.000Z",
+  "geoMode": "demo"
+}
+```
+
+The workflow compares this event with the account's latest earlier, unrevoked session. Demo mode uses simulated San Francisco/Tokyo coordinates; live mode queries both IPs through the configured batch GeoIP provider. A session is only revoked after an administrator approves the alert in **Tự động hóa SOAR** within the 70-second approval window. The backend validates the session belongs to the supplied account and records the revocation in the audit log.
+
+To explicitly select Docker (for example, when a local n8n CLI is also installed), run:
 
 ```bash
-MG_PG_HOST=postgres MG_PG_PORT=5432 bash scripts/setup-n8n.sh
+docker compose up -d --force-recreate n8n
+N8N_TARGET=docker bash scripts/setup-n8n.sh
+docker compose restart n8n
 ```
+
+The recreate loads `GROQ_API_KEY` from `.env` into n8n so the setup script can import it as a credential. The Docker setup reads PostgreSQL settings from the running Compose container and uses the `postgres:5432` network address for the imported PostgreSQL credential. Override the target container names with `N8N_CONTAINER` or `N8N_DB_CONTAINER` if needed. For a local instance, set `N8N_TARGET=local` and `N8N_DB` if its SQLite database is not at `~/.n8n/database.sqlite`.
 
 ### Rebuild the workflow definitions
 
 ```bash
 make n8n-build   # regenerate n8n/workflows/*.json + manifest.json
-make n8n-setup   # rebuild, import, publish and activate
+make n8n-setup   # rebuild, import, publish and activate using local n8n or Docker
 ```
+
+## Demo phát hiện tấn công danh tính
+
+Giao diện SOC có thể chạy demo bằng tài khoản không phải quản trị viên và các sự kiện giả lập. IP mẫu `203.0.113.42` được dành riêng cho tài liệu và không được kết nối. Webhook cũng nhận chuỗi sự kiện tường minh:
+
+```json
+{
+  "userEmail": "viewer@medicareguard.io",
+  "mode": "demo",
+  "events": [
+    { "type": "login_failed", "sourceIp": "203.0.113.42" },
+    { "type": "login_failed", "sourceIp": "203.0.113.42" },
+    { "type": "login_failed", "sourceIp": "203.0.113.42" },
+    { "type": "login_failed", "sourceIp": "203.0.113.42" },
+    { "type": "login_failed", "sourceIp": "203.0.113.42" },
+    { "type": "login_success", "sourceIp": "203.0.113.42", "device": "demo-unrecognized-device" },
+    { "type": "admin_access_denied", "sourceIp": "203.0.113.42", "targetResource": "admin/users" }
+  ]
+}
+```
+
+Workflow chỉ phân tích dữ liệu sự kiện được gửi vào; không thử đăng nhập và không thay đổi quyền tài khoản. Khi điểm rủi ro từ 70 trở lên, workflow tạo cảnh báo rồi tạm dừng tại **Chờ quản trị viên duyệt**. Quản trị viên duyệt/từ chối trong bảng **Tự động hóa SOAR** trên frontend; n8n kiểm tra quyết định định kỳ, ghi audit log rồi hoàn tất execution.
 
 ## Phone alerts
 
@@ -123,6 +174,8 @@ The check never prints the token or app password. A successful run reports the T
 | `MG_API_URL` | Base URL used by workflow HTTP Request nodes, default `http://localhost:4000/api` |
 | `MG_API_TOKEN` | MedicareGuard JWT used by workflow callbacks; mint with `npm run token:n8n` |
 | `MG_CONSOLE_URL` | Console URL embedded in alert messages, default `http://localhost:3000` |
+| `MG_N8N_UI_URL` | URL giao diện n8n được liên kết trong cảnh báo chờ duyệt, mặc định `http://localhost:5678` |
+| `GROQ_API_KEY` | Tạo credential Groq cần cho bước AI phân tích danh tính |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from `@BotFather` |
 | `TELEGRAM_CHAT_ID` | Personal chat or SOC group that receives the phone push |
 | `MG_SMTP_HOST` / `MG_SMTP_PORT` / `MG_SMTP_SECURE` | SMTP server, default Gmail `smtp.gmail.com:465` with SSL |
