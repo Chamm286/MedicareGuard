@@ -34,15 +34,7 @@ export default function AutomationPage() {
   }, []);
 
   const workflows = data?.data || [];
-  const visibleWorkflowIds = new Set([
-    "ransomware-containment",
-    "phishing-triage",
-    "vulnerability-sla",
-    "compliance-evidence",
-    "identity-attack",
-    "impossible-travel",
-  ]);
-  const list = workflows.filter((workflow: any) => visibleWorkflowIds.has(workflow.id));
+  const list = workflows;
   const summary = data?.summary;
   const runtime = summary?.runtime;
   const runs = executions.data?.data || [];
@@ -63,13 +55,14 @@ export default function AutomationPage() {
       const response = await api<any>(`/automation/workflows/${workflow.id}/run`, { method: "POST" });
       const result = response.data;
       setLastRun({ ...result, workflowName: workflow.name });
-      if (result.dispatched) {
+      if (result.status === "failed") {
+        toastError("Không thể khởi chạy quy trình", result.message || "n8n từ chối yêu cầu.");
+      } else if (result.dispatched) {
         success(
           ["identity-attack", "impossible-travel"].includes(workflow.id) ? `Đã khởi chạy mô phỏng ${workflow.name}` : "Đã gửi quy trình",
           `${workflow.name} đang thực thi trong n8n.`,
         );
-      }
-      else toast("Quy trình đã vào hàng đợi", { message: "Không thể truy cập n8n. Lần chạy đã được ghi lại và sẽ được gửi khi động cơ trực tuyến.", tone: "warning" });
+      } else toast("Quy trình đã vào hàng đợi", { message: "Không thể truy cập n8n. Lần chạy đã được ghi lại và sẽ được gửi khi động cơ trực tuyến.", tone: "warning" });
       refetch();
       executions.refetch();
     } catch (err) {

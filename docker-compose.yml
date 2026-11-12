@@ -46,6 +46,7 @@ services:
       N8N_AI_CHAT_URL: http://n8n:5678/webhook/mg-ai-chat
       N8N_AI_CHAT_TIMEOUT_MS: ${N8N_AI_CHAT_TIMEOUT_MS:-15000}
       MG_API_TOKEN: ${MG_API_TOKEN:-}
+      MG_IDENTITY_WEBHOOK_TOKEN: ${MG_IDENTITY_WEBHOOK_TOKEN:-}
     ports:
       - "4000:4000"
     depends_on:
@@ -108,6 +109,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       MG_API_URL: http://backend:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
+      MG_IDENTITY_WEBHOOK_TOKEN: ${MG_IDENTITY_WEBHOOK_TOKEN:-}
       MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}
       MG_N8N_UI_URL: ${MG_N8N_UI_URL:-http://localhost:5678}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}

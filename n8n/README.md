@@ -48,6 +48,8 @@ npm run --silent token:n8n > /tmp/mg-n8n-token
 
 export MG_API_URL=http://localhost:4000/api
 export MG_API_TOKEN="$(cat /tmp/mg-n8n-token)"
+# Generate once, then keep the same value in the backend/n8n environment (for Docker, .env).
+export MG_IDENTITY_WEBHOOK_TOKEN="$(openssl rand -hex 32)"
 export MG_CONSOLE_URL=http://localhost:3000
 export N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 export GROQ_API_KEY="<Groq API key from https://console.groq.com/keys>"
@@ -74,7 +76,9 @@ cd ..
 bash scripts/setup-n8n.sh
 ```
 
-The setup script requires `GROQ_API_KEY`, imports `mg-postgres-credential` and `mg-groq-credential`, imports optional SMTP/Telegram credentials when configured, and publishes all ten shipped workflows. It stops before importing anything if the Groq key is missing. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`); only its display title and node labels are localized.
+The setup script requires `GROQ_API_KEY`, `MG_API_TOKEN`, and a dedicated `MG_IDENTITY_WEBHOOK_TOKEN` of at least 32 characters. It imports the PostgreSQL, Groq, and authenticated Identity webhook credentials, imports optional SMTP/Telegram credentials when configured, and publishes all ten shipped workflows. Generate the dedicated webhook secret with `openssl rand -hex 32` and configure the same value for backend and n8n. Do not reuse `MG_API_TOKEN`: the latter is a privileged API JWT and is not exposed to the public webhook. The Identity webhook uses n8n Header Auth and rejects requests without the dedicated Bearer token. The identity-detection workflow keeps its existing workflow ID (`identity-attack`), webhook path, and JSON filename (`identity-attrack.json`).
+
+Identity risk scoring weighs failed-login volume, unusual successful logins, privileged-access attempts, a failed-then-successful login from the same IP within 15 minutes, multiple correlated signal types, and account history. Alerts with the same account, source IP, and detection set are consolidated for 10 minutes; retries of the same execution remain idempotent. MedicareGuard API steps retry transient failures up to three times. Telegram delivery failure does not stop the approval and audit path; a rejected or unreachable Identity webhook is recorded as failed and shown in the frontend instead of being reported as queued.
 
 The impossible-travel workflow verifies the internal webhook request using `MG_API_TOKEN` and accepts successful-login events only. Demo mode uses simulated coordinates. Live mode requires `MG_GEOIP_URL` to point to an HTTPS batch GeoIP service that accepts a JSON array of `{ "query": "IP" }` objects and returns an array with country, city and latitude/longitude fields. IP reputation uses `MG_IP_REPUTATION_URL` (defaults to `https://api.ipapi.is/?q=`). These services receive the IP addresses being checked. The Telegram node requires the MedicareGuard Telegram credential; a Telegram delivery failure is recorded while the approval path continues. After alerting, the workflow waits 70 seconds for an administrator decision in the SOC frontend; it only requests revocation of the specific suspicious session if approved. Rejected or expired requests do not revoke any session.
 
@@ -132,7 +136,7 @@ Giao diện SOC có thể chạy demo bằng tài khoản không phải quản t
 }
 ```
 
-Workflow chỉ phân tích dữ liệu sự kiện được gửi vào; không thử đăng nhập và không thay đổi quyền tài khoản. Khi điểm rủi ro từ 70 trở lên, workflow tạo cảnh báo rồi tạm dừng tại **Chờ quản trị viên duyệt**. Quản trị viên duyệt/từ chối trong bảng **Tự động hóa SOAR** trên frontend; n8n kiểm tra quyết định định kỳ, ghi audit log rồi hoàn tất execution.
+Workflow chỉ phân tích dữ liệu sự kiện được gửi vào; không thử đăng nhập và không thay đổi quyền tài khoản. Gọi webhook trực tiếp phải kèm `Authorization: Bearer "$MG_IDENTITY_WEBHOOK_TOKEN"`; không đưa token này vào mã frontend. Khi điểm rủi ro từ 70 trở lên, workflow tạo cảnh báo rồi tạm dừng tại **Chờ quản trị viên duyệt**. Quản trị viên duyệt/từ chối trong bảng **Tự động hóa SOAR** trên frontend; n8n kiểm tra quyết định định kỳ, ghi audit log rồi hoàn tất execution.
 
 ## Phone alerts
 
@@ -173,6 +177,7 @@ The check never prints the token or app password. A successful run reports the T
 | --- | --- |
 | `MG_API_URL` | Base URL used by workflow HTTP Request nodes, default `http://localhost:4000/api` |
 | `MG_API_TOKEN` | MedicareGuard JWT used by workflow callbacks; mint with `npm run token:n8n` |
+| `MG_IDENTITY_WEBHOOK_TOKEN` | Dedicated random Bearer secret required by the Identity webhook; use `openssl rand -hex 32`, separate from `MG_API_TOKEN` |
 | `MG_CONSOLE_URL` | Console URL embedded in alert messages, default `http://localhost:3000` |
 | `MG_N8N_UI_URL` | URL giao diện n8n được liên kết trong cảnh báo chờ duyệt, mặc định `http://localhost:5678` |
 | `GROQ_API_KEY` | Tạo credential Groq cần cho bước AI phân tích danh tính |

@@ -374,7 +374,7 @@
       "onError": "stopWorkflow"
     },
     {
-      "name": "20 · Mô hình chat Groq",
+      "name": "20 · Chat Grog Model AI",
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "parameters": {

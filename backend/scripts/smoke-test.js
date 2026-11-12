@@ -254,10 +254,14 @@ const run = async () => {
   });
   const identityDefinition = require("../../n8n/workflows/identity-attrack.json");
   const identityExecutableNodes = identityDefinition.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote");
+  const identityWebhook = identityDefinition.nodes.find((node) => node.type === "n8n-nodes-base.webhook");
   results.push({
-    name: "identity workflow has more than 15 executable nodes and no PostgreSQL nodes",
+    name: "identity webhook requires Header Auth and workflow has no PostgreSQL nodes",
     status: suiteResponse.status,
-    ok: identityExecutableNodes.length > 15 && identityExecutableNodes.every((node) => node.type !== "n8n-nodes-base.postgres"),
+    ok: identityExecutableNodes.length > 15
+      && identityExecutableNodes.every((node) => node.type !== "n8n-nodes-base.postgres")
+      && identityWebhook?.parameters.authentication === "headerAuth"
+      && identityWebhook.credentials?.httpHeaderAuth?.id === "mg-identity-webhook-credential",
   });
   const travelWorkflow = suite.find((workflow) => workflow.id === "impossible-travel");
   const travelDefinition = require("../../n8n/workflows/impossible-travel.json");

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(__dirname, "../n8n/workflows");
 const CREDENTIAL = { id: "mg-postgres-credential", name: "MedicareGuard PostgreSQL" };
+const IDENTITY_WEBHOOK_CREDENTIAL = { id: "mg-identity-webhook-credential", name: "MedicareGuard Identity Webhook" };
 
 const ref = (node, field) => `$('${node}').first().json.${field}`;
 const sqlRef = (node, field) => `{{ ${ref(node, field)} }}`;
@@ -605,15 +606,29 @@ const privilegeEvents = base.events.filter((event) => event.type === 'admin_acce
 return [{ json: { ...base, privilegeEvents, privilegeEscalationDetected: privilegeEvents.length > 0 } }];`;
 
   const scoreCode = `const base = $('${N.privilege}').first().json;
-const factors = {
-  repeatedFailedLogins: base.bruteForceDetected ? 30 : Math.min(20, base.failedLoginCount * 4),
-  unusualSuccessfulLogin: base.unusualLoginDetected ? 25 : 0,
-  privilegedAccessAttempt: base.privilegeEscalationDetected ? 40 : 0,
-  knownAccountHistory: Number(base.history.successful_logins_30d || 0) > 0 ? 5 : 0,
-};
-const riskScore = Math.min(100, 5 + Object.values(factors).reduce((sum, value) => sum + value, 0));
-const detections = Object.entries({ bruteForce: base.bruteForceDetected, unusualLogin: base.unusualLoginDetected, privilegeEscalation: base.privilegeEscalationDetected }).filter(([, detected]) => detected).map(([name]) => name);
-return [{ json: { ...base, factors, riskScore, detections, threshold: 70, severity: riskScore >= 90 ? 'critical' : riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low' } }];`;
+  const failedLoginPoints = Math.min(35, Math.max(0, base.failedLoginCount) * 7);
+  const failureTimesByIp = new Map();
+  for (const event of base.failedEvents) {
+    const times = failureTimesByIp.get(event.sourceIp) || [];
+    times.push(new Date(event.timestamp).getTime());
+    failureTimesByIp.set(event.sourceIp, times);
+  }
+  const correlatedLogin = base.unusualLogins.some((login) => {
+    const loginTime = new Date(login.timestamp).getTime();
+    return (failureTimesByIp.get(login.sourceIp) || []).some((failureTime) => loginTime >= failureTime && loginTime - failureTime <= 15 * 60 * 1000);
+  });
+  const signalCount = [base.bruteForceDetected, base.unusualLoginDetected, base.privilegeEscalationDetected].filter(Boolean).length;
+  const factors = {
+    failedLoginActivity: failedLoginPoints,
+    unusualSuccessfulLogin: base.unusualLoginDetected ? 30 : 0,
+    privilegedAccessAttempt: base.privilegeEscalationDetected ? 40 : 0,
+    failedThenSuccessfulFromSameIp: correlatedLogin ? 15 : 0,
+    multipleAttackSignals: signalCount >= 2 ? 10 : 0,
+    unfamiliarAccount: Number(base.history.successful_logins_30d || 0) === 0 ? 5 : 0,
+  };
+  const riskScore = Math.min(100, 5 + Object.values(factors).reduce((sum, value) => sum + value, 0));
+  const detections = Object.entries({ bruteForce: base.bruteForceDetected, unusualLogin: base.unusualLoginDetected, privilegeEscalation: base.privilegeEscalationDetected }).filter(([, detected]) => detected).map(([name]) => name);
+  return [{ json: { ...base, factors, correlatedLogin, riskScore, detections, threshold: 70, severity: riskScore >= 90 ? 'critical' : riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low' } }];`;
 
   const mitreCode = `const risk = $('${N.score}').first().json;
 const rawAi = $('${N.agent}').first().json.output || $('${N.agent}').first().json.text || '';
@@ -627,15 +642,18 @@ const alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;
 const alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;
 return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evidence, mitre: mappings, alertTitle, alertDescription, mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];`;
 
-  const approvalAuditBody = `={{ JSON.stringify({ workflowId: '${spec.id}', executionId: $('${N.validate}').first().json.executionId, userEmail: $('${N.validate}').first().json.userEmail, sourceIp: $('${N.unusual}').first().json.suspiciousIp, alertId: $('${N.alert}').first().json.data.id, riskScore: $('${N.score}').first().json.riskScore, adminDecision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required', reviewer: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.reviewer : null }) }}`;
+  const approvalAuditBody = `={{ JSON.stringify({ workflowId: '${spec.id}', executionId: $('${N.validate}').first().json.executionId, userEmail: $('${N.validate}').first().json.userEmail, sourceIp: $('${N.unusual}').first().json.suspiciousIp, alertId: $('${N.score}').first().json.riskScore >= 70 ? $('${N.alert}').first().json.data.id : null, riskScore: $('${N.score}').first().json.riskScore, adminDecision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required', reviewer: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.reviewer : null }) }}`;
 
-  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: true, approval_required: $('${N.score}').first().json.riskScore >= 70, admin_decision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
+  const completionBody = `={{ JSON.stringify({ workflowId: '${spec.id}', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('${N.validate}').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('${N.score}').first().json.riskScore, detections: $('${N.score}').first().json.detections, alert_created: $('${N.score}').first().json.riskScore >= 70, approval_required: $('${N.score}').first().json.riskScore >= 70, admin_decision: $('${N.score}').first().json.riskScore >= 70 ? $('${N.approvalCheck}').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('${N.validate}').first().json.userEmail }) }}`;
 
   const nodes = [
-    node(N.webhook, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", options: {} }, pos(0), { webhookId: id() }),
+    node(N.webhook, "n8n-nodes-base.webhook", 2, { httpMethod: "POST", path: spec.webhookPath, responseMode: "onReceived", authentication: "headerAuth", options: {} }, pos(0), {
+      webhookId: id(),
+      credentials: { httpHeaderAuth: IDENTITY_WEBHOOK_CREDENTIAL },
+    }),
     code(N.validate, validateCode, pos(1)),
     code(N.normalize, normalizeCode, pos(2)),
-    http(N.history, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/context?userEmail=' + encodeURIComponent($('${N.validate}').first().json.userEmail) }}`, pos(3), null, { onError: "stopWorkflow" }),
+    http(N.history, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/identity/context?userEmail=' + encodeURIComponent($('${N.validate}').first().json.userEmail) }}`, pos(3), null, { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
     code(N.filter, filterCode, pos(4)),
     code(N.brute, bruteCode, pos(5)),
     code(N.unusual, unusualCode, pos(6)),
@@ -652,8 +670,8 @@ return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evid
       options: { temperature: 0.2 },
     }, pos(10, 220), { credentials: { groqApi: { id: "mg-groq-credential", name: "MedicareGuard Groq" } } }),
     code(N.mitre, mitreCode, pos(11)),
-    http(N.evidence, "POST", apiUrl("/automation/identity/evidence"), pos(12), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, userEmail: $('${N.mitre}').first().json.userEmail, sourceIp: $('${N.mitre}').first().json.suspiciousIp, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow" }),
-    http(N.alert, "POST", apiUrl("/automation/identity/alerts"), pos(13), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, title: $('${N.mitre}').first().json.alertTitle, description: $('${N.mitre}').first().json.alertDescription, severity: $('${N.score}').first().json.severity, sourceIp: $('${N.mitre}').first().json.suspiciousIp, mitreTactic: $('${N.mitre}').first().json.mitreTactic, mitreTechnique: $('${N.mitre}').first().json.mitreTechnique, riskScore: $('${N.score}').first().json.riskScore, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow" }),
+    http(N.evidence, "POST", apiUrl("/automation/identity/evidence"), pos(12), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, userEmail: $('${N.mitre}').first().json.userEmail, sourceIp: $('${N.mitre}').first().json.suspiciousIp, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
+    http(N.alert, "POST", apiUrl("/automation/identity/alerts"), pos(13), jsonBody(`executionId: $('${N.mitre}').first().json.executionId, title: $('${N.mitre}').first().json.alertTitle, description: $('${N.mitre}').first().json.alertDescription, severity: $('${N.score}').first().json.severity, sourceIp: $('${N.mitre}').first().json.suspiciousIp, mitreTactic: $('${N.mitre}').first().json.mitreTactic, mitreTechnique: $('${N.mitre}').first().json.mitreTechnique, riskScore: $('${N.score}').first().json.riskScore, evidence: $('${N.mitre}').first().json.evidence`), { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
     ifNode(N.telegramGate, "={{ Boolean($env.TELEGRAM_BOT_TOKEN && $env.TELEGRAM_CHAT_ID) }}", true, pos(14)),
     node(N.telegram, "n8n-nodes-base.telegram", 1.2, {
       resource: "message",
@@ -670,12 +688,12 @@ return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evid
   'Xem xét / tiếp tục phê duyệt trong n8n: ' + ($env.MG_N8N_UI_URL || 'http://localhost:5678') + '/execution/' + $execution.id,
 ].join('\\n') }}`,
       additionalFields: { appendAttribution: false },
-    }, pos(15), { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "stopWorkflow" }),
-    http(N.approvalRequest, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval-request' }}`, pos(16), jsonBody(`workflowId: '${spec.id}', userEmail: $('${N.score}').first().json.userEmail, riskScore: $('${N.score}').first().json.riskScore, alertId: $('${N.alert}').first().json.data.id`), { onError: "stopWorkflow" }),
+    }, pos(15), { credentials: { telegramApi: { id: "mg-telegram-credential", name: "MedicareGuard Telegram" } }, onError: "continueRegularOutput" }),
+    http(N.approvalRequest, "POST", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval-request' }}`, pos(16), jsonBody(`workflowId: '${spec.id}', userEmail: $('${N.score}').first().json.userEmail, riskScore: $('${N.score}').first().json.riskScore, alertId: $('${N.alert}').first().json.data.id`), { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
     node(N.approval, "n8n-nodes-base.wait", 1.1, { resume: "timeInterval", amount: 70, unit: "seconds", options: {} }, pos(17)),
-    http(N.approvalCheck, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval' }}`, pos(18), null, { onError: "stopWorkflow" }),
+    http(N.approvalCheck, "GET", `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/approval' }}`, pos(18), null, { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
     ifNode(N.approvalPending, `={{ $json.data.decision }}`, "pending", pos(19)),
-    http(N.audit, "POST", apiUrl("/automation/identity/audit"), pos(20), approvalAuditBody, { onError: "stopWorkflow" }),
+    http(N.audit, "POST", apiUrl("/automation/identity/audit"), pos(20), approvalAuditBody, { onError: "stopWorkflow", retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 }),
     node(N.complete, "n8n-nodes-base.httpRequest", 4.2, {
       method: "POST",
       url: `={{ ($env.MG_API_URL || 'http://localhost:4000/api') + '/automation/executions/' + $('${N.validate}').first().json.executionId + '/complete' }}`,
@@ -690,7 +708,7 @@ return [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evid
       jsonBody: completionBody,
       options: { timeout: 15000 },
     }, pos(21), { onError: "stopWorkflow" }),
-    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/" + spec.webhookPath + "` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
+    sticky("Ghi chú — Phát hiện tấn công danh tính", "# " + spec.name + "\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook Header Auth: `POST /webhook/" + spec.webhookPath + "` · Dùng token riêng MG_IDENTITY_WEBHOOK_TOKEN · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.", [0, -420], 1900, 170, 4),
     sticky("Ghi chú — Phát hiện & Chấm điểm", "## ① Tương quan danh tính\nLấy lịch sử đăng nhập qua API MedicareGuard, đếm đăng nhập lỗi liên tiếp, đối chiếu IP đăng nhập thành công với IP đã biết, phát hiện truy cập tài nguyên quản trị và tính risk score.", [0, -220], 1450, 145, 1),
     sticky("Ghi chú — AI, Cảnh báo & Duyệt", "## ② Phân tích & Quyết định có kiểm soát\nAI phân tích bằng chứng, gắn MITRE ATT&CK, gọi API MedicareGuard để lưu alert/evidence và audit, gửi Telegram. Rủi ro cao chờ quyết định Duyệt/Từ chối trên frontend; n8n kiểm tra quyết định định kỳ.", [1500, -220], 1550, 145, 3),
   ];

@@ -11,6 +11,7 @@
         "httpMethod": "POST",
         "path": "mg-identity-attack",
         "responseMode": "onReceived",
+        "authentication": "headerAuth",
         "options": {}
       },
       "position": [
@@ -18,7 +19,13 @@
         0
       ],
       "id": "5ca3c280-ddaa-5b6c-9686-ededda1d1efd",
-      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8"
+      "webhookId": "6121f2e1-7780-5017-9870-1638877dc8c8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mg-identity-webhook-credential",
+          "name": "MedicareGuard Identity Webhook"
+        }
+      }
     },
     {
       "name": "02 · Kiểm tra dữ liệu",
@@ -75,7 +82,10 @@
         0
       ],
       "id": "df485150-dd72-5b71-b8cd-36e8ca879f72",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "05 · Lọc đăng nhập thất bại",
@@ -134,7 +144,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const base = $('08 · Phát hiện truy cập vượt quyền').first().json;\nconst factors = {\n  repeatedFailedLogins: base.bruteForceDetected ? 30 : Math.min(20, base.failedLoginCount * 4),\n  unusualSuccessfulLogin: base.unusualLoginDetected ? 25 : 0,\n  privilegedAccessAttempt: base.privilegeEscalationDetected ? 40 : 0,\n  knownAccountHistory: Number(base.history.successful_logins_30d || 0) > 0 ? 5 : 0,\n};\nconst riskScore = Math.min(100, 5 + Object.values(factors).reduce((sum, value) => sum + value, 0));\nconst detections = Object.entries({ bruteForce: base.bruteForceDetected, unusualLogin: base.unusualLoginDetected, privilegeEscalation: base.privilegeEscalationDetected }).filter(([, detected]) => detected).map(([name]) => name);\nreturn [{ json: { ...base, factors, riskScore, detections, threshold: 70, severity: riskScore >= 90 ? 'critical' : riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low' } }];"
+        "jsCode": "const base = $('08 · Phát hiện truy cập vượt quyền').first().json;\n  const failedLoginPoints = Math.min(35, Math.max(0, base.failedLoginCount) * 7);\n  const failureTimesByIp = new Map();\n  for (const event of base.failedEvents) {\n    const times = failureTimesByIp.get(event.sourceIp) || [];\n    times.push(new Date(event.timestamp).getTime());\n    failureTimesByIp.set(event.sourceIp, times);\n  }\n  const correlatedLogin = base.unusualLogins.some((login) => {\n    const loginTime = new Date(login.timestamp).getTime();\n    return (failureTimesByIp.get(login.sourceIp) || []).some((failureTime) => loginTime >= failureTime && loginTime - failureTime <= 15 * 60 * 1000);\n  });\n  const signalCount = [base.bruteForceDetected, base.unusualLoginDetected, base.privilegeEscalationDetected].filter(Boolean).length;\n  const factors = {\n    failedLoginActivity: failedLoginPoints,\n    unusualSuccessfulLogin: base.unusualLoginDetected ? 30 : 0,\n    privilegedAccessAttempt: base.privilegeEscalationDetected ? 40 : 0,\n    failedThenSuccessfulFromSameIp: correlatedLogin ? 15 : 0,\n    multipleAttackSignals: signalCount >= 2 ? 10 : 0,\n    unfamiliarAccount: Number(base.history.successful_logins_30d || 0) === 0 ? 5 : 0,\n  };\n  const riskScore = Math.min(100, 5 + Object.values(factors).reduce((sum, value) => sum + value, 0));\n  const detections = Object.entries({ bruteForce: base.bruteForceDetected, unusualLogin: base.unusualLoginDetected, privilegeEscalation: base.privilegeEscalationDetected }).filter(([, detected]) => detected).map(([name]) => name);\n  return [{ json: { ...base, factors, correlatedLogin, riskScore, detections, threshold: 70, severity: riskScore >= 90 ? 'critical' : riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low' } }];"
       },
       "position": [
         1760,
@@ -264,7 +274,10 @@
         0
       ],
       "id": "986c2f2d-8863-5f11-a17f-8764545f9631",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "14 · API MedicareGuard — Tạo cảnh báo SOC",
@@ -299,7 +312,10 @@
         0
       ],
       "id": "67a12c54-1978-5da1-b77d-4b27d5c2e262",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "Telegram đã cấu hình?",
@@ -358,7 +374,7 @@
           "name": "MedicareGuard Telegram"
         }
       },
-      "onError": "stopWorkflow"
+      "onError": "continueRegularOutput"
     },
     {
       "name": "Ghi nhận yêu cầu duyệt",
@@ -393,7 +409,10 @@
         0
       ],
       "id": "c7c3bc73-d523-5143-8032-5ce983461790",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "16 · Chờ quản trị viên duyệt",
@@ -440,7 +459,10 @@
         0
       ],
       "id": "d47f48eb-2b2e-5156-8d51-7dcdfbc71fb3",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "Chưa có quyết định?",
@@ -501,14 +523,17 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', executionId: $('02 · Kiểm tra dữ liệu').first().json.executionId, userEmail: $('02 · Kiểm tra dữ liệu').first().json.userEmail, sourceIp: $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIp, alertId: $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.id, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, adminDecision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required', reviewer: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.reviewer : null }) }}"
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', executionId: $('02 · Kiểm tra dữ liệu').first().json.executionId, userEmail: $('02 · Kiểm tra dữ liệu').first().json.userEmail, sourceIp: $('07 · Phát hiện đăng nhập bất thường').first().json.suspiciousIp, alertId: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('14 · API MedicareGuard — Tạo cảnh báo SOC').first().json.data.id : null, riskScore: $('09 · Tính điểm rủi ro').first().json.riskScore, adminDecision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required', reviewer: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.reviewer : null }) }}"
       },
       "position": [
         4400,
         0
       ],
       "id": "0062a290-9257-5f47-a261-2ed2cbde8693",
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
     },
     {
       "name": "18 · Hoàn tất thực thi",
@@ -533,7 +558,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: true, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, admin_decision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflowId: 'identity-attack', status: 'success', durationMs: Math.max(1, Date.now() - new Date($('02 · Kiểm tra dữ liệu').first().json.receivedAt).getTime()), nodeCount: 23, metrics: { risk_score: $('09 · Tính điểm rủi ro').first().json.riskScore, detections: $('09 · Tính điểm rủi ro').first().json.detections, alert_created: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, approval_required: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70, admin_decision: $('09 · Tính điểm rủi ro').first().json.riskScore >= 70 ? $('Kiểm tra quyết định duyệt').first().json.data.decision : 'not_required' }, message: 'Identity detection completed for ' + $('02 · Kiểm tra dữ liệu').first().json.userEmail }) }}",
         "options": {
           "timeout": 15000
         }
@@ -550,7 +575,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "parameters": {
-        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook: `POST /webhook/mg-identity-attack` · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
+        "content": "# Phát hiện tấn công danh tính\n18 giai đoạn phân tích chuỗi đăng nhập và leo thang quyền · 23 node thực thi qua API MedicareGuard, dùng Groq AI · không tự động khóa tài khoản.\n\nWebhook Header Auth: `POST /webhook/mg-identity-attack` · Dùng token riêng MG_IDENTITY_WEBHOOK_TOKEN · Dữ liệu demo dùng IP TEST-NET không thể định tuyến.",
         "height": 170,
         "width": 1900,
         "color": 4

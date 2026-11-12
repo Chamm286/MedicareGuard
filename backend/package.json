@@ -14,6 +14,7 @@
     "seed": "node scripts/seed.js",
     "seed:reset": "node scripts/seed.js --reset",
     "test": "node scripts/smoke-test.js",
+    "test:identity": "node scripts/identity-workflow-test.js",
     "token:n8n": "node scripts/mint-service-token.js",
     "test:security": "node scripts/security-test.js"
   },

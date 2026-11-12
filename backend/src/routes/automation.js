@@ -4,6 +4,7 @@ const { query, withTransaction } = require("../config/db");
 const { asyncHandler, HttpError } = require("../utils/http");
 const { authorize, requirePermission } = require("../middleware/auth");
 const { recordActivity, recordAudit } = require("../services/audit");
+const { identityAlertFingerprint, identityAlertSeverity } = require("../services/identityDetection");
 const { workflows, byId } = require("../config/automation");
 const { n8nBaseUrl, probeN8n, simulateAction, finalizeExecution } = require("../services/automationRuntime");
 
@@ -437,44 +438,85 @@ router.post(
     const executionId = identityExecutionId(req.body?.executionId);
     const title = String(req.body?.title || "").trim();
     const description = String(req.body?.description || "");
-    const severity = String(req.body?.severity || "").toLowerCase();
     const sourceIp = String(req.body?.sourceIp || "").slice(0, 64);
     const riskScore = Number(req.body?.riskScore);
     const evidence = req.body?.evidence;
     if (!title || title.length > 200) throw new HttpError(400, "title là bắt buộc và không vượt quá 200 ký tự");
-    if (!["critical", "high", "medium", "low"].includes(severity)) throw new HttpError(400, "severity không hợp lệ");
     if (!Number.isFinite(riskScore) || riskScore < 0 || riskScore > 100) throw new HttpError(400, "riskScore phải từ 0 đến 100");
     if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new HttpError(400, "evidence phải là một object");
     if (Buffer.byteLength(JSON.stringify(evidence), "utf8") > 32768) throw new HttpError(400, "evidence vượt quá 32 KB");
+    const userEmail = identityEmail(evidence.userEmail);
+    if (!Array.isArray(evidence.detections) || evidence.detections.length === 0 || evidence.detections.length > 16) {
+      throw new HttpError(400, "evidence.detections phải chứa từ 1 đến 16 dấu hiệu");
+    }
+    const detections = evidence.detections;
+    if (detections.some((detection) => !["bruteForce", "unusualLogin", "privilegeEscalation"].includes(detection))) {
+      throw new HttpError(400, "evidence.detections chứa dấu hiệu không hợp lệ");
+    }
+    const dedupeKey = identityAlertFingerprint({ userEmail, sourceIp, detections });
+    const outcome = await withTransaction(async (client) => {
+      const lockKeys = [`identity-alert:${dedupeKey}`, `identity-execution:${executionId}`].sort();
+      for (const lockKey of lockKeys) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lockKey]);
+      }
+      const recent = await client.query(
+        `SELECT id, title, severity, risk_score, source_ip, metadata
+         FROM alerts
+         WHERE source = 'Phát hiện tấn công danh tính bằng Groq AI'
+           AND (
+             metadata->>'executionId' = $2
+             OR (metadata->>'dedupeKey' = $1 AND detected_at > now() - interval '10 minutes')
+           )
+         ORDER BY detected_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [dedupeKey, executionId],
+      );
+      if (recent.rows.length) {
+        const existing = recent.rows[0];
+        const mergedRiskScore = Math.max(Number(existing.risk_score) || 0, riskScore);
+        const updated = await client.query(
+          `UPDATE alerts
+           SET risk_score = $2,
+               severity = $3,
+               metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
+           WHERE id = $1
+           RETURNING id, title, severity, risk_score, source_ip`,
+          [
+            existing.id,
+            mergedRiskScore,
+            identityAlertSeverity(mergedRiskScore),
+            JSON.stringify({
+              duplicateCount: (Number(existing.metadata?.duplicateCount) || 0) + 1,
+              latestExecutionId: executionId,
+              lastDuplicateAt: new Date().toISOString(),
+            }),
+          ],
+        );
+        return { alert: updated.rows[0], created: false };
+      }
 
-    const existing = await query(
-      `SELECT id, title, severity, risk_score, source_ip FROM alerts
-       WHERE source = 'Phát hiện tấn công danh tính bằng Groq AI'
-         AND metadata->>'executionId' = $1
-       ORDER BY created_at DESC LIMIT 1`,
-      [executionId],
-    );
-    if (existing.rows.length) return res.json({ data: existing.rows[0], created: false });
-
-    const inserted = await query(
-      `INSERT INTO alerts
-         (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique,
-          risk_score, confidence, tags, metadata)
-       VALUES ($1, $2, $3, 'open', 'Phát hiện tấn công danh tính bằng Groq AI', $4, $5, $6,
-               $7, 85, ARRAY['identity','brute_force','privilege_escalation'], $8::jsonb)
-       RETURNING id, title, severity, risk_score, source_ip`,
-      [
-        title,
-        description.slice(0, 12000),
-        severity,
-        sourceIp || null,
-        String(req.body?.mitreTactic || "").slice(0, 200),
-        String(req.body?.mitreTechnique || "").slice(0, 200),
-        riskScore,
-        JSON.stringify({ ...evidence, workflowId: "identity-attack", executionId }),
-      ],
-    );
-    res.status(201).json({ data: inserted.rows[0], created: true });
+      const inserted = await client.query(
+        `INSERT INTO alerts
+           (title, description, severity, status, source, source_ip, mitre_tactic, mitre_technique,
+            risk_score, confidence, tags, metadata)
+         VALUES ($1, $2, $3, 'open', 'Phát hiện tấn công danh tính bằng Groq AI', $4, $5, $6,
+                 $7, 85, ARRAY['identity','brute_force','privilege_escalation'], $8::jsonb)
+         RETURNING id, title, severity, risk_score, source_ip`,
+        [
+          title,
+          description.slice(0, 12000),
+          identityAlertSeverity(riskScore),
+          sourceIp || null,
+          String(req.body?.mitreTactic || "").slice(0, 200),
+          String(req.body?.mitreTechnique || "").slice(0, 200),
+          riskScore,
+          JSON.stringify({ ...evidence, workflowId: "identity-attack", executionId, dedupeKey, duplicateCount: 0 }),
+        ],
+      );
+      return { alert: inserted.rows[0], created: true };
+    });
+    res.status(outcome.created ? 201 : 200).json({ data: outcome.alert, created: outcome.created, duplicate: !outcome.created });
   }),
 );
 
@@ -687,8 +729,11 @@ router.post(
     if (!workflow) throw new HttpError(404, "Không tìm thấy quy trình");
     const enabled = (await readOverrides())[workflow.id] ?? workflow.enabled;
     if (!enabled) throw new HttpError(409, "Quy trình đang tạm dừng. Hãy bật trước khi chạy.");
+    if (workflow.id === "identity-attack" && (process.env.MG_IDENTITY_WEBHOOK_TOKEN || "").length < 32) {
+      throw new HttpError(503, "Thiếu MG_IDENTITY_WEBHOOK_TOKEN hợp lệ để xác thực webhook danh tính");
+    }
     if (workflow.id === "impossible-travel" && !process.env.MG_API_TOKEN) {
-      throw new HttpError(503, "Thiếu MG_API_TOKEN để xác thực webhook di chuyển bất khả thi");
+      throw new HttpError(503, "Thiếu MG_API_TOKEN để xác thực webhook");
     }
 
     const executionId = crypto.randomUUID();
@@ -717,10 +762,13 @@ router.post(
     }
     let status = "queued";
     let dispatched = false;
+    let dispatchError = null;
 
     try {
       const headers = { "Content-Type": "application/json" };
-      if (workflow.id === "impossible-travel") {
+      if (workflow.id === "identity-attack") {
+        headers.Authorization = `Bearer ${process.env.MG_IDENTITY_WEBHOOK_TOKEN}`;
+      } else if (workflow.id === "impossible-travel") {
         headers.Authorization = `Bearer ${process.env.MG_API_TOKEN}`;
       }
       const response = await fetch(`${n8nBaseUrl()}${workflow.webhook}`, {
@@ -732,9 +780,19 @@ router.post(
       if (response.ok) {
         status = "dispatched";
         dispatched = true;
+      } else if (workflow.id === "identity-attack") {
+        status = "failed";
+        dispatchError = `Webhook n8n từ chối yêu cầu (HTTP ${response.status})`;
       }
-    } catch (_error) {
-      status = "queued";
+    } catch (error) {
+      if (workflow.id === "identity-attack") {
+        status = "failed";
+        dispatchError = error.name === "TimeoutError" || error.name === "AbortError"
+          ? "Webhook n8n hết thời gian chờ"
+          : "Không thể kết nối webhook n8n";
+      } else {
+        status = "queued";
+      }
     }
 
     const durationMs = Math.max(1, Date.now() - new Date(startedAt).getTime());
@@ -745,10 +803,10 @@ router.post(
       resource: "automation_workflow",
       resourceId: workflow.id,
       action: "run",
-      message: dispatched ? `Đã gửi quy trình tới n8n: ${workflow.name}` : `Đã xếp hàng quy trình (n8n ngoại tuyến): ${workflow.name}`,
-      metadata: { executionId, workflowId: workflow.id, workflowName: workflow.name, status, mode: "manual", durationMs, nodeCount: workflow.nodeCount, triggeredBy: req.user?.email },
+      message: dispatched ? `Đã gửi quy trình tới n8n: ${workflow.name}` : dispatchError || `Đã xếp hàng quy trình (n8n ngoại tuyến): ${workflow.name}`,
+      metadata: { executionId, workflowId: workflow.id, workflowName: workflow.name, status, mode: "manual", durationMs, nodeCount: workflow.nodeCount, triggeredBy: req.user?.email, ...(dispatchError ? { dispatchError } : {}) },
     });
-    await recordAudit({ req, action: "run_workflow", resource: "automation", resourceId: workflow.id, details: { executionId, status } });
+    await recordAudit({ req, action: "run_workflow", resource: "automation", resourceId: workflow.id, details: { executionId, status, ...(dispatchError ? { dispatchError } : {}) } });
 
     res.status(202).json({
       data: {
@@ -761,7 +819,7 @@ router.post(
         nodeCount: workflow.nodeCount,
         startedAt,
         durationMs,
-        message: dispatched ? "Đã gửi quy trình tới n8n" : "Đã xếp hàng quy trình — API không thể kết nối tới n8n",
+        message: dispatched ? "Đã gửi quy trình tới n8n" : dispatchError || "Đã xếp hàng quy trình — API không thể kết nối tới n8n",
       },
     });
   }),
