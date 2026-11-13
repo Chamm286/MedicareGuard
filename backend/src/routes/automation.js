@@ -9,6 +9,8 @@ const { n8nBaseUrl, probeN8n, simulateAction, finalizeExecution } = require("../
 
 const router = express.Router();
 
+const n8nUiUrl = () => (process.env.MG_N8N_UI_URL || process.env.N8N_PUBLIC_URL || n8nBaseUrl()).replace(/\/$/, "");
+
 const readOverrides = async () => {
   const result = await query("SELECT key, value FROM settings WHERE key LIKE 'automation.workflow.%'");
   return Object.fromEntries(
@@ -125,7 +127,7 @@ router.get(
         success_rate: stat.attempted_runs ? Math.round((stat.successful_runs / stat.attempted_runs) * 100) : 100,
         last_run: stat.last_run || null,
         avg_duration_ms: stat.avg_duration_ms || null,
-        n8n_url: `${n8nBaseUrl()}/workflow/${workflow.id}`,
+        n8n_url: `${n8nUiUrl()}/workflow/${workflow.id}`,
       };
     });
     const runtime = await runtimeStatus();
@@ -136,7 +138,8 @@ router.get(
         active: data.filter((workflow) => workflow.enabled).length,
         nodes: data.reduce((sum, workflow) => sum + workflow.nodeCount, 0),
         runs: data.reduce((sum, workflow) => sum + workflow.runs, 0),
-        n8n: n8nBaseUrl(),
+        n8n: n8nUiUrl(),
+        n8nInternal: n8nBaseUrl(),
         runtime,
       },
     });
@@ -757,7 +760,7 @@ router.post(
         workflowName: workflow.name,
         status,
         dispatched,
-        n8n: n8nBaseUrl(),
+        n8n: n8nUiUrl(),
         nodeCount: workflow.nodeCount,
         startedAt,
         durationMs,

@@ -2,7 +2,7 @@
 
 **A full-stack security operations platform for healthcare environments.**
 
-MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 52-table PostgreSQL schema, a 575-endpoint REST API, a 28-route Next.js console and storefront, seven focused Vietnamese n8n workflows (17/19 nodes each, 19 for the monitor, 13 for e-commerce fraud, 5 for AI chat) and a realistic seeded dataset for demos.
+MedicareGuard unifies alert triage, threat intelligence, asset exposure, incident response, firewall policy, compliance evidence and n8n-driven automation in one production-style SOC console. It ships with a 52-table PostgreSQL schema, a 575-endpoint REST API, a 28-route Next.js console and storefront, ten focused Vietnamese n8n workflows (17–24 nodes each, 13 for e-commerce fraud, 11 for fraud confirmation, 5 for AI chat) and a realistic seeded dataset for demos.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white">
@@ -68,20 +68,22 @@ flowchart LR
 
   subgraph Services
     A["Express API<br/>574 endpoints"]
-    W["n8n 2.41<br/>7 focused workflows"]
+    W["n8n 2.41<br/>10 focused workflows"]
   end
 
   subgraph Data
     P[("PostgreSQL 16<br/>52 tables · 5 views")]
+    M["Mailpit<br/>SMTP 1025 · UI 8025"]
   end
 
   B -->|REST + JWT| N
   N --> A
   N --> B
-  N -->|/n8n| W
+  N -->|n8n.cham164.id.vn| W
   A --> P
   W -->|Postgres + SOC API| P
-  W -->|Slack · SMTP · EDR| X["External systems"]
+  W -->|SMTP 1025| M
+  W -->|Slack · EDR| X["External systems"]
   A -->|webhook dispatch| W
 ```
 
@@ -94,7 +96,7 @@ flowchart LR
 | Frontend | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Recharts, Lucide |
 | Backend | Node.js 20+, Express 4, PostgreSQL (`pg`), JWT, bcrypt, Helmet, rate limiting |
 | Database | PostgreSQL 16 — 52 tables, 5 analytics views, triggers and indexes |
-| Automation | n8n 2.41 — 7 focused workflows (19/18 nodes, 18 monitor, 13 e-commerce, 5 AI chat), Vietnamese labels |
+| Automation | n8n 2.41 — 10 focused workflows (17–24 nodes, 13 e-commerce fraud, 11 fraud confirmation, 5 AI chat), Vietnamese labels |
 | Infrastructure | Docker Compose, multi-stage Dockerfiles, nginx reverse proxy |
 | AI | n8n + PostgreSQL grounded analyst, optional OpenAI/Gemini provider |
 | Testing | 61-check smoke suite, 21-check store security suite, TypeScript checks, Playwright screenshots |
@@ -114,7 +116,7 @@ flowchart LR
 | Response Playbooks | Repeatable procedures for DDoS, malware, identity, exfiltration, phishing and ransomware |
 | SOAR Automation | Workflow catalogue, node/stage metadata, execution history, enable toggles, manual runs |
 | Medicare Store | Product catalogue, cart, coupons, guest/customer checkout, order tracking, customer accounts, IP/geo capture and fraud scoring |
-| Store Admin | Revenue, orders, top products, fraud events and order-status operations for SOC analysts |
+| Store Admin | Revenue dashboard, order/risk triage, product CRUD (create/edit/archive), stock and fraud-event operations for admins |
 | AI Analyst | Grounded investigations, suggested prompts, live SOC context, AI insights, conversation history |
 | Reports | Executive/operational/compliance reports, PDF/CSV/JSON export, scheduled delivery |
 | Users & Roles | RBAC, MFA posture, account status, directory filters, role permissions |
@@ -123,14 +125,21 @@ flowchart LR
 
 ## Role-based access control
 
-| Role | Level | Access |
-| --- | --- | --- |
-| `admin` | 100 | Full platform access, users, roles, settings and every operational module |
-| `analyst` | 80 | Triage and respond: alerts, threats, assets, incidents, firewall, reports, AI |
-| `hunter` | 60 | Detection and intel: alerts, threats, scans, logs, reports export, AI |
-| `viewer` | 10 | Read-only access to operational data plus the AI analyst |
+| Role | Level | SOC modules | Medicare Store admin | Users & Roles | Activity / audit logs |
+| --- | --- | --- | --- | --- | --- |
+| `admin` | 100 | Toàn bộ module vận hành, cài đặt nền tảng, tự động hóa và báo cáo | Toàn quyền: xem doanh thu, xử lý đơn, chặn IP, tạo/sửa/lưu trữ sản phẩm, tồn kho | Tạo, sửa, xóa thành viên; gán vai trò; cập nhật bộ quyền của vai trò | Đọc, lọc và xuất |
+| `analyst` | 80 | Phân loại và ứng phó: cảnh báo, mối đe dọa, tài sản, sự cố, tường lửa, báo cáo, AI, tự động hóa | Xem dashboard, xử lý trạng thái đơn, chặn IP gian lận; **không** sửa sản phẩm | Xem danh bạ và quyền của vai trò (chỉ đọc) | Đọc |
+| `hunter` | 60 | Săn tìm và tình báo: cảnh báo, mối đe dọa, quét tài sản, nhật ký, xuất báo cáo, AI | Không truy cập | Không truy cập | Đọc |
+| `viewer` | 10 | Chỉ đọc dữ liệu vận hành và Chuyên viên AI | Không truy cập | Không truy cập | Không truy cập |
 
-Permissions are enforced by `requirePermission` middleware and embedded in the JWT. The UI adapts module actions to the active role.
+Backend enforcement:
+
+- `requirePermission("read" | "write")` bảo vệ các API nghiệp vụ; JWT mang theo danh sách quyền của vai trò.
+- `authorize("admin")` bảo vệ các thao tác quản trị người dùng, vai trò và **CRUD sản phẩm** (`POST/PATCH/DELETE /api/store/admin/products`).
+- Analyst vẫn có thể `PATCH /api/store/admin/orders/:id` và các endpoint phản hồi gian lận để vận hành SOC, nhưng không thể thay đổi danh mục sản phẩm.
+- UI ẩn nút thao tác với vai trò không đủ quyền, đồng thời backend trả `403` nếu gọi trực tiếp API — không phụ thuộc vào việc ẩn nút.
+
+Khi thay đổi quyền của một vai trò, người dùng thuộc vai trò đó cần đăng nhập lại (hoặc làm mới token) để JWT nhận bộ quyền mới.
 
 ## Quick start (Docker)
 
@@ -165,6 +174,81 @@ The backend applies the schema and seeds demo data on first start (`SEED_ON_STAR
 
 > These credentials are for local demos only. Rotate them before any shared deployment.
 
+## Production deployment (AWS EC2 · `https://cham164.id.vn`)
+
+The public stack runs on a single EC2 instance behind a host-level Nginx with Let's Encrypt TLS. Docker Compose provides PostgreSQL, the API, the Next.js console, Mailpit and n8n.
+
+| Public endpoint | Upstream |
+| --- | --- |
+| `https://cham164.id.vn/` | `mg-frontend:3000` |
+| `https://cham164.id.vn/api/` | `mg-backend:4000` |
+| `https://n8n.cham164.id.vn/` | `mg-n8n:5678` (Nginx Basic Auth) |
+| `https://mail.cham164.id.vn/` (optional) | `mg-mailpit:8025` (Nginx Basic Auth) |
+
+Production `.env` essentials:
+
+```dotenv
+NODE_ENV=production
+CORS_ORIGINS=https://cham164.id.vn,https://www.cham164.id.vn
+NEXT_PUBLIC_API_URL=https://cham164.id.vn/api
+
+N8N_HOST=n8n.cham164.id.vn
+N8N_PROTOCOL=https
+N8N_EDITOR_BASE_URL=https://n8n.cham164.id.vn/
+WEBHOOK_URL=https://n8n.cham164.id.vn/
+MG_CONSOLE_URL=https://cham164.id.vn
+MG_N8N_UI_URL=https://n8n.cham164.id.vn
+
+MG_SMTP_HOST=mg-mailpit
+MG_SMTP_PORT=1025
+MG_SMTP_SECURE=false
+MG_SMTP_DISABLE_STARTTLS=true
+MG_SMTP_USER=mailpit
+MG_SMTP_PASSWORD=mailpit
+MG_SMTP_FROM=alerts@medicareguard.io
+MG_ALERT_EMAIL=soc@medicareguard.io
+```
+
+`NEXT_PUBLIC_API_URL` is embedded at **build time**. After changing it, rebuild the frontend image (`docker compose build --no-cache frontend`) instead of only restarting the container.
+
+Mailpit is part of `docker-compose.yml` (`mg-mailpit`, SMTP `1025`, UI `8025`). Ports are bound to `127.0.0.1`, so the UI is reachable through Nginx or an SSH tunnel:
+
+```bash
+ssh -L 8025:127.0.0.1:8025 ubuntu@3.27.93.119
+# then open http://localhost:8025
+```
+
+The n8n container is also bound to `127.0.0.1:5678`; never expose `5678` in the EC2 Security Group. Publish it through `n8n.cham164.id.vn` with TLS and Basic Auth instead.
+
+### DBeaver through an SSH tunnel (PostgreSQL is never public)
+
+PostgreSQL is published as `127.0.0.1:5433:5432` only, so DBeaver must reach it via an SSH tunnel. Keep the EC2 Security Group closed on `5432`/`5433`.
+
+Option A — tunnel created inside DBeaver (recommended):
+
+- Connection → PostgreSQL
+- Host: `127.0.0.1`, Port: `5433`, Database: `medicareguard`, user `medicare`, password `medicare`
+- SSH tab: enabled, host `3.27.93.119`, port `22`, user `ubuntu`, key `~/.ssh/medicareguard.pem`
+- Test connection → `SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';` returns `52` (plus 5 views).
+
+Option B — manual tunnel:
+
+```bash
+ssh -N -L 5434:127.0.0.1:5433 ubuntu@3.27.93.119
+# DBeaver: host 127.0.0.1, port 5434, DB medicareguard, user medicare
+```
+
+The `public` schema holds 52 base tables + 5 views; n8n keeps its own tables in the `n8n` schema.
+
+Re-deploy after a code or environment change:
+
+```bash
+git pull --ff-only
+docker compose build --no-cache frontend backend
+docker compose up -d --remove-orphans
+docker compose logs -f --tail=100 backend n8n
+```
+
 ## Local development
 
 Prerequisites: Node.js 20+, npm, Docker.
@@ -198,7 +282,7 @@ make test          # 61-check API smoke suite (574 endpoints)
 cd backend && npm run test:security   # 21-check e-commerce security suite
 make typecheck     # frontend TypeScript check
 make screenshots   # recapture docs/screenshots with Playwright
-make n8n-build     # regenerate the seven focused n8n workflows
+make n8n-build     # regenerate the focused n8n workflows
 make n8n-token     # mint a 30-day JWT for n8n callbacks
 make n8n-setup     # import, publish and activate the workflows
 make docker-reset  # stop stack and delete volumes
@@ -270,6 +354,76 @@ The API exposes 574 routes covering:
 
 See `GET /api/_meta/resources` for the full resource registry.
 
+## SePay payment gateway (Medicare Store)
+
+Medicare Store supports four payment methods: `cod`, `bank_transfer`, `card` and `sepay`. The SePay flow generates a VietQR image from the order total and confirms the order automatically when SePay calls the webhook.
+
+### 1. Prepare the SePay account
+
+1. Create a merchant account at <https://sepay.vn> and link the receiving bank account.
+2. Open **Cấu hình → Cửa hàng** (or **Tài khoản ngân hàng**) and note the **số tài khoản**, **mã ngân hàng** (e.g. `MBBank`, `Vietcombank`, `TPBank`) and **tên chủ tài khoản**.
+3. Open **Cấu hình → Webhook** (or **API/Webhook**) and create a webhook secret. SePay sends it as `Authorization: Bearer <secret>`.
+4. Optional: use the SePay sandbox/test bank account first; no real money is transferred in test mode.
+
+### 2. Configure the backend
+
+Add the following to `.env`, then recreate the backend container:
+
+```dotenv
+SEPAY_ACCOUNT_NUMBER=0123456789
+SEPAY_BANK_CODE=MBBank
+SEPAY_ACCOUNT_NAME=NGUYEN VAN A
+SEPAY_WEBHOOK_SECRET=<webhook-secret>
+```
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+When these values are missing, checkout still works but the order page shows the message `Cấu hình SEPAY_ACCOUNT_NUMBER và SEPAY_BANK_CODE để tạo mã QR thanh toán.`
+
+### 3. Configure the SePay webhook
+
+| Field | Value |
+| --- | --- |
+| URL | `https://cham164.id.vn/api/store/payments/sepay/webhook` |
+| Method | `POST` |
+| Auth | `Bearer <SEPAY_WEBHOOK_SECRET>` |
+| Events | Money in / transfer received |
+
+The handler matches the order number inside the transfer content. Order numbers use the format `MG-YYYYMMDD-XXXX` (generated at checkout) and must be preserved verbatim in the bank transfer description. The amount must match the order total within ±1 VND; a mismatch is stored as a `payment_mismatch` security event and rejected.
+
+### 4. Test the flow
+
+```bash
+# Create an order with payment_method=sepay in the store UI, then simulate SePay:
+curl -X POST https://cham164.id.vn/api/store/payments/sepay/webhook \
+  -H 'Authorization: Bearer <SEPAY_WEBHOOK_SECRET>' \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"MG-20261114-1234","transferAmount":250000,"referenceCode":"SEPAY-TEST-1"}'
+
+# Expected: {"ok":true,"matched":true,"orderNumber":"MG-20261114-1234"}
+```
+
+A successful webhook sets `store_orders.payment_status = 'paid'`, moves the order to `processing` (unless it is `on_hold` for fraud review), and marks the payment row as `captured`. Confirm in the console at **Store → Orders** and in the SePay dashboard webhook log.
+
+### Store admin operations
+
+| Method | Endpoint | Role | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/store/admin/stats` | admin, analyst | Doanh thu, đơn mở, khách hàng, top sản phẩm, sự kiện gian lận |
+| `GET` | `/api/store/admin/orders` | admin, analyst | Danh sách đơn có tìm kiếm, lọc trạng thái và phân trang |
+| `GET` | `/api/store/admin/orders/:id` | admin, analyst | Chi tiết đơn, item, payment và security event |
+| `PATCH` | `/api/store/admin/orders/:id` | admin, analyst | Phê duyệt, tạm giữ hoặc hủy đơn |
+| `GET` | `/api/store/admin/products` | admin, analyst | Toàn bộ sản phẩm (kể cả nháp/lưu trữ), lọc `q`, `status`, phân trang |
+| `POST` | `/api/store/admin/products` | admin | Tạo sản phẩm mới |
+| `PATCH` | `/api/store/admin/products/:id` | admin | Sửa giá, tồn kho, ảnh, trạng thái, mô tả |
+| `DELETE` | `/api/store/admin/products/:id` | admin | Lưu trữ mềm sản phẩm (`status = 'archived'`) |
+| `POST` | `/api/store/admin/orders/:id/record-fraud-response` | admin, analyst | Ghi nhận kết quả phản hồi gian lận từ n8n |
+| `POST` | `/api/store/admin/orders/:id/fraud-confirmed` | admin, analyst | Xác nhận gian lận, hủy đơn và gửi IP sang n8n để chặn |
+
+The Store Admin UI (`/store/admin`) has three tabs: **Tổng quan** (doanh thu 7 ngày, top sản phẩm, sự kiện gian lận), **Đơn hàng** (lọc rủi ro, chi tiết, phê duyệt/hủy/chặn IP) and **Sản phẩm** (tạo/sửa/lưu trữ, tồn kho). Product mutation buttons are only rendered for `admin`; the API also enforces `authorize("admin")`.
+
 ## n8n workflows
 
 | Workflow | Webhook | Outcome |
@@ -280,8 +434,12 @@ See `GET /api/_meta/resources` for the full resource registry.
 | Bằng chứng Tuân thủ Liên tục | `/webhook/mg-compliance` | Thu thập bằng chứng HIPAA/NIST/ISO và ghi nhật ký kiểm toán |
 | Phản hồi Gian lận Thương mại điện tử | `/webhook/mg-ecommerce-fraud` | Xác minh IP/quốc gia, tạm giữ đơn rủi ro, cảnh báo SOC và Telegram/Gmail |
 | Giám sát Tấn công Trực tiếp & Cảnh báo Điện thoại | `/webhook/mg-attack-monitor` | Quét cảnh báo critical/high mỗi 5 phút và đẩy Telegram + Gmail |
+| Phát hiện Tấn công Danh tính | `/webhook/mg-identity-attack` | Phân tích hành vi đăng nhập bất thường, MFA fatigue và leo thang đặc quyền |
+| Phát hiện Di chuyển Bất khả thi | `/webhook/mg-impossible-travel` | So khớp vị trí/thiết bị, phát hiện impossible travel và yêu cầu phê duyệt |
+| Xác nhận Gian lận & Chặn IP | `/webhook/mg-fraud-confirmed` | Admin xác nhận đơn gian lận, chặn IP, gửi thông báo và ghi nhận phản hồi |
+| Chat AI Phân tích SOC | `/webhook/mg-ai-chat` | Trả lời câu hỏi điều tra dựa trên ngữ cảnh SOC và dữ liệu PostgreSQL |
 
-Each playbook contains **17–19 executable nodes** (**18** for the monitor, **13** for e-commerce fraud) so it stays readable in class and in the n8n canvas, with Vietnamese node labels and three colour-coded sticky notes. Every response flow includes **independent Telegram and Gmail branches** — Telegram works with a bot token and chat ID alone, Gmail is optional — and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
+Each playbook contains **11–24 executable nodes** (**23** for identity attack, **24** for impossible travel, **18** for the monitor, **13** for e-commerce fraud, **11** for fraud confirmation, **5** for AI chat) so it stays readable in class and in the n8n canvas, with Vietnamese node labels and colour-coded sticky notes. The authoritative node count for import lives in [`n8n/workflows/manifest.json`](n8n/workflows/manifest.json). Every response flow includes **independent Telegram and Gmail branches** — Telegram works with a bot token and chat ID alone, Gmail is optional — and the scheduled **Live Attack Monitor** pushes a phone digest every five minutes. The run is dispatched by the API, enriched through the simulated EDR/identity/sandbox/patch adapters, written to PostgreSQL and finalized back into the console.
 
 Setup, credential overrides, environment variables and verification commands are documented in [`n8n/README.md`](n8n/README.md).
 
@@ -453,10 +611,10 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 │   ├── app/(app)/         dashboard and all operational modules
 │   ├── components/        shell, tables, charts, threat map, command palette
 │   └── lib/               API client, auth, navigation and formatting
-├── n8n/                   7 importable Vietnamese workflows + setup guide
+├── n8n/                   10 importable Vietnamese workflows + setup guide
 ├── nginx/                 reverse proxy for console, API and n8n
 ├── docs/screenshots/      Playwright captures of every module
-├── docker-compose.yml     PostgreSQL, backend, frontend, n8n and nginx
+├── docker-compose.yml     PostgreSQL, Mailpit, backend, frontend, n8n and nginx
 └── Makefile               developer workflow
 ```
 
@@ -467,6 +625,7 @@ Views power the dashboard, severity mix, attack geography, top attackers and fir
 - Helmet, CORS allow-listing and parameterised SQL are enabled throughout.
 - Activity and audit logs capture actor, resource, IP and user agent for every mutation.
 - `.env` is ignored by Git; only `.env.example` is committed.
+- n8n webhooks are optionally protected by a shared header token: set `MG_N8N_WEBHOOK_TOKEN` in both the backend and n8n environments; the backend then sends `Authorization: Bearer <token>` on every dispatch (`dispatchFraudWorkflow`, `dispatchFraudConfirmedWorkflow`, `maybeN8n`). Configure the corresponding Header Auth credential in n8n to enforce it. When unset, dispatch remains backward compatible.
 - Before production: rotate `JWT_SECRET`, `N8N_ENCRYPTION_KEY`, database and n8n passwords, terminate TLS, and replace demo seeded credentials.
 - The AI analyst defaults to deterministic, data-grounded responses. Adding `OPENAI_API_KEY` enables an external model provider, but the platform does not require it.
 

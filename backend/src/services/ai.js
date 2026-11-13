@@ -199,11 +199,13 @@ const requestJson = async (url, options, timeoutMs = 8000) => {
 
 const maybeN8n = async (message, conversationId) => {
   if (!config.n8n.aiChatUrl) return null;
+  const headers = { "Content-Type": "application/json" };
+  if (config.n8n?.webhookToken) headers.Authorization = `Bearer ${config.n8n.webhookToken}`;
   const payload = await requestJson(
     config.n8n.aiChatUrl,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ message, conversationId }),
     },
     config.n8n.timeoutMs,

@@ -12,12 +12,12 @@ WORKFLOW_IDS=(ransomware-containment phishing-triage vulnerability-sla complianc
 N8N_USER_ID="${N8N_USER_ID:-}"
 case "$N8N_TARGET" in
   auto)
-    if command -v n8n >/dev/null 2>&1; then
-      N8N_TARGET="local"
-    elif command -v docker >/dev/null 2>&1 && [[ "$(docker inspect --format '{{.State.Running}}' "$N8N_CONTAINER" 2>/dev/null || true)" == "true" ]]; then
+    if command -v docker >/dev/null 2>&1 && [[ "$(docker inspect --format '{{.State.Running}}' "$N8N_CONTAINER" 2>/dev/null || true)" == "true" ]]; then
       N8N_TARGET="docker"
+    elif command -v n8n >/dev/null 2>&1; then
+      N8N_TARGET="local"
     else
-      echo "n8n CLI not found and Docker container '$N8N_CONTAINER' is not running. Start n8n with 'docker compose up -d n8n' or set N8N_TARGET=local." >&2
+      echo "Docker container '$N8N_CONTAINER' is not running and n8n CLI is not on PATH. Start n8n with 'docker compose up -d n8n' or set N8N_TARGET=local." >&2
       exit 1
     fi
     ;;
@@ -79,8 +79,7 @@ else
 fi
 
 if [[ -z "${GROQ_API_KEY:-}" ]]; then
-  echo "GROQ_API_KEY is required to publish the identity-detection workflow. Set it in the environment or .env, then recreate the n8n container." >&2
-  exit 1
+  echo "WARNING: GROQ_API_KEY is not set. The identity-attack and impossible-travel AI analysis nodes will be skipped/fail over. Set it in the environment or .env to enable Groq analysis." >&2
 fi
 
 run_n8n() {
@@ -141,7 +140,8 @@ PY
 echo "Importing MedicareGuard PostgreSQL credential..."
 import_credentials "$TMP_DIR/credential.json"
 
-python3 - "$TMP_DIR/groq.json" "${GROQ_API_KEY}" <<'PYCRED'
+if [[ -n "${GROQ_API_KEY:-}" ]]; then
+  python3 - "$TMP_DIR/groq.json" "${GROQ_API_KEY}" <<'PYCRED'
 import json
 import sys
 path, api_key = sys.argv[1:]
@@ -153,8 +153,11 @@ credential = {
 }
 json.dump([credential], open(path, "w"), indent=2)
 PYCRED
-echo "Importing MedicareGuard Groq credential..."
-import_credentials "$TMP_DIR/groq.json"
+  echo "Importing MedicareGuard Groq credential..."
+  import_credentials "$TMP_DIR/groq.json"
+else
+  echo "Skipping Groq credential: set GROQ_API_KEY to enable AI analysis nodes."
+fi
 
 if [[ -n "${MG_SMTP_HOST:-}" && -n "${MG_SMTP_USER:-}" && -n "${MG_SMTP_PASSWORD:-}" ]]; then
   python3 - "$TMP_DIR/smtp.json" "${MG_SMTP_USER}" "${MG_SMTP_PASSWORD}" "${MG_SMTP_HOST}" "${MG_SMTP_PORT:-465}" "${MG_SMTP_SECURE:-true}" "${MG_SMTP_DISABLE_STARTTLS:-false}" <<'PYCRED'
@@ -233,10 +236,12 @@ cat <<EOF
 Imported and published ${#WORKFLOW_IDS[@]} MedicareGuard workflows.
 
 Next steps:
-  1. Add these values to the environment used to start n8n:
-       MG_API_URL=http://localhost:4000/api
-       N8N_AI_CHAT_URL=http://localhost:5678/webhook/mg-ai-chat
+  1. Ensure the n8n container has these values:
+       MG_API_URL=http://mg-backend:4000/api
+       N8N_AI_CHAT_URL=http://n8n:5678/webhook/mg-ai-chat
        MG_API_TOKEN=<token from: cd backend && npm run token:n8n>
-  2. Restart n8n.
-  3. Verify: curl -X POST http://localhost:5678/webhook/mg-ransomware -H 'Content-Type: application/json' -d '{"entityId":"<alert-uuid>"}'
+  2. Restart n8n: docker compose restart n8n
+  3. Verify from the host:
+       curl -X POST https://n8n.cham164.id.vn/webhook/mg-ransomware \
+         -H 'Content-Type: application/json' -d '{"entityId":"<alert-uuid>"}'
 EOF

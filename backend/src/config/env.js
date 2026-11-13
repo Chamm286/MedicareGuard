@@ -39,6 +39,7 @@ const config = {
   n8n: {
     aiChatUrl: process.env.N8N_AI_CHAT_URL || "",
     timeoutMs: Number(process.env.N8N_AI_CHAT_TIMEOUT_MS || 15000),
+    webhookToken: process.env.MG_N8N_WEBHOOK_TOKEN || "",
   },
 };
 

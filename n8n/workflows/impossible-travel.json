@@ -371,7 +371,10 @@
         0
       ],
       "id": "2f0e5480-ed1e-5a6b-85e5-606214cc7722",
-      "onError": "stopWorkflow"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
     },
     {
       "name": "20 · Mô hình chat Groq",
@@ -421,7 +424,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ executionId: $('18 · Chấm điểm nguy cơ tài khoản').first().json.executionId, userEmail: $('18 · Chấm điểm nguy cơ tài khoản').first().json.userEmail, sessionId: $('18 · Chấm điểm nguy cơ tài khoản').first().json.previousSessionId, sourceIp: $('18 · Chấm điểm nguy cơ tài khoản').first().json.ip, title: $('18 · Chấm điểm nguy cơ tài khoản').first().json.alertTitle, description: $('18 · Chấm điểm nguy cơ tài khoản').first().json.alertDescription, severity: $('18 · Chấm điểm nguy cơ tài khoản').first().json.severity, riskScore: $('18 · Chấm điểm nguy cơ tài khoản').first().json.riskScore, evidence: { ...$('18 · Chấm điểm nguy cơ tài khoản').first().json, aiAnalysis: $('19 · Chuyên gia AI phân tích danh tính').first().json.output || '' } }) }}"
+        "jsonBody": "={{ JSON.stringify({ executionId: $('18 · Chấm điểm nguy cơ tài khoản').first().json.executionId, userEmail: $('18 · Chấm điểm nguy cơ tài khoản').first().json.userEmail, sessionId: $('18 · Chấm điểm nguy cơ tài khoản').first().json.previousSessionId, sourceIp: $('18 · Chấm điểm nguy cơ tài khoản').first().json.ip, title: $('18 · Chấm điểm nguy cơ tài khoản').first().json.alertTitle, description: $('18 · Chấm điểm nguy cơ tài khoản').first().json.alertDescription, severity: $('18 · Chấm điểm nguy cơ tài khoản').first().json.severity, riskScore: $('18 · Chấm điểm nguy cơ tài khoản').first().json.riskScore, evidence: { ...$('18 · Chấm điểm nguy cơ tài khoản').first().json, aiAnalysis: $('19 · Chuyên gia AI phân tích danh tính').first().json.output || 'Không khả dụng (chưa cấu hình GROQ_API_KEY).' } }) }}"
       },
       "position": [
         4320,
