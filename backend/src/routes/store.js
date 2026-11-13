@@ -938,7 +938,8 @@ router.get(
         (SELECT count(*)::int FROM store_orders WHERE status IN ('pending','confirmed','processing','on_hold')) AS open_orders,
         (SELECT count(*)::int FROM store_customers) AS customers`),
       query(`SELECT COALESCE(sum(total),0)::numeric AS revenue, count(*)::int AS paid_orders FROM store_orders WHERE payment_status = 'paid'`),
-      query(`SELECT oi.sku, oi.name, sum(oi.quantity)::int AS quantity, sum(oi.line_total)::numeric AS revenue
+      query(`SELECT oi.sku, oi.name, sum(oi.quantity)::int AS quantity, sum(oi.line_total)::numeric AS revenue,
+                    (SELECT p.image_url FROM store_products p WHERE p.sku = oi.sku LIMIT 1) AS image_url
              FROM store_order_items oi JOIN store_orders o ON o.id = oi.order_id
              GROUP BY oi.sku, oi.name ORDER BY revenue DESC LIMIT 5`),
       query(`SELECT id, order_number, shipping_name, total, status, payment_status, risk_score, ip_address, created_at
