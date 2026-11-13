@@ -27,7 +27,7 @@ import { normalizeRole, ROLE_META } from "@/lib/access";
 import { cn, countryName, formatNumber, relativeTime, riskBar, severityDot, titleCase } from "@/lib/utils";
 import { AttackAreaChart, SeverityDonut, SeverityLegend, TopAttackersBar } from "@/components/charts";
 import { ThreatMap } from "@/components/ThreatMap";
-import { Button, Card, ErrorState, PageHeader, ProgressBar, SeverityBadge, Skeleton, StatCard, StatusBadge } from "@/components/ui";
+import { Button, Card, ErrorState, Modal, PageHeader, ProgressBar, SeverityBadge, Skeleton, StatCard, StatusBadge } from "@/components/ui";
 import { useToast } from "@/components/toast";
 
 const ROLE_ACTIONS: Record<string, { label: string; href: string }[]> = {
@@ -84,6 +84,7 @@ export default function DashboardPage() {
   const runtime = useApi<any>("/automation/runtime", { refreshInterval: 30000 });
   const { success, error: toastError } = useToast();
   const [simulating, setSimulating] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState<any>(null);
   const [blockedIps, setBlockedIps] = useState<Set<string>>(new Set());
   const blockIp = async (ip: string) => {
     try {
@@ -401,6 +402,14 @@ export default function DashboardPage() {
                       <SeverityBadge severity={alert.severity} />
                       <StatusBadge status={alert.status} />
                     </div>
+                    <button
+                      type="button"
+                      onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedAlert(alert); }}
+                      className="rounded-md border border-white/[0.06] bg-white/[0.03] p-1 text-slate-500 transition hover:text-brand-300"
+                      title="Xem chi tiết"
+                    >
+                      <ScrollText className="h-3 w-3" />
+                    </button>
                     <span className="w-14 shrink-0 text-right text-[9px] text-slate-600">{relativeTime(alert.detected_at)}</span>
                     <ArrowRight className="h-3 w-3 shrink-0 text-slate-700 transition group-hover:text-brand-300" />
                   </Link>
@@ -579,6 +588,43 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      )}
+      {selectedAlert && (
+        <Modal open={!!selectedAlert} onClose={() => setSelectedAlert(null)} title={selectedAlert.title} description={`Phát hiện lúc ${new Date(selectedAlert.detected_at).toLocaleString("vi-VN")}`}>
+          <div className="space-y-3 text-xs">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Nguồn</p>
+                <p className="mt-1 font-mono text-slate-200">{selectedAlert.source_ip || "nội bộ"}</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Quốc gia</p>
+                <p className="mt-1 text-slate-200">{countryName(selectedAlert.country) || "—"}</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Mức độ</p>
+                <p className="mt-1"><SeverityBadge severity={selectedAlert.severity} /></p>
+              </div>
+              <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Trạng thái</p>
+                <p className="mt-1"><StatusBadge status={selectedAlert.status} /></p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Điểm rủi ro</p>
+              <p className="mt-1 font-mono text-lg font-semibold text-white">{selectedAlert.risk_score ?? "—"}</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Người phụ trách</p>
+              <p className="mt-1 text-slate-200">{selectedAlert.assignee_name || "Chưa phân công"}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Link href={`/alerts/${selectedAlert.id}`} className="rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-400">
+              Mở trang chi tiết
+            </Link>
+          </div>
+        </Modal>
       )}
     </div>
   );
