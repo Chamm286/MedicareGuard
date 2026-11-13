@@ -38,7 +38,10 @@ const COUNTRY_COORDS: Record<string, [number, number]> = {
 
 const coordsFor = (origin: Origin): [number, number] | null => {
   if (typeof origin.lat === "number" && typeof origin.lon === "number") return [origin.lon, origin.lat];
-  return COUNTRY_COORDS[String(origin.country_code || "").toUpperCase()] || null;
+  const coords = COUNTRY_COORDS[String(origin.country_code || "").toUpperCase()];
+  if (!coords) return null;
+  // COUNTRY_COORDS is stored as [lat, lon]; projection expects [lon, lat].
+  return [coords[1], coords[0]];
 };
 
 const WIDTH = 860;

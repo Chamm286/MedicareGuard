@@ -788,4 +788,36 @@ router.patch(
   }),
 );
 
+router.post(
+  "/block-ip",
+  requirePermission("write"),
+  asyncHandler(async (req, res) => {
+    const ip = String(req.body?.ip || "").trim();
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new HttpError(400, "IP không hợp lệ");
+    const reason = String(req.body?.reason || "Manual block from SOC dashboard").slice(0, 240);
+    const existing = await query(`SELECT id FROM firewall_rules WHERE source_ip = $1 AND action = 'deny' LIMIT 1`, [ip]);
+    if (!existing.rows.length) {
+      await query(
+        `INSERT INTO firewall_rules (name, action, source_ip, priority, enabled, hit_count, description, created_by)
+         VALUES ($1, 'deny', $2, 5, true, 0, $3, $4)`,
+        [`Block ${ip}`, ip, reason, req.user?.id || null],
+      );
+    }
+    await recordAudit({ req, action: "block_ip", resource: "firewall", resourceId: ip, details: { reason } });
+    let dispatched = false;
+    try {
+      const response = await fetch(`${n8nBaseUrl()}/webhook/mg-block-ip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip, reason, triggeredBy: req.user?.email, blockedAt: new Date().toISOString() }),
+        signal: AbortSignal.timeout(3000),
+      });
+      dispatched = response.ok;
+    } catch (error) {
+      dispatched = false;
+    }
+    res.json({ data: { ip, reason, blocked: true, dispatched } });
+  }),
+);
+
 module.exports = router;

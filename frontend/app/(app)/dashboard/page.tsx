@@ -84,6 +84,16 @@ export default function DashboardPage() {
   const runtime = useApi<any>("/automation/runtime", { refreshInterval: 30000 });
   const { success, error: toastError } = useToast();
   const [simulating, setSimulating] = useState(false);
+  const [blockedIps, setBlockedIps] = useState<Set<string>>(new Set());
+  const blockIp = async (ip: string) => {
+    try {
+      await api(`/automation/block-ip`, { method: "POST", body: { ip, reason: "Blocked from SOC dashboard" } });
+      setBlockedIps((prev) => new Set(prev).add(ip));
+      success("Đã chặn IP", `${ip} đã được thêm vào firewall và gửi tới n8n.`);
+    } catch (err) {
+      toastError("Chặn IP thất bại", err instanceof Error ? err.message : "Không thể gọi API.");
+    }
+  };
 
   const simulateAttack = async () => {
     setSimulating(true);
@@ -340,12 +350,24 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <TopAttackersBar data={summary?.attackers || []} height={272} />
-              <div className="mt-2 space-y-1.5">
-                {summary?.categories?.slice(0, 3).map((item: any) => (
-                  <div key={item.category} className="flex items-center gap-2 text-[10px]">
-                    <span className="h-1 w-1 rounded-full bg-brand-400" />
-                    <span className="flex-1 truncate text-slate-500">{item.category}</span>
-                    <span className="text-slate-400">{item.total}</span>
+              <div className="mt-3 space-y-1.5">
+                {(summary?.attackers || []).slice(0, 5).map((attacker: any) => (
+                  <div key={attacker.source_ip} className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-2.5 py-1.5">
+                    <span className="font-mono text-[10px] text-slate-300">{attacker.source_ip}</span>
+                    {attacker.country && <span className="text-[9px] text-slate-600">{attacker.country}</span>}
+                    <span className="ml-auto text-[9px] text-slate-500">{attacker.events} sự kiện</span>
+                    <button
+                      onClick={() => blockIp(attacker.source_ip)}
+                      disabled={blockedIps.has(attacker.source_ip)}
+                      className={cn(
+                        "rounded-md border px-2 py-0.5 text-[9px] font-semibold transition",
+                        blockedIps.has(attacker.source_ip)
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                          : "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20",
+                      )}
+                    >
+                      {blockedIps.has(attacker.source_ip) ? "Đã chặn" : "Chặn IP"}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -413,6 +435,9 @@ export default function DashboardPage() {
                     <div className="mt-1.5 flex items-center gap-1.5">
                       <SeverityBadge severity={incident.severity} />
                       <StatusBadge status={incident.status} />
+                      {incident.detected_at && (Date.now() - new Date(incident.detected_at).getTime()) > 24 * 60 * 60 * 1000 && (
+                        <span className="rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-300">Quá hạn</span>
+                      )}
                       <span className="ml-auto text-[9px] text-slate-700">{relativeTime(incident.detected_at)}</span>
                     </div>
                   </Link>
