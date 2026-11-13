@@ -6,7 +6,7 @@ const rateLimit = require("express-rate-limit");
 const { query, withTransaction } = require("../config/db");
 const config = require("../config/env");
 const { asyncHandler, HttpError, parsePagination } = require("../utils/http");
-const { authenticate, requirePermission } = require("../middleware/auth");
+const { authenticate, authorize, requirePermission } = require("../middleware/auth");
 const { recordActivity, recordAudit } = require("../services/audit");
 
 const router = express.Router();
@@ -329,9 +329,11 @@ const n8nBaseUrl = () => (process.env.N8N_BASE_URL || process.env.N8N_URL || "ht
 
 const dispatchFraudWorkflow = async (payload) => {
   try {
+    const headers = { "Content-Type": "application/json" };
+    if (config.n8n?.webhookToken) headers.Authorization = `Bearer ${config.n8n.webhookToken}`;
     const response = await fetch(`${n8nBaseUrl()}/webhook/mg-ecommerce-fraud`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(3000),
     });
@@ -343,9 +345,11 @@ const dispatchFraudWorkflow = async (payload) => {
 
 const dispatchFraudConfirmedWorkflow = async (payload) => {
   try {
+    const headers = { "Content-Type": "application/json" };
+    if (config.n8n?.webhookToken) headers.Authorization = `Bearer ${config.n8n.webhookToken}`;
     const response = await fetch(`${n8nBaseUrl()}/webhook/mg-fraud-confirmed`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(3000),
     });
@@ -1077,10 +1081,59 @@ router.get(
   }),
 );
 
+router.get(
+  "/admin/products",
+  authenticate,
+  requirePermission("read"),
+  asyncHandler(async (req, res) => {
+    const { page, limit, offset } = parsePagination({ ...req.query, limit: req.query.limit || 50 });
+    const values = [];
+    const conditions = [];
+    if (req.query.status && req.query.status !== "all") {
+      values.push(String(req.query.status));
+      conditions.push(`status = $${values.length}`);
+    }
+    if (req.query.q) {
+      values.push(`%${sanitizeText(req.query.q, 120)}%`);
+      conditions.push(`(name ILIKE $${values.length} OR sku ILIKE $${values.length} OR category ILIKE $${values.length} OR brand ILIKE $${values.length})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const count = await query(`SELECT count(*)::int AS total FROM store_products ${where}`, values);
+    const dataValues = [...values, limit, offset];
+    const products = await query(
+      `SELECT *, COALESCE(sale_price, price) AS effective_price
+       FROM store_products ${where}
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT $${dataValues.length - 1} OFFSET $${dataValues.length}`,
+      dataValues,
+    );
+    const summary = await query(
+      `SELECT
+        count(*) FILTER (WHERE status = 'active')::int AS active,
+        count(*) FILTER (WHERE status = 'draft')::int AS draft,
+        count(*) FILTER (WHERE status = 'archived')::int AS archived,
+        count(*) FILTER (WHERE stock = 0)::int AS out_of_stock,
+        COALESCE(sum(stock), 0)::int AS units
+       FROM store_products`,
+    );
+    res.json({
+      data: products.rows.map((product) => ({
+        ...product,
+        price: money(product.price),
+        sale_price: product.sale_price === null ? null : money(product.sale_price),
+        effective_price: money(product.effective_price),
+        rating: numeric(product.rating),
+      })),
+      summary: summary.rows[0],
+      pagination: { page, limit, total: count.rows[0].total, pages: Math.ceil(count.rows[0].total / limit) || 1 },
+    });
+  }),
+);
+
 router.post(
   "/admin/products",
   authenticate,
-  requirePermission("write"),
+  authorize("admin"),
   asyncHandler(async (req, res) => {
     const name = sanitizeText(req.body?.name, 200);
     const slug = sanitizeText(req.body?.slug || name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), 180);
@@ -1111,7 +1164,7 @@ router.post(
 router.patch(
   "/admin/products/:id",
   authenticate,
-  requirePermission("write"),
+  authorize("admin"),
   asyncHandler(async (req, res) => {
     const allowed = {
       name: "name", category: "category", brand: "brand", description: "description", price: "price",
@@ -1120,10 +1173,16 @@ router.patch(
     const fields = [];
     const values = [];
     for (const [input, column] of Object.entries(allowed)) {
-      if (req.body?.[input] !== undefined) {
-        values.push(["price", "sale_price"].includes(column) ? money(req.body[input]) : sanitizeText(req.body[input], 3000));
-        fields.push(`${column} = $${values.length}`);
+      if (req.body?.[input] === undefined) continue;
+      if (column === "sale_price" && (req.body[input] === null || req.body[input] === "")) {
+        fields.push(`${column} = NULL`);
+        continue;
       }
+      if (column === "status" && !["active", "draft", "archived"].includes(req.body[input])) {
+        throw new HttpError(400, "Trạng thái sản phẩm không hợp lệ");
+      }
+      values.push(["price", "sale_price"].includes(column) ? money(req.body[input]) : sanitizeText(req.body[input], 3000));
+      fields.push(`${column} = $${values.length}`);
     }
     if (!fields.length) throw new HttpError(400, "Không có trường hợp lệ nào được cung cấp");
     values.push(req.params.id);
@@ -1136,7 +1195,7 @@ router.patch(
 router.delete(
   "/admin/products/:id",
   authenticate,
-  requirePermission("write"),
+  authorize("admin"),
   asyncHandler(async (req, res) => {
     const result = await query("UPDATE store_products SET status = 'archived', updated_at = now() WHERE id::text = $1 RETURNING id", [req.params.id]);
     if (!result.rows[0]) throw new HttpError(404, "Không tìm thấy sản phẩm");
