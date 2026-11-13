@@ -12,9 +12,12 @@ import {
   HardDrive,
   Radar,
   RefreshCw,
+  ScrollText,
   ServerCog,
   ShieldAlert,
   Siren,
+  Store,
+  Users,
   Workflow,
 } from "lucide-react";
 import { api, useApi } from "@/lib/api";
@@ -103,6 +106,37 @@ export default function DashboardPage() {
     ? Math.round(summary.compliance.reduce((sum: number, item: any) => sum + Number(item.score || 0), 0) / summary.compliance.length)
     : 0;
   const firewallHits = (summary?.firewall || []).reduce((sum: number, item: any) => sum + Number(item.hits || 0), 0);
+  const healthScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (100 - Math.min((overview?.open_alerts || 0) * 2, 100)) * 0.2 +
+          (100 - Math.min((overview?.critical_alerts || 0) * 5, 100)) * 0.2 +
+          (100 - Math.min((overview?.open_incidents || 0) * 4, 100)) * 0.15 +
+          complianceAverage * 0.25 +
+          (overview?.uptime_percent || 100) * 0.2,
+      ),
+    ),
+  );
+  const health =
+    healthScore >= 80
+      ? { label: "Ổn định", tone: "text-emerald-300", ring: "#34d399", hint: "Tư thế an ninh tốt, tiếp tục duy trì giám sát." }
+      : healthScore >= 60
+        ? { label: "Cần chú ý", tone: "text-amber-300", ring: "#fbbf24", hint: "Một số chỉ số đang xấu đi, cần ưu tiên xử lý." }
+        : { label: "Rủi ro cao", tone: "text-red-300", ring: "#f87171", hint: "Có nhiều cảnh báo nghiêm trọng, cần phản hồi ngay." };
+  const posture = [
+    { label: "Cảnh báo mở", value: formatNumber(overview?.open_alerts), tone: "text-amber-300" },
+    { label: "Nghiêm trọng", value: formatNumber(overview?.critical_alerts), tone: "text-red-300" },
+    { label: "Sự cố mở", value: formatNumber(overview?.open_incidents), tone: "text-cyan-300" },
+    { label: "Tuân thủ", value: `${complianceAverage}%`, tone: "text-emerald-300" },
+  ];
+  const adminLinks = [
+    { label: "Quản trị cửa hàng", href: "/store/admin", icon: Store },
+    { label: "Người dùng", href: "/users", icon: Users },
+    { label: "Nhật ký", href: "/logs", icon: ScrollText },
+    { label: "Tự động hóa", href: "/automation", icon: Workflow },
+  ];
 
   return (
     <div>
@@ -161,6 +195,57 @@ export default function DashboardPage() {
         <Card><ErrorState message={error} onRetry={refetch} /></Card>
       ) : (
         <div className="space-y-4">
+          <div className="grid gap-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-br from-brand-500/[0.13] via-surface-850 to-cyan-500/[0.07] p-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+            <div className="flex items-center gap-4">
+              <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+                <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">
+                  <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(148,163,184,0.1)" strokeWidth="8" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="44"
+                    fill="none"
+                    stroke={health.ring}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(healthScore / 100) * 276.5} 276.5`}
+                  />
+                </svg>
+                <div className="text-center">
+                  <p className={cn("font-display text-2xl font-bold", health.tone)}>{healthScore}</p>
+                  <p className="text-[8px] uppercase tracking-[0.18em] text-slate-500">/ 100</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Tư thế an ninh</p>
+                <h2 className={cn("mt-1 font-display text-lg font-semibold", health.tone)}>{health.label}</h2>
+                <p className="mt-1 max-w-xs text-[11px] leading-relaxed text-slate-500">{health.hint}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:px-6">
+              {posture.map((item) => (
+                <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+                  <p className="text-[9px] font-medium uppercase tracking-wider text-slate-500">{item.label}</p>
+                  <p className={cn("mt-1 font-display text-lg font-semibold", item.tone)}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 lg:w-[240px]">
+              {(role === "admin" ? adminLinks : ROLE_ACTIONS[role]?.map((action) => ({ ...action, icon: ArrowRight })) || []).map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className="group flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-2.5 py-2 text-[10px] font-medium text-slate-400 transition hover:border-brand-400/25 hover:bg-white/[0.05] hover:text-brand-200"
+                >
+                  <action.icon className="h-3.5 w-3.5 shrink-0 text-slate-500 transition group-hover:text-brand-300" />
+                  <span className="truncate">{action.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             <StatCard
               label="Cảnh báo đang mở"

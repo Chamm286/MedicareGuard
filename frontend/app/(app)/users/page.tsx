@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Copy, KeyRound, LockKeyhole, Pencil, Plus, Power, RefreshCw, Shield, ShieldCheck, UserCheck, UserX, Users as UsersIcon } from "lucide-react";
+import { Check, Copy, KeyRound, LockKeyhole, Pencil, Plus, Power, RefreshCw, Shield, ShieldCheck, Trash2, UserCheck, UserX, Users as UsersIcon } from "lucide-react";
 import { api, buildQuery, useApi, useDebounced } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { cn, formatDate, relativeTime, titleCase } from "@/lib/utils";
@@ -82,6 +82,24 @@ export default function UsersPage() {
     setTempPassword(null);
   };
 
+  const deleteUser = (user: any) => {
+    setConfirm({
+      title: "Xóa thành viên?",
+      message: `${user.fullName} (${user.email}) sẽ bị xóa vĩnh viễn khỏi MedicareGuard. Hành động này không thể hoàn tác.`,
+      action: async () => {
+        try {
+          await api(`/users/${user.id}`, { method: "DELETE" });
+          success("Đã xóa thành viên", user.email);
+          refetch();
+          allUsers.refetch();
+          roles.refetch();
+        } catch (err) {
+          toastError("Xóa thất bại", err instanceof Error ? err.message : "Lỗi không xác định");
+        }
+      },
+    });
+  };
+
   const doReset = async (event: FormEvent) => {
     event.preventDefault();
     if (!resetting) return;
@@ -119,14 +137,22 @@ export default function UsersPage() {
     {
       key: "actions",
       header: "",
-      width: "110px",
-      render: (row) => (
-        <div className="flex items-center justify-end gap-0.5">
-          <button onClick={(event) => { event.stopPropagation(); setEditing(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-brand-300" aria-label="Sửa thành viên"><Pencil className="h-3 w-3" /></button>
-          <button onClick={(event) => { event.stopPropagation(); resetPassword(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-high" aria-label="Đặt lại mật khẩu"><KeyRound className="h-3 w-3" /></button>
-          <button onClick={(event) => { event.stopPropagation(); toggleStatus(row); }} className={cn("rounded p-1.5 transition hover:bg-white/[0.06]", row.status === "active" ? "text-slate-600 hover:text-critical" : "text-slate-600 hover:text-low")} aria-label={row.status === "active" ? "Vô hiệu hóa thành viên" : "Kích hoạt thành viên"}>{row.status === "active" ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}</button>
-        </div>
-      ),
+      width: "130px",
+      render: (row) => {
+        if (!isAdmin) return <span className="block text-right text-[9px] text-slate-600">Chỉ xem</span>;
+        return (
+          <div className="flex items-center justify-end gap-0.5">
+            <button onClick={(event) => { event.stopPropagation(); setEditing(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-brand-300" aria-label="Sửa thành viên"><Pencil className="h-3 w-3" /></button>
+            <button onClick={(event) => { event.stopPropagation(); resetPassword(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-high" aria-label="Đặt lại mật khẩu"><KeyRound className="h-3 w-3" /></button>
+            {row.id !== me?.id && (
+              <button onClick={(event) => { event.stopPropagation(); toggleStatus(row); }} className={cn("rounded p-1.5 transition hover:bg-white/[0.06]", row.status === "active" ? "text-slate-600 hover:text-critical" : "text-slate-600 hover:text-low")} aria-label={row.status === "active" ? "Vô hiệu hóa thành viên" : "Kích hoạt thành viên"}>{row.status === "active" ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}</button>
+            )}
+            {row.id !== me?.id && (
+              <button onClick={(event) => { event.stopPropagation(); deleteUser(row); }} className="rounded p-1.5 text-slate-600 transition hover:bg-white/[0.06] hover:text-critical" aria-label="Xóa thành viên"><Trash2 className="h-3 w-3" /></button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -264,6 +290,7 @@ export default function UsersPage() {
 
       <RolePermissionsModal
         role={roleDetail}
+        canEdit={isAdmin}
         onClose={() => setRoleDetail(null)}
         onSaved={() => { setRoleDetail(null); roles.refetch(); }}
       />
@@ -360,7 +387,7 @@ function MemberModal({ open, member, roles, onClose, onSaved }: { open: boolean;
   );
 }
 
-function RolePermissionsModal({ role, onClose, onSaved }: { role: any; onClose: () => void; onSaved: () => void }) {
+function RolePermissionsModal({ role, canEdit, onClose, onSaved }: { role: any; canEdit: boolean; onClose: () => void; onSaved: () => void }) {
   const { success, error: toastError } = useToast();
   const { data } = useApi<any>(role ? "/roles/permissions" : null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -371,7 +398,7 @@ function RolePermissionsModal({ role, onClose, onSaved }: { role: any; onClose: 
   }, [role]);
 
   const all = data?.data || [];
-  const toggle = (permission: string) => setSelected((current) => current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]);
+  const toggle = (permission: string) => { if (!canEdit) return; setSelected((current) => current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]); };
 
   const save = async () => {
     if (!role) return;
@@ -395,18 +422,22 @@ function RolePermissionsModal({ role, onClose, onSaved }: { role: any; onClose: 
       description={role?.description || "Kiểm soát quyền truy cập của vai trò này trên nền tảng."}
       size="lg"
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Hủy</Button>
-          <Button variant="primary" loading={saving} onClick={save}>Lưu quyền</Button>
-        </>
+        canEdit ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>Hủy</Button>
+            <Button variant="primary" loading={saving} onClick={save}>Lưu quyền</Button>
+          </>
+        ) : (
+          <Button variant="ghost" onClick={onClose}>Đóng</Button>
+        )
       }
     >
-      <p className="mb-3 text-[10px] text-slate-600">{selected.length}/{all.length} quyền đã chọn · {role?.user_count || 0} thành viên bị ảnh hưởng</p>
+      <p className="mb-3 text-[10px] text-slate-600">{selected.length}/{all.length} quyền đã chọn · {role?.user_count || 0} thành viên bị ảnh hưởng{!canEdit && " · Chỉ quản trị viên mới có thể sửa quyền."}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {all.map((permission: string) => {
           const enabled = selected.includes(permission);
           return (
-            <button key={permission} onClick={() => toggle(permission)} className={cn("flex items-center justify-between rounded-lg border px-3 py-2 text-left transition", enabled ? "border-brand-400/25 bg-brand-500/[0.07]" : "border-white/[0.05] bg-white/[0.015] hover:bg-white/[0.03]")}>
+            <button key={permission} disabled={!canEdit} onClick={() => toggle(permission)} className={cn("flex items-center justify-between rounded-lg border px-3 py-2 text-left transition", enabled ? "border-brand-400/25 bg-brand-500/[0.07]" : "border-white/[0.05] bg-white/[0.015] hover:bg-white/[0.03]", !canEdit && "cursor-not-allowed opacity-80")}>
               <span className={cn("font-mono text-[10px]", enabled ? "text-brand-200" : "text-slate-500")}>{permission}</span>
               <span className={cn("flex h-4 w-4 items-center justify-center rounded border", enabled ? "border-brand-400/40 bg-brand-500/20 text-brand-200" : "border-white/10 text-transparent")}><Check className="h-2.5 w-2.5" /></span>
             </button>
