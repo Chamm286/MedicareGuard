@@ -44,7 +44,7 @@ type Stats = {
   customers: number;
   revenue: number;
   paidOrders: number;
-  topProducts: Array<{ sku: string; name: string; quantity: number; revenue: number }>;
+  topProducts: Array<{ sku: string; name: string; quantity: number; revenue: number; image_url?: string | null }>;
   recentOrders: Array<{ id: string; order_number: string; shipping_name: string; total: number; status: string; payment_status: string; risk_score: number; ip_address: string; created_at: string }>;
   fraudEvents: Array<{ id: string; event_type: string; severity: string; ip_address: string; country: string; risk_score: number; created_at: string }>;
 };
@@ -161,6 +161,23 @@ function RiskBadge({ score }: { score: number }) {
     <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold", meta.chip)}>
       <Icon className="h-3 w-3" /> {score} · {meta.label}
     </span>
+  );
+}
+
+function RiskMeter({ score }: { score: number }) {
+  const meta = riskMeta(score);
+  const Icon = meta.icon;
+  const pct = Math.max(0, Math.min(100, score));
+  const barColor = score >= 70 ? "bg-red-500" : score >= 50 ? "bg-amber-500" : "bg-emerald-500";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+        <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold", meta.chip)}>
+        <Icon className="h-3 w-3" /> {score}
+      </span>
+    </div>
   );
 }
 
@@ -682,19 +699,27 @@ export default function StoreAdminPage() {
                   <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900"><Star className="h-4 w-4 text-amber-500" /> Bán chạy</h2>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">Top 5</span>
                 </div>
-                <div className="mt-4 space-y-4">
+                <div className="mt-4 space-y-3">
                   {(data?.topProducts || []).slice(0, 5).map((product, index) => {
                     const max = Math.max(...(data?.topProducts || []).map((item) => item.revenue), 1);
                     return (
-                      <div key={product.sku}>
-                        <div className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="min-w-0 truncate font-medium text-slate-700"><span className="mr-1.5 text-slate-400">{index + 1}.</span>{product.name}</span>
-                          <span className="shrink-0 font-semibold text-slate-900">{formatVnd(product.revenue)}</span>
+                      <div key={product.sku} className="flex items-center gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">{index + 1}</span>
+                        {product.image_url ? (
+                          <img src={product.image_url} alt={product.name} className="h-10 w-10 shrink-0 rounded-xl border border-slate-100 object-cover" />
+                        ) : (
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><Box className="h-4 w-4" /></span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="min-w-0 truncate font-medium text-slate-700">{product.name}</span>
+                            <span className="shrink-0 font-semibold text-slate-900">{formatVnd(product.revenue)}</span>
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${Math.max(6, (product.revenue / max) * 100)}%` }} />
+                          </div>
+                          <p className="mt-1 text-[9px] text-slate-400">{product.quantity} đã bán</p>
                         </div>
-                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${Math.max(6, (product.revenue / max) * 100)}%` }} />
-                        </div>
-                        <p className="mt-1 text-[9px] text-slate-400">{product.quantity} sản phẩm đã bán</p>
                       </div>
                     );
                   })}
@@ -707,14 +732,18 @@ export default function StoreAdminPage() {
                   <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900"><ShieldAlert className="h-4 w-4 text-red-500" /> Sự kiện gian lận</h2>
                   <span className="rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-semibold text-red-600">{(data?.fraudEvents || []).length} sự kiện</span>
                 </div>
-                <div className="mt-4 space-y-2.5">
+                <div className="relative mt-4 space-y-3 pl-5">
+                  <span className="absolute left-1.5 top-1 bottom-1 w-px bg-slate-200" />
                   {(data?.fraudEvents || []).slice(0, 6).map((event) => (
-                    <div key={event.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-[11px] font-semibold text-slate-700">{event.event_type}</p>
-                        <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", severityMeta(event.severity))}>{event.severity}</span>
+                    <div key={event.id} className="relative">
+                      <span className={cn("absolute -left-[15px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white", event.severity === "critical" ? "bg-red-500" : event.severity === "high" ? "bg-amber-500" : "bg-blue-500")} />
+                      <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-red-200 hover:bg-red-50/40">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[11px] font-semibold text-slate-700">{event.event_type}</p>
+                          <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", severityMeta(event.severity))}>{event.risk_score}</span>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] text-slate-400">{event.ip_address} · {event.country} · {formatStoreDate(event.created_at)}</p>
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-slate-400">{event.ip_address} · {event.country} · {formatStoreDate(event.created_at)}</p>
                     </div>
                   ))}
                   {!data?.fraudEvents?.length && <p className="text-xs text-slate-400">Chưa có sự kiện gian lận.</p>}
@@ -782,7 +811,7 @@ export default function StoreAdminPage() {
                           <p className="text-[10px] text-slate-400">{order.shipping_email}</p>
                         </td>
                         <td className="px-4 py-3.5 text-xs font-semibold text-slate-900">{formatVnd(order.total)}</td>
-                        <td className="px-4 py-3.5"><RiskBadge score={order.risk_score} /></td>
+                        <td className="px-4 py-3.5"><RiskMeter score={order.risk_score} /></td>
                         <td className="px-4 py-3.5">
                           <span className={cn("inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-semibold", statusChip(order.status))}>{orderStatusLabel[order.status] || order.status}</span>
                         </td>
