@@ -11,12 +11,31 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-medicareguard}
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medicare} -d ${POSTGRES_DB:-medicareguard}"]
       interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [socnet]
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: mg-mailpit
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8025/readyz || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 12
     networks: [socnet]
@@ -33,19 +52,26 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-medicare}:${POSTGRES_PASSWORD:-medicare}@postgres:5432/${POSTGRES_DB:-medicareguard}
       DATABASE_SSL: "false"
-      CORS_ORIGINS: "http://3.27.93.119:3000,http://localhost:3000,http://localhost:8080"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://cham164.id.vn,https://www.cham164.id.vn,http://localhost:3000,http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-medicareguard-2026}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
       SEED_ON_START: ${SEED_ON_START:-true}
+      DEMO_MODE: ${DEMO_MODE:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       N8N_BASE_URL: http://n8n:5678
       N8N_AI_CHAT_URL: http://n8n:5678/webhook/mg-ai-chat
       N8N_AI_CHAT_TIMEOUT_MS: ${N8N_AI_CHAT_TIMEOUT_MS:-15000}
+      MG_N8N_UI_URL: ${MG_N8N_UI_URL:-https://n8n.cham164.id.vn}
       MG_API_TOKEN: ${MG_API_TOKEN:-}
+      MG_N8N_WEBHOOK_TOKEN: ${MG_N8N_WEBHOOK_TOKEN:-}
+      SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER:-}
+      SEPAY_BANK_CODE: ${SEPAY_BANK_CODE:-}
+      SEPAY_ACCOUNT_NAME: ${SEPAY_ACCOUNT_NAME:-Medicare Store}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-}
     ports:
       - "4000:4000"
     depends_on:
@@ -62,14 +88,15 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://cham164.id.vn/api}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-MedicareGuard SOC}
+        NEXT_PUBLIC_MAILPIT_URL: ${NEXT_PUBLIC_MAILPIT_URL:-http://127.0.0.1:8025}
     container_name: mg-frontend
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
-      NEXT_PUBLIC_MAILPIT_URL: ${NEXT_PUBLIC_MAILPIT_URL:-http://localhost:8025}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://cham164.id.vn/api}
+      NEXT_PUBLIC_MAILPIT_URL: ${NEXT_PUBLIC_MAILPIT_URL:-http://127.0.0.1:8025}
       BACKEND_INTERNAL_URL: http://backend:4000
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
@@ -84,9 +111,12 @@ services:
     container_name: mg-n8n
     restart: unless-stopped
     environment:
-      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_HOST: ${N8N_HOST:-n8n.cham164.id.vn}
       N8N_PORT: 5678
-      N8N_PROTOCOL: http
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-https://n8n.cham164.id.vn/}
+      WEBHOOK_URL: ${WEBHOOK_URL:-https://n8n.cham164.id.vn/}
+      N8N_PROXY_HOPS: "1"
       N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-medicareguard}
@@ -108,17 +138,20 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       MG_API_URL: http://backend:4000/api
       MG_API_TOKEN: ${MG_API_TOKEN:-}
-      MG_CONSOLE_URL: ${MG_CONSOLE_URL:-http://localhost:3000}
-      MG_N8N_UI_URL: ${MG_N8N_UI_URL:-http://localhost:5678}
+      MG_CONSOLE_URL: ${MG_CONSOLE_URL:-https://cham164.id.vn}
+      MG_N8N_UI_URL: ${MG_N8N_UI_URL:-https://n8n.cham164.id.vn}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      MG_ALERT_EMAIL: ${MG_ALERT_EMAIL:-}
-      MG_SMTP_FROM: ${MG_SMTP_FROM:-}
-      MG_SMTP_HOST: ${MG_SMTP_HOST:-}
-      MG_SMTP_USER: ${MG_SMTP_USER:-}
-      MG_SMTP_PASSWORD: ${MG_SMTP_PASSWORD:-}
+      MG_ALERT_EMAIL: ${MG_ALERT_EMAIL:-soc@medicareguard.io}
+      MG_SMTP_HOST: mg-mailpit
+      MG_SMTP_PORT: "1025"
+      MG_SMTP_SECURE: "false"
+      MG_SMTP_DISABLE_STARTTLS: "true"
+      MG_SMTP_FROM: ${MG_SMTP_FROM:-alerts@medicareguard.io}
+      MG_SMTP_USER: ${MG_SMTP_USER:-mailpit}
+      MG_SMTP_PASSWORD: ${MG_SMTP_PASSWORD:-mailpit}
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/workflows:ro
@@ -126,6 +159,8 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     networks: [socnet]
 

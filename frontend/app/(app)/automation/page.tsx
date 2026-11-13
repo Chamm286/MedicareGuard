@@ -39,6 +39,8 @@ export default function AutomationPage() {
     "phishing-triage",
     "vulnerability-sla",
     "compliance-evidence",
+    "ecommerce-fraud-response",
+    "live-attack-monitor",
     "identity-attack",
     "impossible-travel",
   ]);
@@ -139,11 +141,11 @@ export default function AutomationPage() {
         title="Tự động hóa SOAR"
         subtitle="Quy trình n8n xử lý mối đe dọa, đặt lại thông tin xác thực và thu thập bằng chứng tuân thủ"
         icon={Workflow}
-        badge={<Badge tone="info" dot>{active}/{list.length || 5} đang hoạt động</Badge>}
+        badge={<Badge tone="info" dot>{active}/{list.length || 8} đang hoạt động</Badge>}
         actions={
           <>
             <Button icon={RefreshCw} onClick={() => { refetch(); executions.refetch(); }} loading={refreshing}>Làm mới</Button>
-            <a href={summary?.n8n || "http://localhost:5678"} target="_blank" rel="noreferrer">
+            <a href={summary?.n8n || "https://n8n.cham164.id.vn"} target="_blank" rel="noreferrer">
               <Button icon={ExternalLink}>Mở n8n</Button>
             </a>
           </>
@@ -162,7 +164,7 @@ export default function AutomationPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1 font-mono text-[9px] text-slate-500">{summary?.n8n || "http://localhost:5678"}</span>
+              <span className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1 font-mono text-[9px] text-slate-500">{summary?.n8n || "https://n8n.cham164.id.vn"}</span>
               <Badge tone={runtime ? (runtime.online ? "low" : "critical") : "warning"} dot>{runtime ? (runtime.online ? `n8n trực tuyến · ${runtime.latencyMs}ms` : "n8n ngoại tuyến") : "đang kiểm tra n8n"}</Badge>
             </div>
           </div>
