@@ -191,9 +191,9 @@
         0
       ],
       "id": "41b52431-8f3f-542c-92b8-f69d5301a22f",
-      "onError": "stopWorkflow",
+      "onError": "continueRegularOutput",
       "retryOnFail": true,
-      "maxTries": 3,
+      "maxTries": 2,
       "waitBetweenTries": 5000
     },
     {
@@ -223,7 +223,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "parameters": {
-        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Groq AI — Phân tích danh tính').first().json.output || $('11 · Groq AI — Phân tích danh tính').first().json.text || '';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evidence, mitre: mappings, alertTitle, alertDescription, mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
+        "jsCode": "const risk = $('09 · Tính điểm rủi ro').first().json;\nconst rawAi = $('11 · Groq AI — Phân tích danh tính').first().json.output || $('11 · Groq AI — Phân tích danh tính').first().json.text || 'Không khả dụng (chưa cấu hình GROQ_API_KEY).';\nconst mappings = [];\nif (risk.bruteForceDetected) mappings.push({ tactic: 'Credential Access', technique: 'T1110', name: 'Brute Force' });\nif (risk.unusualLoginDetected) mappings.push({ tactic: 'Initial Access', technique: 'T1078', name: 'Valid Accounts' });\nif (risk.privilegeEscalationDetected) mappings.push({ tactic: 'Privilege Escalation', technique: 'T1098', name: 'Account Manipulation' });\nconst user = risk.history.full_name || risk.userEmail;\nconst evidence = { userEmail: risk.userEmail, userName: user, role: risk.history.role_name || 'unknown', department: risk.history.department || 'unknown', executionId: risk.executionId, events: risk.events, detections: risk.detections, factors: risk.factors, riskScore: risk.riskScore, aiAnalysis: String(rawAi).slice(0, 4000), mitre: mappings, detectedAt: new Date().toISOString() };\nconst alertTitle = 'Phát hiện chuỗi tấn công danh tính — ' + user;\nconst alertDescription = 'Tương quan dấu hiệu dò mật khẩu, đăng nhập bất thường và truy cập đặc quyền; đánh giá của Groq AI: ' + evidence.aiAnalysis;\nreturn [{ json: { ...risk, userName: user, aiAnalysis: evidence.aiAnalysis, evidence, mitre: mappings, alertTitle, alertDescription, mitreTactic: mappings.map((item) => item.tactic).join(', '), mitreTechnique: mappings.map((item) => item.technique).join(', ') } }];"
       },
       "position": [
         2420,
