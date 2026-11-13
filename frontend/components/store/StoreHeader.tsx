@@ -15,6 +15,7 @@ const links = [
 
 export function StoreHeader() {
   const pathname = usePathname();
+  const isAdmin = pathname.startsWith("/store/admin");
   const count = useCartCount();
   const [customer, setCustomer] = useState<StoreCustomer | null>(null);
   const [open, setOpen] = useState(false);
@@ -42,58 +43,74 @@ export function StoreHeader() {
           </div>
           <div className="leading-tight">
             <p className="font-display text-sm font-bold text-slate-900">Medicare <span className="text-blue-600">Store</span></p>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-400">Thiết bị y tế chính hãng</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-400">{isAdmin ? "Khu vực quản trị" : "Thiết bị y tế chính hãng"}</p>
           </div>
+          {isAdmin && <span className="hidden rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-blue-700 sm:inline">Admin</span>}
         </Link>
 
-        <nav className="ml-6 hidden items-center gap-1 md:flex">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                "rounded-xl px-3.5 py-2 text-sm font-medium transition",
-                pathname === link.href ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        {!isAdmin && (
+          <nav className="ml-6 hidden items-center gap-1 md:flex">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "rounded-xl px-3.5 py-2 text-sm font-medium transition",
+                  pathname === link.href ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
-          <Link href="/dashboard" className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-blue-300 hover:text-blue-700 sm:flex">
-            <LayoutDashboard className="h-3.5 w-3.5" /> SOC
-          </Link>
-          <Link href="/store/cart" className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:border-blue-300 hover:text-blue-700">
-            <ShoppingCart className="h-4 w-4" />
-            {count > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-md">{count}</span>
-            )}
-          </Link>
-          {customer ? (
-            <div className="relative">
-              <button onClick={() => setMenu((value) => !value)} className="flex items-center gap-2 rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-300">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700">{customer.fullName.slice(0, 1)}</span>
-                <span className="hidden max-w-24 truncate sm:block">{customer.fullName}</span>
-                <ChevronDown className="h-3 w-3" />
-              </button>
-              {menu && (
-                <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-                  <div className="border-b border-slate-100 px-4 py-3">
-                    <p className="truncate text-xs font-semibold text-slate-900">{customer.fullName}</p>
-                    <p className="truncate text-[10px] text-slate-500">{customer.email}</p>
-                  </div>
-                  <Link href="/store/account" onClick={() => setMenu(false)} className="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50"><UserRound className="h-3.5 w-3.5" /> Tài khoản</Link>
-                  <Link href="/store/orders" onClick={() => setMenu(false)} className="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50"><ShoppingBag className="h-3.5 w-3.5" /> Đơn hàng</Link>
-                  <button onClick={() => { clearStoreSession(); setMenu(false); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs text-red-600 hover:bg-red-50"><LogOut className="h-3.5 w-3.5" /> Đăng xuất</button>
-                </div>
-              )}
-            </div>
+          {isAdmin ? (
+            <>
+              <Link href="/store" className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-blue-300 hover:text-blue-700 sm:flex">
+                <ShoppingBag className="h-3.5 w-3.5" /> Về cửa hàng
+              </Link>
+              <Link href="/dashboard" className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-blue-500/25">
+                <LayoutDashboard className="h-3.5 w-3.5" /> SOC
+              </Link>
+            </>
           ) : (
-            <Link href="/store/account" className="hidden items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-blue-500/25 sm:flex">
-              <UserRound className="h-3.5 w-3.5" /> Đăng nhập
-            </Link>
+            <>
+              <Link href="/dashboard" className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-blue-300 hover:text-blue-700 sm:flex">
+                <LayoutDashboard className="h-3.5 w-3.5" /> SOC
+              </Link>
+              <Link href="/store/cart" className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:border-blue-300 hover:text-blue-700">
+                <ShoppingCart className="h-4 w-4" />
+                {count > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-md">{count}</span>
+                )}
+              </Link>
+              {customer ? (
+                <div className="relative">
+                  <button onClick={() => setMenu((value) => !value)} className="flex items-center gap-2 rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-300">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700">{customer.fullName.slice(0, 1)}</span>
+                    <span className="hidden max-w-24 truncate sm:block">{customer.fullName}</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                  {menu && (
+                    <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                      <div className="border-b border-slate-100 px-4 py-3">
+                        <p className="truncate text-xs font-semibold text-slate-900">{customer.fullName}</p>
+                        <p className="truncate text-[10px] text-slate-500">{customer.email}</p>
+                      </div>
+                      <Link href="/store/account" onClick={() => setMenu(false)} className="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50"><UserRound className="h-3.5 w-3.5" /> Tài khoản</Link>
+                      <Link href="/store/orders" onClick={() => setMenu(false)} className="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50"><ShoppingBag className="h-3.5 w-3.5" /> Đơn hàng</Link>
+                      <button onClick={() => { clearStoreSession(); setMenu(false); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs text-red-600 hover:bg-red-50"><LogOut className="h-3.5 w-3.5" /> Đăng xuất</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link href="/store/account" className="hidden items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-blue-500/25 sm:flex">
+                  <UserRound className="h-3.5 w-3.5" /> Đăng nhập
+                </Link>
+              )}
+            </>
           )}
           <button onClick={() => setOpen((value) => !value)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 md:hidden">
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -102,10 +119,19 @@ export function StoreHeader() {
       </div>
       {open && (
         <div className="border-t border-slate-100 bg-white px-4 py-3 md:hidden">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">{link.label}</Link>
-          ))}
-          <Link href="/dashboard" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-50">Mở SOC</Link>
+          {isAdmin ? (
+            <>
+              <Link href="/store" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Về cửa hàng</Link>
+              <Link href="/dashboard" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-50">Mở SOC</Link>
+            </>
+          ) : (
+            <>
+              {links.map((link) => (
+                <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">{link.label}</Link>
+              ))}
+              <Link href="/dashboard" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-50">Mở SOC</Link>
+            </>
+          )}
         </div>
       )}
     </header>
@@ -113,6 +139,8 @@ export function StoreHeader() {
 }
 
 export function StoreFooter() {
+  const pathname = usePathname();
+  if (pathname.startsWith("/store/admin")) return null;
   return (
     <footer className="mt-16 border-t border-slate-200 bg-white">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-4 lg:px-8">
