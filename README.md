@@ -346,12 +346,14 @@ GitHub Actions tự động build Docker image và push lên Docker Hub mỗi kh
 | `medicareguard-soc-frontend` | `./frontend` | `frontend/Dockerfile` |
 | `medicareguard-soc-backend` | `.` (repo root) | `backend/Dockerfile` |
 
-Docker Hub: **https://hub.docker.com/u/<DOCKERHUB_USERNAME>**
+Docker Hub: **https://hub.docker.com/u/chamniee**
 
 ```bash
-docker pull <DOCKERHUB_USERNAME>/medicareguard-soc-frontend:latest
-docker pull <DOCKERHUB_USERNAME>/medicareguard-soc-backend:latest
+docker pull chamniee/medicareguard-soc-frontend:develop
+docker pull chamniee/medicareguard-soc-backend:develop
 ```
+
+> Tag `latest` chỉ xuất hiện sau khi push lên nhánh `main`.
 
 ### Secrets & Variables cần thiết
 
