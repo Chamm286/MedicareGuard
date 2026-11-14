@@ -1,0 +1,111 @@
+# =============================================================================
+# CI/CD Pipeline for MedicareGuard SOC
+# Build 2 Docker image (frontend + backend) song song và push lên Docker Hub.
+# - Không hardcode token: dùng GitHub Secrets (DOCKERHUB_TOKEN) và Variables
+#   (DOCKERHUB_USERNAME) để đảm bảo an toàn thông tin.
+# =============================================================================
+
+name: CI/CD Pipeline for MedicareGuard SOC
+
+# Trigger: chạy khi push hoặc mở/cập nhật pull_request vào develop và main
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+
+# Quyền tối thiểu cho GITHUB_TOKEN (chỉ cần đọc source code)
+permissions:
+  contents: read
+
+# Hủy các lần chạy cũ cùng nhánh khi có commit mới (tiết kiệm tài nguyên)
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # JOB: build-and-push
+  # Ma trận (matrix) build song song 2 image: frontend và backend.
+  # Mỗi phần tử matrix mô tả: context build, đường dẫn Dockerfile, tên image.
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    name: Build & push ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      # fail-fast: false => 1 image lỗi không hủy image còn lại, dễ debug
+      fail-fast: false
+      matrix:
+        include:
+          # --- Frontend (Next.js): context là thư mục frontend/ ---
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image: medicareguard-soc-frontend
+            # Biến NEXT_PUBLIC_* được "nướng" vào bundle lúc build (Next.js)
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://cham164.id.vn/api
+              NEXT_PUBLIC_APP_NAME=MedicareGuard SOC
+              NEXT_PUBLIC_MAILPIT_URL=http://127.0.0.1:8025
+          # --- Backend (Node.js/Express): context là thư mục gốc repo ---
+          - name: backend
+            context: .
+            dockerfile: ./backend/Dockerfile
+            image: medicareguard-soc-backend
+            build_args: ""
+
+    steps:
+      # 1) Lấy source code của repo về runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2) Cài Buildx (cần cho cache GHA và build nâng cao)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3) Đăng nhập Docker Hub.
+      #    Chỉ chạy khi KHÔNG phải pull_request (PR từ fork không có secrets).
+      #    Username lấy từ Variable, Token lấy từ Secret -> không hardcode.
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4) Sinh tag/label tự động:
+      #    - ref branch: develop, main
+      #    - ref PR: pr-<số> (khi chạy pull_request)
+      #    - sha ngắn: sha-abc1234
+      #    - latest: chỉ khi push lên main
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+
+      # 5) Build và (nếu không phải PR) push image lên Docker Hub.
+      #    - cache-from/cache-to type=gha + scope riêng cho từng image:
+      #      tận dụng cache GitHub Actions, tránh xung đột cache giữa 2 image.
+      #    - push=false với pull_request => chỉ kiểm tra build được hay không.
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

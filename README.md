@@ -323,6 +323,48 @@ bash scripts/check-alerts.sh --send   # send Telegram + Gmail test alerts
 
 Full details, credential overrides and verification commands are in [`n8n/README.md`](n8n/README.md).
 
+## CI/CD Pipeline for MedicareGuard SOC
+
+GitHub Actions tự động build Docker image và push lên Docker Hub mỗi khi có
+`push`/`pull_request` vào nhánh `develop` hoặc `main`. Cấu hình nằm tại
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
+
+- **Trigger:** `push` và `pull_request` vào `develop`, `main`.
+- **Build song song:** dùng `strategy.matrix` để build 2 image cùng lúc.
+- **Cache:** `docker/build-push-action` với `cache-from/cache-to: type=gha,mode=max`
+  (scope riêng cho từng image) giúp các lần build sau nhanh hơn.
+- **Tag tự động** (`docker/metadata-action`):
+  - tên nhánh: `develop`, `main`
+  - commit SHA ngắn: `sha-abc1234`
+  - `latest`: chỉ khi push lên `main`
+- **Pull request:** chỉ build để kiểm tra, **không push** (PR từ fork không có secrets).
+
+### Docker images được build
+
+| Image | Context | Dockerfile |
+| --- | --- | --- |
+| `medicareguard-soc-frontend` | `./frontend` | `frontend/Dockerfile` |
+| `medicareguard-soc-backend` | `.` (repo root) | `backend/Dockerfile` |
+
+Docker Hub: **https://hub.docker.com/u/<DOCKERHUB_USERNAME>**
+
+```bash
+docker pull <DOCKERHUB_USERNAME>/medicareguard-soc-frontend:latest
+docker pull <DOCKERHUB_USERNAME>/medicareguard-soc-backend:latest
+```
+
+### Secrets & Variables cần thiết
+
+Vào **GitHub → Repo → Settings → Secrets and variables → Actions**:
+
+| Loại | Tên | Mô tả |
+| --- | --- | --- |
+| Secret | `DOCKERHUB_TOKEN` | Personal Access Token Docker Hub (quyền **Read & Write**) |
+| Variable | `DOCKERHUB_USERNAME` | Username Docker Hub, dùng làm namespace image |
+
+> **Bảo mật:** tuyệt đối không commit file `.env` / token lên GitHub. Repo đã
+> `.gitignore` các file `.env*` (trừ `.env.example`). Chỉ dùng GitHub Secrets.
+
 ## API
 
 All routes are prefixed with `/api`. Authentication uses a bearer JWT.
